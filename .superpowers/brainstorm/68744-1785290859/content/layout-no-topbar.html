@@ -1,0 +1,95 @@
+<h2>更新后的布局（无 Top bar）</h2>
+<p class="subtitle">Logo、主题切换、语言切换都落在 Left bar。请确认这个结构。</p>
+
+<div class="mockup">
+  <div class="mockup-header">Opticrum Desktop · 1440 宽屏示意</div>
+  <div class="mockup-body" style="padding:0;">
+    <div style="display:grid;grid-template-columns:260px 1fr 300px;min-height:360px;background:#0b0f14;color:#cbd5e1;font-size:12px;">
+      <!-- Left -->
+      <aside style="background:#121821;border-right:1px solid #1e2a38;display:flex;flex-direction:column;padding:16px 14px;gap:12px;">
+        <div style="display:flex;align-items:center;gap:10px;padding-bottom:8px;border-bottom:1px solid #1e2a38;">
+          <div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#2dd4bf,#0f766e);"></div>
+          <div>
+            <div style="font-weight:700;color:#f1f5f9;font-size:13px;">Opticrum Desktop</div>
+            <div style="font-size:10px;color:#64748b;">Fiber Wallet</div>
+          </div>
+        </div>
+
+        <div style="background:#0f141c;border:1px solid #1f6f5a55;border-radius:10px;padding:12px;cursor:pointer;">
+          <div style="font-size:10px;color:#64748b;margin-bottom:4px;">CKB 余额</div>
+          <div style="font-size:18px;font-weight:700;color:#f8fafc;">12,480.52</div>
+          <div style="font-size:10px;color:#2dd4bf;">≈ $1,842.10 · 点击查看</div>
+        </div>
+
+        <div style="background:#0f141c;border:1px solid #1e2a38;border-radius:10px;padding:12px;">
+          <div style="font-size:10px;color:#64748b;margin-bottom:6px;">节点 / 通道</div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>节点</span><span style="color:#34d399;">Online</span></div>
+          <div style="display:flex;justify-content:space-between;"><span>通道</span><span style="color:#f1f5f9;">6 活跃</span></div>
+        </div>
+
+        <div style="background:#0f141c;border:1px solid #1e2a38;border-radius:10px;padding:12px;">
+          <div style="font-size:10px;color:#64748b;margin-bottom:6px;">节点运行</div>
+          <div>CPU 12% · Peers 48</div>
+          <div style="font-size:10px;color:#64748b;margin-top:4px;">Synced · tip #12,804,221</div>
+        </div>
+
+        <div style="flex:1;"></div>
+
+        <div style="border-top:1px solid #1e2a38;padding-top:12px;display:flex;flex-direction:column;gap:8px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:#94a3b8;">主题</span>
+            <span style="background:#1e2a38;border-radius:999px;padding:4px 10px;font-size:11px;color:#2dd4bf;">深色</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:#94a3b8;">语言</span>
+            <span style="background:#1e2a38;border-radius:999px;padding:4px 10px;font-size:11px;">中文 / EN</span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Center -->
+      <main style="padding:16px;background:#0b0f14;">
+        <div style="height:72px;border-radius:12px;background:linear-gradient(90deg,#134e4a,#0f766e 50%,#115e59);margin-bottom:14px;display:flex;align-items:flex-end;padding:12px;color:#ecfeff;font-weight:600;">
+          Banner · Fiber App Marketplace
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+          <div style="height:88px;background:#121821;border:1px solid #1e2a38;border-radius:10px;"></div>
+          <div style="height:88px;background:#121821;border:1px solid #1e2a38;border-radius:10px;"></div>
+          <div style="height:88px;background:#121821;border:1px solid #1e2a38;border-radius:10px;"></div>
+          <div style="height:88px;background:#121821;border:1px solid #1e2a38;border-radius:10px;"></div>
+          <div style="height:88px;background:#121821;border:1px solid #1e2a38;border-radius:10px;"></div>
+          <div style="height:88px;background:#121821;border:1px solid #1e2a38;border-radius:10px;"></div>
+        </div>
+      </main>
+
+      <!-- Right -->
+      <aside style="background:#121821;border-left:1px solid #1e2a38;padding:16px 14px;">
+        <div style="font-size:11px;color:#64748b;margin-bottom:8px;">全网概况</div>
+        <div style="height:64px;background:#0f141c;border-radius:8px;margin-bottom:14px;border:1px solid #1e2a38;"></div>
+        <div style="font-size:11px;color:#64748b;margin-bottom:8px;">资讯</div>
+        <div style="height:40px;background:#0f141c;border-radius:6px;margin-bottom:6px;border:1px solid #1e2a38;"></div>
+        <div style="height:40px;background:#0f141c;border-radius:6px;margin-bottom:6px;border:1px solid #1e2a38;"></div>
+        <div style="font-size:11px;color:#64748b;margin:14px 0 8px;">Change log</div>
+        <div style="height:56px;background:#0f141c;border-radius:6px;border:1px solid #1e2a38;"></div>
+      </aside>
+    </div>
+  </div>
+</div>
+
+<div class="pros-cons" style="margin-top:1.25rem;">
+  <div class="pros">
+    <h4>这样改的好处</h4>
+    <ul>
+      <li>三栏即完整工作台，没有顶栏分割感</li>
+      <li>品牌与设置锚在钱包侧，更像桌面客户端</li>
+      <li>中间区垂直空间全给应用市场</li>
+    </ul>
+  </div>
+  <div class="cons">
+    <h4>注意点</h4>
+    <ul>
+      <li>左侧底部会略挤：设置放底、业务卡片靠上</li>
+      <li>二级页返回按钮放在中间区顶部，而不是顶栏</li>
+    </ul>
+  </div>
+</div>

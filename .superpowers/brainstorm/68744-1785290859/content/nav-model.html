@@ -1,0 +1,66 @@
+<h2>左侧板块点进去，二级页怎么出现？</h2>
+<p class="subtitle">余额 / 节点通道 / 节点运行状态 都可点进详情。选一种导航模型。</p>
+
+<div class="cards">
+  <div class="card" data-choice="route-replace" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="height:130px;background:#0f141c;border-radius:8px;padding:8px;color:#94a3b8;font-size:10px;">
+        <div style="margin-bottom:6px;opacity:.7;">主页 → 路由切换 → 详情页</div>
+        <div style="display:grid;grid-template-columns:48px 1fr 48px;gap:4px;height:90px;">
+          <div style="background:#1a2330;border-radius:4px;opacity:.35;"></div>
+          <div style="background:#151c27;border:1px solid #2dd4bf55;border-radius:4px;padding:8px;">
+            <div style="color:#2dd4bf;margin-bottom:6px;">← 返回 · 通道详情</div>
+            <div style="height:10px;background:#243041;border-radius:2px;margin-bottom:4px;"></div>
+            <div style="height:10px;background:#243041;border-radius:2px;width:70%;"></div>
+          </div>
+          <div style="background:#1a2330;border-radius:4px;opacity:.35;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A · 中间区整页切换（推荐）</h3>
+      <p>左右 sidebar 保留，中间变成详情。像常见钱包 App 的二级页，路由清晰。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="slide-over" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="height:130px;background:#0f141c;border-radius:8px;padding:8px;color:#94a3b8;font-size:10px;position:relative;">
+        <div style="margin-bottom:6px;opacity:.7;">主页上叠一层抽屉</div>
+        <div style="display:grid;grid-template-columns:48px 1fr 48px;gap:4px;height:90px;opacity:.45;">
+          <div style="background:#1a2330;border-radius:4px;"></div>
+          <div style="background:#151c27;border-radius:4px;"></div>
+          <div style="background:#1a2330;border-radius:4px;"></div>
+        </div>
+        <div style="position:absolute;right:12px;top:28px;bottom:12px;width:55%;background:#151c27;border:1px solid #2dd4bf66;border-radius:6px;padding:8px;box-shadow:-8px 0 24px #0008;">
+          <div style="color:#2dd4bf;margin-bottom:6px;">通道详情 · ✕</div>
+          <div style="height:10px;background:#243041;border-radius:2px;margin-bottom:4px;"></div>
+          <div style="height:10px;background:#243041;border-radius:2px;width:60%;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B · 右侧滑出面板</h3>
+      <p>详情盖住中间+右侧。上下文不丢，但桌面宽屏上会挡应用市场。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="full-replace" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="height:130px;background:#0f141c;border-radius:8px;padding:8px;color:#94a3b8;font-size:10px;">
+        <div style="margin-bottom:6px;opacity:.7;">整屏进入详情</div>
+        <div style="height:90px;background:#151c27;border:1px solid #2dd4bf55;border-radius:4px;padding:10px;">
+          <div style="color:#2dd4bf;margin-bottom:8px;">← 返回主工作台</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+            <div style="height:48px;background:#1a2330;border-radius:4px;"></div>
+            <div style="height:48px;background:#1a2330;border-radius:4px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C · 全屏二级页</h3>
+      <p>左右栏也收起，详情占满。适合复杂表格，但离开「三栏工作台」感更强。</p>
+    </div>
+  </div>
+</div>
