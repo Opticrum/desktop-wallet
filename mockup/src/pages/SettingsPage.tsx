@@ -15,16 +15,15 @@ export function SettingsPage() {
   return (
     <div className="page">
       <BackLink to="/me" />
-      <h2 className="page-title">{t.settings}</h2>
+      <div className="page-kicker">{t.me}</div>
+      <h1 className="page-title">{t.settings}</h1>
 
-      <div className="card" style={{ padding: 0 }}>
-        <div className="settings-group" style={{ padding: '0 20px' }}>
+      <div className="settings-panel">
+        <div className="settings-group">
           <div className="settings-row">
             <div>
-              <div style={{ fontWeight: 500 }}>{t.themeLabel}</div>
-              <div className="settings-hint">
-                {theme === 'dark' ? 'Dark' : 'Light'}
-              </div>
+              <div>{t.themeLabel}</div>
+              <div className="settings-hint">{theme === 'dark' ? 'Dark' : 'Light'}</div>
             </div>
             <div className="radio-pill" role="radiogroup" aria-label={t.themeLabel}>
               <button
@@ -47,11 +46,7 @@ export function SettingsPage() {
           </div>
 
           <div className="settings-row">
-            <div>
-              <div style={{ fontWeight: 500 }}>
-                {locale === 'zh' ? '语言' : 'Language'}
-              </div>
-            </div>
+            <div>{locale === 'zh' ? '语言' : 'Language'}</div>
             <select
               className="select-mini"
               value={locale}
@@ -64,9 +59,7 @@ export function SettingsPage() {
           </div>
 
           <div className="settings-row">
-            <div>
-              <div style={{ fontWeight: 500 }}>{t.currencyUnit}</div>
-            </div>
+            <div>{t.currencyUnit}</div>
             <select
               className="select-mini"
               value={currency}
@@ -81,7 +74,7 @@ export function SettingsPage() {
 
           <div className="settings-row">
             <div>
-              <div style={{ fontWeight: 500 }}>{t.hideSmallBalances}</div>
+              <div>{t.hideSmallBalances}</div>
               <div className="settings-hint">{t.hideSmallBalancesHint}</div>
             </div>
             <button
@@ -96,7 +89,7 @@ export function SettingsPage() {
 
           <div className="settings-row">
             <div>
-              <div style={{ fontWeight: 500 }}>{t.notifications}</div>
+              <div>{t.notifications}</div>
               <div className="settings-hint">{t.notificationsHint}</div>
             </div>
             <button

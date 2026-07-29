@@ -8,7 +8,8 @@ export function RuntimeDetail() {
   return (
     <div className="page">
       <BackLink to="/node" />
-      <h2 className="page-title">{t.nodeRuntime}</h2>
+      <div className="page-kicker">{t.nodeLabel}</div>
+      <h1 className="page-title">{t.nodeRuntime}</h1>
 
       <div className="stat-row">
         <div className="stat">

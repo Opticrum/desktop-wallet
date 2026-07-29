@@ -15,7 +15,8 @@ export function PeersDetail() {
   return (
     <div className="page">
       <BackLink to="/node" />
-      <h2 className="page-title">{t.peerList}</h2>
+      <div className="page-kicker">{t.nodeLabel}</div>
+      <h1 className="page-title">{t.peerList}</h1>
 
       <div className="stat-row">
         <div className="stat">

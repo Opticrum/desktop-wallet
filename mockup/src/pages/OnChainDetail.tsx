@@ -9,48 +9,53 @@ export function OnChainDetail() {
   return (
     <div className="page">
       <BackLink to="/balance" />
-      <h2 className="page-title">{t.onchainAssets}</h2>
-      <p className="text-secondary mb-4">{t.onchainDescription}</p>
+      <div className="page-kicker">{t.wallet}</div>
+      <h1 className="page-title">{t.onchainAssets}</h1>
+      <p className="page-lead">{t.onchainDescription}</p>
 
-      <div className="stat-row">
-        <div className="stat">
-          <div className="stat-label">{t.available}</div>
-          <div className="stat-value">
-            {wallet.availableCkb.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+      <div className="nav-bento-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 16 }}>
+        <div className="kpi">
+          <div className="kpi-label">{t.available}</div>
+          <div className="kpi-value">
+            {wallet.availableCkb.toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </div>
-          <div className="stat-sub">CKB</div>
+          <div className="kpi-sub">CKB</div>
         </div>
-        <div className="stat">
-          <div className="stat-label">{t.locked}</div>
-          <div className="stat-value">
-            {wallet.lockedCkb.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+        <div className="kpi">
+          <div className="kpi-label">{t.locked}</div>
+          <div className="kpi-value">
+            {wallet.lockedCkb.toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </div>
-          <div className="stat-sub">CKB</div>
+          <div className="kpi-sub">CKB</div>
         </div>
-        <div className="stat">
-          <div className="stat-label">{t.transactionCount}</div>
-          <div className="stat-value">{wallet.txs.length}</div>
-        </div>
-      </div>
-
-      <h3 className="section-header">{t.asset}</h3>
-      <div className="card mb-4">
-        <div className="stat-label" style={{ marginBottom: 8 }}>{t.balance}</div>
-        <div style={{ fontSize: 22, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-          {wallet.totalCkb.toLocaleString(undefined, { maximumFractionDigits: 2 })} CKB
-        </div>
-        <div className="text-secondary mt-2">≈ ${wallet.fiatUsd.toLocaleString()} USD</div>
-
-        <div className="address-block" style={{ marginTop: 16, marginBottom: 0 }}>
-          <div className="address-block-label">{t.address}</div>
-          {wallet.address}
+        <div className="kpi">
+          <div className="kpi-label">{t.transactionCount}</div>
+          <div className="kpi-value">{wallet.txs.length}</div>
         </div>
       </div>
 
-      <h3 className="section-header">{t.recentTxs}</h3>
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <TransactionTable transactions={wallet.txs} />
+      <div className="section-head">
+        <h2>{t.asset}</h2>
       </div>
+      <div className="panel mb-4">
+        <div className="kpi-label" style={{ marginBottom: 8 }}>
+          {t.balance}
+        </div>
+        <div className="balance-figure" style={{ fontSize: 40 }}>
+          {wallet.totalCkb.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+          <span className="unit">CKB</span>
+        </div>
+        <div className="balance-fiat">≈ ${wallet.fiatUsd.toLocaleString()} USD</div>
+        <div className="address-chip" style={{ marginTop: 20 }}>
+          <span className="label">{t.address}</span>
+          <span className="break-all">{wallet.address}</span>
+        </div>
+      </div>
+
+      <div className="section-head">
+        <h2>{t.recentTxs}</h2>
+      </div>
+      <TransactionTable transactions={wallet.txs} />
     </div>
   )
 }

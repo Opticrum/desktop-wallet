@@ -17,13 +17,15 @@ export function NewsPage() {
   return (
     <div className="page">
       <BackLink />
-      <h2 className="page-title">{t.news}</h2>
+      <div className="page-kicker">{t.marketplace}</div>
+      <h1 className="page-title">{t.news}</h1>
 
       <div className="chips" style={{ marginBottom: 24 }}>
         <button
           type="button"
           className={`chip${filter === 'all' ? ' active' : ''}`}
           onClick={() => setFilter('all')}
+          aria-pressed={filter === 'all'}
         >
           {t.allCategories}
         </button>
@@ -31,6 +33,7 @@ export function NewsPage() {
           type="button"
           className={`chip${filter === 'Fiber' ? ' active' : ''}`}
           onClick={() => setFilter('Fiber')}
+          aria-pressed={filter === 'Fiber'}
         >
           Fiber
         </button>
@@ -38,6 +41,7 @@ export function NewsPage() {
           type="button"
           className={`chip${filter === 'Lightning' ? ' active' : ''}`}
           onClick={() => setFilter('Lightning')}
+          aria-pressed={filter === 'Lightning'}
         >
           Lightning
         </button>

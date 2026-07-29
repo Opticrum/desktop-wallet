@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 opticrum-wallet/
 ├── mockup/                       # Vite + React + TS SPA (the only runnable code)
+├── DESIGN.md                     # High-fidelity visual spec — required for all UI work
 ├── docs/superpowers/specs/       # Design spec (approved)
 ├── docs/superpowers/plans/       # Implementation plans
 ├── AGENTS.md                     # Learned user preferences + workspace facts
@@ -67,8 +68,9 @@ StrictMode
 
 ## Conventions & Constraints
 
-These come from the approved design spec (`docs/superpowers/specs/2026-07-29-opticrum-desktop-mockup-design.md`) and the learned-preferences file (`AGENTS.md`):
+These come from `DESIGN.md`, the approved design spec (`docs/superpowers/specs/2026-07-29-opticrum-desktop-mockup-design.md`), and the learned-preferences file (`AGENTS.md`):
 
+- **All UI changes must actively reference `DESIGN.md`.** Before modifying components, pages, or styles in `mockup/`, read the applicable sections of `DESIGN.md` (layout, tokens, spacing, typography, component specs). Treat it as the visual source of truth for implementation details; cite or cross-check it when proposing or applying UI diffs.
 - **Pages and copy first, scaffolding last.** Do not introduce abstractions, component libraries, state managers, chart libs, CSS-in-JS, or i18n frameworks.
 - **Desktop-only.** Layout collapses below 1100px; mobile responsive is explicitly out of scope.
 - **Locale parity:** every new visible string must be added to **all three** of `i18n/types.ts`, `i18n/zh.ts`, `i18n/en.ts`. The `Messages` type is the contract.
@@ -81,6 +83,7 @@ These come from the approved design spec (`docs/superpowers/specs/2026-07-29-opt
 
 When changing behavior, consult these in order:
 
-1. `docs/superpowers/specs/2026-07-29-opticrum-desktop-mockup-design.md` — the source of truth for layout, theming, locale, and what's in/out of scope.
-2. `AGENTS.md` — accumulated user preferences and workspace facts; updated by the user as decisions get made.
-3. `mockup/README.md` — quick-start commands for running the dev server.
+1. **`DESIGN.md`** — **required for all UI changes.** High-fidelity visual spec (layout, density, colors, typography, shadows, component anatomy). Read relevant sections before editing anything under `mockup/src/` or `mockup/src/styles/`.
+2. `docs/superpowers/specs/2026-07-29-opticrum-desktop-mockup-design.md` — scope, shell architecture, theming/locale rules, and what's in/out of scope.
+3. `AGENTS.md` — accumulated user preferences and workspace facts; updated by the user as decisions get made.
+4. `mockup/README.md` — quick-start commands for running the dev server.

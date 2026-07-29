@@ -30,15 +30,27 @@ export function AppDetail() {
     <div className="page">
       <BackLink />
       <div className="app-hero">
-        <div className="app-hero-icon" style={{ background: app.accent }} />
+        <div className="app-hero-icon" style={{ background: app.accent }} aria-hidden />
         <div>
           <h1>{locale === 'zh' ? app.nameZh : app.nameEn}</h1>
           <p className="app-hero-blurb">
-            {locale === 'zh' ? app.blurbZh : app.blurbEn}
+            {locale === 'zh' ? app.descZh || app.blurbZh : app.descEn || app.blurbEn}
           </p>
-          <p className="app-hero-meta">
-            {t.category}: {catLabel}
-          </p>
+          <div className="app-hero-meta">
+            <span>
+              {t.category}: {catLabel}
+            </span>
+            {app.rating != null && (
+              <span>
+                {t.ratingLabel} {app.rating}
+              </span>
+            )}
+            {app.downloads && (
+              <span>
+                {app.downloads} {t.downloadsLabel}
+              </span>
+            )}
+          </div>
           <div className="app-card-tags">
             {app.tags.map((tag) => (
               <span key={tag}>{tag}</span>

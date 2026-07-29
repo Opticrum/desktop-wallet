@@ -10,23 +10,25 @@ export function NetworkOverview() {
 
   return (
     <section className="network-section">
-      <h3 className="section-header">{t.networkOverview}</h3>
-      <div className="stat-row">
-        <div className="stat">
-          <div className="stat-label">{t.networkNodes}</div>
-          <div className="stat-value">{fmt(networkOverview.nodes)}</div>
+      <div className="section-head">
+        <h2>{t.networkOverview}</h2>
+      </div>
+      <div className="kpi-grid">
+        <div className="kpi">
+          <div className="kpi-label">{t.networkNodes}</div>
+          <div className="kpi-value">{fmt(networkOverview.nodes)}</div>
         </div>
-        <div className="stat">
-          <div className="stat-label">{t.networkChannels}</div>
-          <div className="stat-value">{fmt(networkOverview.channels)}</div>
+        <div className="kpi">
+          <div className="kpi-label">{t.networkChannels}</div>
+          <div className="kpi-value">{fmt(networkOverview.channels)}</div>
         </div>
-        <div className="stat">
-          <div className="stat-label">{t.networkCapacity}</div>
-          <div className="stat-value">{(networkOverview.capacityCkb / 1_000_000).toFixed(2)}M</div>
+        <div className="kpi">
+          <div className="kpi-label">{t.networkCapacity}</div>
+          <div className="kpi-value">{(networkOverview.capacityCkb / 1_000_000).toFixed(1)}M</div>
         </div>
-        <div className="stat">
-          <div className="stat-label">{t.settlements24h}</div>
-          <div className="stat-value">{fmt(networkOverview.settlements24h)}</div>
+        <div className="kpi">
+          <div className="kpi-label">{t.settlements24h}</div>
+          <div className="kpi-value">{fmt(networkOverview.settlements24h)}</div>
         </div>
       </div>
     </section>

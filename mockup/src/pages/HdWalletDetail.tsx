@@ -8,8 +8,9 @@ export function HdWalletDetail() {
   return (
     <div className="page">
       <BackLink to="/balance" />
-      <h2 className="page-title">{t.hdWallet}</h2>
-      <p className="text-secondary mb-4">{t.hdWalletDescription}</p>
+      <div className="page-kicker">{t.wallet}</div>
+      <h1 className="page-title">{t.hdWallet}</h1>
+      <p className="page-lead">{t.hdWalletDescription}</p>
 
       <div className="hd-toolbar">
         <button type="button" className="btn-primary">
@@ -23,8 +24,10 @@ export function HdWalletDetail() {
         </button>
       </div>
 
-      <h3 className="section-header">{t.walletAccounts}</h3>
-      <div className="card">
+      <div className="section-head">
+        <h2>{t.walletAccounts}</h2>
+      </div>
+      <div className="panel">
         {hdAccounts.map((acc) => (
           <div key={acc.id} className="hd-account-row">
             <div>

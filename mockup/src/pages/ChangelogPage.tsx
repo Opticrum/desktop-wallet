@@ -8,7 +8,8 @@ export function ChangelogPage() {
   return (
     <div className="page">
       <BackLink />
-      <h2 className="page-title">{t.changelog}</h2>
+      <div className="page-kicker">{t.marketplace}</div>
+      <h1 className="page-title">{t.changelog}</h1>
 
       <div className="news-list">
         {changelogs.map((item) => (

@@ -94,11 +94,28 @@ export type Messages = {
   languageZh: string
   languageEn: string
 
+  // Marketplace hero
+  marketHeroTitle: string
+  marketHeroLead: string
+  featuredApp: string
+  browseApps: string
+  downloadsLabel: string
+  ratingLabel: string
+  yourBalance: string
+  sendReceive: string
+  sendReceiveDesc: string
+  viewAll: string
+  activity: string
+
   // Transaction table
   txType: string
   amount: string
   time: string
   transaction: string
+  txReceive: string
+  txSend: string
+  txChannelOpen: string
+  txChannelClose: string
 
   // Peer / channel table headers
   peer: string
