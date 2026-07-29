@@ -7,6 +7,8 @@ export type Messages = {
   balance: string
   available: string
   locked: string
+  availableCkb: string
+  lockedFiber: string
   address: string
   nodeOnline: string
   nodeOffline: string
@@ -126,4 +128,73 @@ export type Messages = {
   fees: string
   latency: string
   asset: string
+
+  // Send page + balance QR
+  send: string
+  sendDescription: string
+  sendConfirm: string
+  sendAddress: string
+  sendAmount: string
+  sendMemo: string
+  scanToReceive: string
+  hdSectionTitle: string
+  close: string
+  copied: string
+
+  // Node page — sections + redesigned sidebar
+  nodeChannelsSection: string
+  nodePeersSection: string
+  nodeLogsSection: string
+  nodeChannelCount: string
+  nodePeerCount: string
+  capacityBreakdown: string
+  topArticles: string
+  viewNodeLogs: string
+
+  // Node page — create + delete actions
+  nodeNewChannel: string
+  nodeNewPeer: string
+  nodeFormPeerAlias: string
+  nodeFormPeerAddr: string
+  nodeFormCapacity: string
+  nodeFormBaseFee: string
+  nodeFormFeeRate: string
+  nodeFormCancel: string
+  nodeFormCreate: string
+  nodeCreateToast: string
+  nodeCloseChannel: string
+  nodeRemovePeer: string
+  nodeConfirmDeleteTitle: string
+  nodeConfirmDeleteChannelBody: string
+  nodeConfirmDeletePeerBody: string
+  nodeDeleteConfirm: string
+  nodeDeleteCancel: string
+  nodeDeleteToast: string
+
+  // Peer connection status
+  peerConnected: string
+  peerDisconnected: string
+
+  // Node control panel
+  nodeAlias: string
+  fiberPubkey: string
+  chain: string
+  nodeRunning: string
+  nodeStopped: string
+  nodeStart: string
+  nodeStop: string
+  nodeRestart: string
+  stopNodeTitle: string
+  stopNodeBody: string
+  nodeStoppedToast: string
+  nodeStartedToast: string
+  nodeRestartToast: string
+  watchtower: string
+  watchtowerLocal: string
+  watchtowerRemote: string
+  watchtowerSessions: string
+  watchtowerEndpoint: string
+  watchtowerSwitchLocal: string
+  watchtowerSwitchRemote: string
+  watchtowerSwitchedToast: string
 }

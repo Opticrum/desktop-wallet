@@ -11,6 +11,7 @@ export type HdAccount = {
   nameZh: string
   nameEn: string
   path: string
+  address: string
   addressShort: string
   balanceCkb: number
 }
@@ -68,6 +69,7 @@ export const hdAccounts: HdAccount[] = [
     nameZh: '主钱包',
     nameEn: 'Primary wallet',
     path: "m/44'/309'/0'/0/0",
+    address: 'ckt1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsqds6edszer3w0fkx63kvxu6znl0z2vhrza3x9s2p',
     addressShort: 'ckt1…s2p',
     balanceCkb: 9860.32,
   },
@@ -76,6 +78,7 @@ export const hdAccounts: HdAccount[] = [
     nameZh: '储蓄钱包',
     nameEn: 'Savings wallet',
     path: "m/44'/309'/0'/0/1",
+    address: 'ckt1qrf9syv8pnj5z3y9j4h8k7c2d6wxt5a4b3e2f1g0h9i8j7k6l5m4n3o2p1q0r9s8t7u6v5w4x3y2z1a0b9c8d7e6f5g4h3i2j1k0l9m8n7o6p5q4r3s2t1u0v',
     addressShort: 'ckt1…h7q',
     balanceCkb: 2620.2,
   },

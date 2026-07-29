@@ -27,8 +27,7 @@ const navItems: NavItem[] = [
     glyph: 'N',
     labelKey: 'nodeLabel',
     metric: `${channelsSummary.activeCount}`,
-    isActive: (p) =>
-      p === '/node' || p.startsWith('/channels') || p.startsWith('/peers') || p.startsWith('/runtime'),
+    isActive: (p) => p === '/node' || p.startsWith('/node/'),
   },
   {
     to: '/balance',

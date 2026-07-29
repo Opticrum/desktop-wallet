@@ -1,5 +1,6 @@
 import { BackLink } from '../components/BackLink'
 import { TransactionTable } from '../components/TransactionTable'
+import { CopyableText } from '../components/CopyableText'
 import { useLocale } from '../i18n/LocaleContext'
 import { wallet } from '../mock/wallet'
 
@@ -9,7 +10,6 @@ export function OnChainDetail() {
   return (
     <div className="page">
       <BackLink to="/balance" />
-      <div className="page-kicker">{t.wallet}</div>
       <h1 className="page-title">{t.onchainAssets}</h1>
       <p className="page-lead">{t.onchainDescription}</p>
 
@@ -48,7 +48,7 @@ export function OnChainDetail() {
         <div className="balance-fiat">≈ ${wallet.fiatUsd.toLocaleString()} USD</div>
         <div className="address-chip" style={{ marginTop: 20 }}>
           <span className="label">{t.address}</span>
-          <span className="break-all">{wallet.address}</span>
+          <CopyableText value={wallet.address} />
         </div>
       </div>
 

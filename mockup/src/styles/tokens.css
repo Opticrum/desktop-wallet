@@ -34,6 +34,14 @@
   --violet: #633de8;
   --cyan: #15b8ed;
 
+  --donut-1: #3f61ff;
+  --donut-2: #ff6b1a;
+  --donut-3: #633de8;
+  --donut-4: #15b8ed;
+  --donut-track: rgba(15, 17, 23, 0.06);
+
+  --modal-backdrop: rgba(15, 17, 23, 0.55);
+
   --radius-sm: 10px;
   --radius: 16px;
   --radius-lg: 24px;
@@ -92,6 +100,14 @@
   --orange: #ff8040;
   --violet: #8b7cff;
   --cyan: #22c5f0;
+
+  --donut-1: #5b7aff;
+  --donut-2: #ff8040;
+  --donut-3: #8b7cff;
+  --donut-4: #22c5f0;
+  --donut-track: rgba(242, 243, 247, 0.08);
+
+  --modal-backdrop: rgba(0, 0, 0, 0.65);
 
   --shadow-soft: none;
   --shadow-panel: 0 24px 60px rgba(0, 0, 0, 0.45);

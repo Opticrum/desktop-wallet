@@ -5,6 +5,16 @@ function shortHash(hash: string) {
   return `${hash.slice(0, 8)}…${hash.slice(-6)}`
 }
 
+/**
+ * "Moderate" truncation — keep enough context on both ends to be identifiable
+ * (12 prefix + 12 suffix = 24 visible hex chars + ellipsis) without spilling
+ * onto multiple lines. The full hash is exposed via the native browser
+ * tooltip (title attr) on hover.
+ */
+function truncatedHash(hash: string) {
+  return `${hash.slice(0, 12)}…${hash.slice(-12)}`
+}
+
 function txLabel(type: Tx['type'], t: ReturnType<typeof useLocale>['t']) {
   switch (type) {
     case 'receive':
@@ -18,7 +28,13 @@ function txLabel(type: Tx['type'], t: ReturnType<typeof useLocale>['t']) {
   }
 }
 
-export function TransactionTable({ transactions }: { transactions: Tx[] }) {
+export function TransactionTable({
+  transactions,
+  fullHash = false,
+}: {
+  transactions: Tx[]
+  fullHash?: boolean
+}) {
   const { t, locale } = useLocale()
 
   return (
@@ -37,7 +53,16 @@ export function TransactionTable({ transactions }: { transactions: Tx[] }) {
                   minute: '2-digit',
                 })}
                 {' · '}
-                <span className="mono">{shortHash(tx.txHash)}</span>
+                {fullHash ? (
+                  <span
+                    className="mono activity-sub-hash"
+                    title={tx.txHash}
+                  >
+                    {truncatedHash(tx.txHash)}
+                  </span>
+                ) : (
+                  <span className="mono">{shortHash(tx.txHash)}</span>
+                )}
               </div>
             </div>
           </div>

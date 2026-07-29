@@ -1,6 +1,13 @@
 import { BackLink } from '../components/BackLink'
+import { CopyableText } from '../components/CopyableText'
 import { useLocale } from '../i18n/LocaleContext'
 import { hdAccounts } from '../mock/wallet'
+
+// NOTE: This page is kept only as a deep-link target. The HD wallet UI is now
+// embedded directly under the total balance card on /balance — see
+// BalanceDetail.tsx's <section className="hd-section">. The route /wallet/hd
+// still resolves in App.tsx for direct navigation, but no in-app link points
+// here anymore.
 
 export function HdWalletDetail() {
   const { t, locale } = useLocale()
@@ -8,7 +15,6 @@ export function HdWalletDetail() {
   return (
     <div className="page">
       <BackLink to="/balance" />
-      <div className="page-kicker">{t.wallet}</div>
       <h1 className="page-title">{t.hdWallet}</h1>
       <p className="page-lead">{t.hdWalletDescription}</p>
 
@@ -30,17 +36,19 @@ export function HdWalletDetail() {
       <div className="panel">
         {hdAccounts.map((acc) => (
           <div key={acc.id} className="hd-account-row">
-            <div>
-              <div className="hd-account-name">
-                {locale === 'zh' ? acc.nameZh : acc.nameEn}
+            <div className="hd-account-top">
+              <div className="hd-account-info">
+                <div className="hd-account-name">
+                  {locale === 'zh' ? acc.nameZh : acc.nameEn}
+                </div>
+                <div className="hd-account-path">{acc.path}</div>
               </div>
-              <div className="hd-account-path">{acc.path}</div>
-            </div>
-            <div>
-              <div className="hd-account-addr">{acc.addressShort}</div>
               <div className="hd-account-balance">
                 {acc.balanceCkb.toLocaleString(undefined, { maximumFractionDigits: 2 })} CKB
               </div>
+            </div>
+            <div className="hd-account-address">
+              <CopyableText value={acc.address} />
             </div>
           </div>
         ))}

@@ -7,12 +7,11 @@ import { AppDetail } from './pages/AppDetail'
 import { NewsPage } from './pages/NewsPage'
 import { ChangelogPage } from './pages/ChangelogPage'
 import { NodeDetail } from './pages/NodeDetail'
-import { ChannelsDetail } from './pages/ChannelsDetail'
-import { PeersDetail } from './pages/PeersDetail'
-import { RuntimeDetail } from './pages/RuntimeDetail'
+import { NodeLogsPage } from './pages/NodeLogsPage'
 import { BalanceDetail } from './pages/BalanceDetail'
 import { HdWalletDetail } from './pages/HdWalletDetail'
 import { OnChainDetail } from './pages/OnChainDetail'
+import { ActivityDetail } from './pages/ActivityDetail'
 import { MePage } from './pages/MePage'
 import { SettingsPage } from './pages/SettingsPage'
 
@@ -29,13 +28,12 @@ export default function App() {
               <Route path="changelog" element={<ChangelogPage />} />
 
               <Route path="node" element={<NodeDetail />} />
-              <Route path="channels" element={<ChannelsDetail />} />
-              <Route path="peers" element={<PeersDetail />} />
-              <Route path="runtime" element={<RuntimeDetail />} />
+              <Route path="node/logs" element={<NodeLogsPage />} />
 
               <Route path="balance" element={<BalanceDetail />} />
               <Route path="wallet/hd" element={<HdWalletDetail />} />
               <Route path="wallet/onchain" element={<OnChainDetail />} />
+              <Route path="wallet/activity" element={<ActivityDetail />} />
 
               <Route path="me" element={<MePage />} />
               <Route path="settings" element={<SettingsPage />} />
