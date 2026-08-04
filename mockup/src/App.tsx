@@ -12,8 +12,7 @@ import { BalanceDetail } from './pages/BalanceDetail'
 import { HdWalletDetail } from './pages/HdWalletDetail'
 import { OnChainDetail } from './pages/OnChainDetail'
 import { ActivityDetail } from './pages/ActivityDetail'
-import { MePage } from './pages/MePage'
-import { SettingsPage } from './pages/SettingsPage'
+import { LiquidityMarket } from './pages/LiquidityMarket'
 
 export default function App() {
   return (
@@ -35,8 +34,7 @@ export default function App() {
               <Route path="wallet/onchain" element={<OnChainDetail />} />
               <Route path="wallet/activity" element={<ActivityDetail />} />
 
-              <Route path="me" element={<MePage />} />
-              <Route path="settings" element={<SettingsPage />} />
+              <Route path="liquidity" element={<LiquidityMarket />} />
 
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

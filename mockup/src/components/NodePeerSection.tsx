@@ -1,10 +1,18 @@
 import { useState } from 'react'
 import { ConfirmModal } from './ConfirmModal'
+import { CopyableText } from './CopyableText'
 import { useLocale } from '../i18n/LocaleContext'
 import { peers } from '../mock/node'
 
 type Props = {
   onToast: (msg: string) => void
+}
+
+function latencyClass(ms: number, status: string) {
+  if (status !== 'connected') return 'latency-off'
+  if (ms < 60) return 'latency-ok'
+  if (ms < 150) return 'latency-warn'
+  return 'latency-slow'
 }
 
 export function NodePeerSection({ onToast }: Props) {
@@ -17,13 +25,10 @@ export function NodePeerSection({ onToast }: Props) {
 
   return (
     <>
-      <div className="section-head toolbar">
-        <h2>
-          {t.nodePeersSection}{' '}
-          <span className="text-tertiary" style={{ fontWeight: 500, fontSize: 13 }}>
-            · {peers.length} {t.nodePeerCount} · {t.averageLatency} {avgLatency} ms
-          </span>
-        </h2>
+      <div className="section-head toolbar" style={{ marginTop: 0 }}>
+        <span className="text-tertiary" style={{ fontWeight: 500, fontSize: 13 }}>
+          {t.averageLatency} {avgLatency} ms
+        </span>
         <div className="toolbar-actions">
           <button
             className={createOpen ? 'btn-secondary' : 'btn-primary'}
@@ -66,30 +71,29 @@ export function NodePeerSection({ onToast }: Props) {
       )}
 
       <div className="panel panel-flush">
-        <table className="data-table">
+        <table className="data-table data-table-sm">
           <thead>
             <tr>
               <th>{t.peerList}</th>
               <th>{t.peerAddr}</th>
-              <th className="num">{t.latency}</th>
-              <th>{t.state}</th>
+              <th>{t.latency}</th>
               <th className="row-action" aria-label={t.nodeRemovePeer} />
             </tr>
           </thead>
           <tbody>
             {peers.map((p) => (
               <tr key={p.id}>
-                <td style={{ fontWeight: 500 }}>{p.alias}</td>
-                <td className="mono text-secondary" style={{ fontSize: 12 }}>
-                  {p.addr}
-                </td>
-                <td className="num">
-                  {p.status === 'connected' ? `${p.latencyMs} ms` : '—'}
-                </td>
                 <td>
-                  <span className={`badge ${p.status}`}>
-                    {p.status === 'connected' ? t.peerConnected : t.peerDisconnected}
-                  </span>
+                  <div className="peer-name-cell">
+                    <span className={`peer-dot ${p.status}`} />
+                    <span className="peer-alias">{p.alias}</span>
+                  </div>
+                </td>
+                <td className="mono text-secondary peer-addr-cell">
+                  <CopyableText value={p.addr} />
+                </td>
+                <td className={`peer-latency ${latencyClass(p.latencyMs, p.status)}`}>
+                  {p.status === 'connected' ? `${p.latencyMs} ms` : '—'}
                 </td>
                 <td className="row-action">
                   <button

@@ -47,7 +47,7 @@ export type Messages = {
 
   // Sidebar intent blocks
   wallet: string
-  me: string
+  liquidityMarket: string
   appCountSuffix: string
 
   // Hub nav cards + descriptions
@@ -72,29 +72,45 @@ export type Messages = {
   transactionCount: string
   derivationPath: string
 
-  // Me page
-  profile: string
-  security: string
-  preferences: string
-  connectedApps: string
-  about: string
-  comingSoon: string
-  lnAddress: string
-  profileName: string
+  // Liquidity — connection
+  connectionPanel: string
+  networkLabel: string
+  networkMainnet: string
+  networkTestnet: string
+  rpcUrlLabel: string
+  rpcUrlPlaceholder: string
+  indexerUrlLabel: string
+  indexerUrlPlaceholder: string
+  connectionStatus: string
+  statusConnected: string
+  statusDisconnected: string
+  connectButton: string
 
-  // Settings
-  settings: string
-  themeLabel: string
-  currencyUnit: string
-  currencyUsd: string
-  currencyCkb: string
-  currencyBtc: string
-  hideSmallBalances: string
-  hideSmallBalancesHint: string
-  notifications: string
-  notificationsHint: string
-  languageZh: string
-  languageEn: string
+  // Liquidity — dashboard
+  dashboardTitle: string
+  tvlLabel: string
+  activeOrdersLabel: string
+  activeMatchesLabel: string
+  averageApyLabel: string
+  yieldDistribution: string
+
+  // Liquidity — match monitoring
+  matchMonitorTitle: string
+  matchOutpoint: string
+  matchCapacity: string
+  matchRate: string
+  matchRemaining: string
+  matchExtractable: string
+  matchHealth: string
+  matchDeadline: string
+  healthHealthy: string
+  healthWarning: string
+  healthCritical: string
+  healthExhausted: string
+  filterAll: string
+  shannonsPerBlock: string
+  unitCkb: string
+  unitBlocks: string
 
   // Marketplace hero
   marketHeroTitle: string
@@ -103,6 +119,13 @@ export type Messages = {
   browseApps: string
   downloadsLabel: string
   ratingLabel: string
+  discover: string
+  hotBadge: string
+  newBadge: string
+  popularApps: string
+  newApps: string
+  platformWeb: string
+  platformMobile: string
   yourBalance: string
   sendReceive: string
   sendReceiveDesc: string
@@ -178,6 +201,7 @@ export type Messages = {
   // Node control panel
   nodeAlias: string
   fiberPubkey: string
+  totalLocked: string
   chain: string
   nodeRunning: string
   nodeStopped: string

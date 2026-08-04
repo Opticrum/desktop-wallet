@@ -1,196 +1,190 @@
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { apps, type AppCategory, type MarketApp } from '../mock/apps'
+import { type MarketApp, type AppCategory, type AppPlatform } from '../mock/apps'
 import { useLocale } from '../i18n/LocaleContext'
+import { Link } from 'react-router-dom'
 
-type CatFilter = 'all' | AppCategory
-type CardVariant = 'wide' | 'cover' | 'soft' | 'compact'
+export type GridLayout = 'grid-4' | 'grid-3' | 'grid-2' | 'hscroll'
+export type CardVariant = 'default' | 'featured' | 'list'
 
 type Props = {
-  category?: CatFilter
-  onCategoryChange?: (c: CatFilter) => void
-}
-
-function variantFor(index: number, total: number): CardVariant {
-  if (total === 1) return 'wide'
-  if (index === 0) return 'wide'
-  if (index === 1 || index === 2) return 'cover'
-  if (index % 5 === 3) return 'soft'
-  if (index % 5 === 4) return 'soft'
-  return 'compact'
+  apps: MarketApp[]
+  title?: string
+  count?: number
+  layout?: GridLayout
+  cardVariant?: CardVariant
 }
 
 function catLabel(cat: AppCategory, t: ReturnType<typeof useLocale>['t']) {
   switch (cat) {
-    case 'payments':
-      return t.catPayments
-    case 'defi':
-      return t.catDefi
-    case 'tools':
-      return t.catTools
-    case 'games':
-      return t.catGames
+    case 'payments':  return t.catPayments
+    case 'defi':      return t.catDefi
+    case 'tools':     return t.catTools
+    case 'games':     return t.catGames
   }
 }
 
-function AppCard({
-  app,
-  variant,
-  locale,
-  t,
-}: {
-  app: MarketApp
-  variant: CardVariant
-  locale: 'zh' | 'en'
-  t: ReturnType<typeof useLocale>['t']
-}) {
+function platformLabel(p: AppPlatform, t: ReturnType<typeof useLocale>['t']) {
+  switch (p) {
+    case 'web':    return t.platformWeb
+    case 'mobile': return t.platformMobile
+    case 'both':   return `${t.platformWeb} · ${t.platformMobile}`
+  }
+}
+
+function iconLetter(app: MarketApp, locale: 'zh' | 'en') {
+  const name = locale === 'zh' ? app.nameZh : app.nameEn
+  return name.slice(0, 2).toUpperCase()
+}
+
+/* ── Badge ─────────────────────────────────────────────────────────────── */
+
+function Badge({ badge, t }: { badge: 'hot' | 'new'; t: ReturnType<typeof useLocale>['t'] }) {
+  return <span className={`dapp-card-badge ${badge}`}>{badge === 'hot' ? t.hotBadge : t.newBadge}</span>
+}
+
+/* ── Shared icon + body used by all card variants ─────────────────────── */
+
+function DAppIcon({ app }: { app: MarketApp }) {
+  const { locale, t } = useLocale()
+  return (
+    <div className="dapp-card-icon-wrap">
+      <div className="dapp-card-icon" style={{ background: app.accent }}>
+        {iconLetter(app, locale)}
+      </div>
+      {app.badge && <Badge badge={app.badge} t={t} />}
+    </div>
+  )
+}
+
+function DAppMeta({ app }: { app: MarketApp }) {
+  const { t } = useLocale()
+  return (
+    <div className="dapp-card-meta">
+      <span>{catLabel(app.category, t)}</span>
+      <span className="dapp-card-meta-sep">·</span>
+      <span className="platform">{platformLabel(app.platform, t)}</span>
+    </div>
+  )
+}
+
+/* ── Default card (stacked, for 4-col grids) ──────────────────────────── */
+
+function DAppCardDefault({ app }: { app: MarketApp }) {
+  const { locale } = useLocale()
   const name = locale === 'zh' ? app.nameZh : app.nameEn
   const blurb = locale === 'zh' ? app.blurbZh : app.blurbEn
 
-  if (variant === 'compact') {
-    return (
-      <Link to={`/apps/${app.id}`} className="app-card app-card--compact">
-        <div className="app-card-icon" style={{ background: app.accent }} aria-hidden />
-        <div className="app-card-body">
-          <h3>{name}</h3>
-          <p>{blurb}</p>
-          <div className="app-card-meta">
-            {app.rating != null && <span>{app.rating}</span>}
-            {app.downloads && <span>{app.downloads}</span>}
-            {app.tags.slice(0, 1).map((tag) => (
-              <span key={tag}>{tag}</span>
-            ))}
-          </div>
-        </div>
-      </Link>
-    )
-  }
+  return (
+    <Link to={`/apps/${app.id}`} className="dapp-card">
+      <DAppIcon app={app} />
+      <h3>{name}</h3>
+      <p className="dapp-card-blurb">{blurb}</p>
+      <DAppMeta app={app} />
+    </Link>
+  )
+}
 
-  if (variant === 'cover' || variant === 'soft') {
-    return (
-      <Link
-        to={`/apps/${app.id}`}
-        className={`app-card app-card--${variant}`}
-      >
-        <div className="app-card-cover" style={{ background: app.accent }} aria-hidden />
-        <div className="app-card-body">
-          <span className="app-card-cat">{catLabel(app.category, t)}</span>
-          <h3>{name}</h3>
-          <p>{blurb}</p>
-          <div className="app-card-meta">
-            {app.rating != null && (
-              <span>
-                {t.ratingLabel} {app.rating}
-              </span>
-            )}
-            {app.downloads && (
-              <span>
-                {app.downloads} {t.downloadsLabel}
-              </span>
-            )}
-          </div>
-          {variant === 'soft' && (
-            <div className="app-card-tags">
-              {app.tags.map((tag) => (
-                <span key={tag}>{tag}</span>
-              ))}
-            </div>
-          )}
-        </div>
-      </Link>
-    )
-  }
+/* ── Featured card (3-col, accent top strip) ──────────────────────────── */
+
+function DAppCardFeatured({ app }: { app: MarketApp }) {
+  const { locale } = useLocale()
+  const name = locale === 'zh' ? app.nameZh : app.nameEn
+  const blurb = locale === 'zh' ? app.blurbZh : app.blurbEn
 
   return (
-    <Link to={`/apps/${app.id}`} className="app-card app-card--wide">
-      <div className="app-card-cover" style={{ background: app.accent }} aria-hidden />
-      <div className="app-card-body">
-        <span className="app-card-cat">{catLabel(app.category, t)}</span>
+    <Link
+      to={`/apps/${app.id}`}
+      className="dapp-card dapp-card--featured"
+      style={{ '--card-accent': app.accent } as React.CSSProperties}
+    >
+      <DAppIcon app={app} />
+      <h3>{name}</h3>
+      <p className="dapp-card-blurb">{blurb}</p>
+      <DAppMeta app={app} />
+    </Link>
+  )
+}
+
+/* ── List card (icon left, text right, for 2-col grids) ───────────────── */
+
+function DAppCardList({ app }: { app: MarketApp }) {
+  const { locale } = useLocale()
+  const name = locale === 'zh' ? app.nameZh : app.nameEn
+  const blurb = locale === 'zh' ? app.blurbZh : app.blurbEn
+
+  return (
+    <Link to={`/apps/${app.id}`} className="dapp-card dapp-card--list">
+      <DAppIcon app={app} />
+      <div className="dapp-card-body-right">
         <h3>{name}</h3>
-        <p>{blurb}</p>
-        <div className="app-card-meta">
-          {app.rating != null && (
-            <span>
-              {t.ratingLabel} {app.rating}
-            </span>
-          )}
-          {app.downloads && (
-            <span>
-              {app.downloads} {t.downloadsLabel}
-            </span>
-          )}
-        </div>
-        <div className="app-card-tags">
-          {app.tags.map((tag) => (
-            <span key={tag}>{tag}</span>
-          ))}
-        </div>
+        <p className="dapp-card-blurb">{blurb}</p>
+        <DAppMeta app={app} />
       </div>
     </Link>
   )
 }
 
-export function AppGrid({ category: controlledCategory, onCategoryChange }: Props) {
-  const { locale, t } = useLocale()
-  const [query, setQuery] = useState('')
-  const [localCategory, setLocalCategory] = useState<CatFilter>('all')
-  const category = controlledCategory ?? localCategory
-  const setCategory = onCategoryChange ?? setLocalCategory
+/* ── Card dispatcher ──────────────────────────────────────────────────── */
 
-  const chips: { id: CatFilter; label: string }[] = [
-    { id: 'all', label: t.allCategories },
-    { id: 'payments', label: t.catPayments },
-    { id: 'defi', label: t.catDefi },
-    { id: 'tools', label: t.catTools },
-    { id: 'games', label: t.catGames },
-  ]
+function DAppCard({ app, variant }: { app: MarketApp; variant: CardVariant }) {
+  if (variant === 'featured') return <DAppCardFeatured app={app} />
+  if (variant === 'list') return <DAppCardList app={app} />
+  return <DAppCardDefault app={app} />
+}
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return apps.filter((app) => {
-      if (category !== 'all' && app.category !== category) return false
-      if (!q) return true
-      const hay = `${app.nameZh} ${app.nameEn} ${app.blurbZh} ${app.blurbEn} ${app.tags.join(' ')}`.toLowerCase()
-      return hay.includes(q)
-    })
-  }, [query, category])
+/* ── AppGrid — layout-aware section ───────────────────────────────────── */
 
-  return (
-    <div>
-      <div className="market-toolbar">
-        <input
-          className="search-input"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t.searchApps}
-          aria-label={t.searchApps}
-        />
-        {!onCategoryChange && (
-          <div className="chips" role="group" aria-label={t.allCategories}>
-            {chips.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                className={`chip${category === c.id ? ' active' : ''}`}
-                onClick={() => setCategory(c.id)}
-                aria-pressed={category === c.id}
-              >
-                {c.label}
-              </button>
-            ))}
+export function AppGrid({ apps, title, count, layout = 'grid-4', cardVariant = 'default' }: Props) {
+  if (apps.length === 0) return null
+
+  const gridClass =
+    layout === 'grid-3' ? 'dapp-grid-3' :
+    layout === 'grid-2' ? 'dapp-grid-2' :
+    'dapp-grid'
+
+  const header = (title || count != null) ? (
+    <div className="dapp-section-header">
+      {title && <h2 className="dapp-section-title">{title}</h2>}
+      {count != null && (
+        <span className="dapp-section-count">{count} {useLocale().t.appCountSuffix}</span>
+      )}
+    </div>
+  ) : null
+
+  if (layout === 'hscroll') {
+    return (
+      <div className="dapp-hscroll-wrap">
+        {header && (
+          <div className="dapp-hscroll-header">
+            {title && <h2 className="dapp-hscroll-title">{title}</h2>}
+            {count != null && (
+              <span className="dapp-section-count">{count} {useLocale().t.appCountSuffix}</span>
+            )}
           </div>
         )}
+        <div className="dapp-hscroll-track">
+          {apps.map((app) => (
+            <Link key={app.id} to={`/apps/${app.id}`} className="dapp-hscroll-card">
+              <DAppIcon app={app} />
+              <div>
+                <h3>{useLocale().locale === 'zh' ? app.nameZh : app.nameEn}</h3>
+                <p className="dapp-card-blurb">
+                  {useLocale().locale === 'zh' ? app.blurbZh : app.blurbEn}
+                </p>
+                <DAppMeta app={app} />
+              </div>
+            </Link>
+          ))}
+        </div>
       </div>
+    )
+  }
 
-      <div className="app-mosaic">
-        {filtered.map((app, index) => (
-          <AppCard
-            key={app.id}
-            app={app}
-            variant={variantFor(index, filtered.length)}
-            locale={locale}
-            t={t}
-          />
+  return (
+    <div className="dapp-section">
+      {header}
+      <div className={gridClass}>
+        {apps.map((app) => (
+          <DAppCard key={app.id} app={app} variant={cardVariant} />
         ))}
       </div>
     </div>

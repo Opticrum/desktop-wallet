@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import { DonutChart } from './DonutChart'
 import { useLocale } from '../i18n/LocaleContext'
 import { capacityBreakdown, networkOverview } from '../mock/network'
@@ -43,10 +42,6 @@ export function NodeNetworkSidebar() {
           ))}
         </ul>
       </section>
-
-      <Link to="/node/logs" className="btn-primary sidebar-cta">
-        {t.viewNodeLogs} →
-      </Link>
     </aside>
   )
 }

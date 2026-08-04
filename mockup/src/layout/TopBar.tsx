@@ -4,13 +4,15 @@ import { useTheme } from '../theme/ThemeContext'
 import { apps } from '../mock/apps'
 import { wallet } from '../mock/wallet'
 import { channelsSummary } from '../mock/channels'
+import { mockDashboardData } from '../mock/liquidity'
 
 type NavItem = {
   to: string
   glyph: string
-  labelKey: 'marketplace' | 'nodeLabel' | 'wallet' | 'me'
+  labelKey: 'marketplace' | 'nodeLabel' | 'wallet' | 'liquidityMarket'
   metric: string
   isActive: (pathname: string) => boolean
+  disabled?: boolean
 }
 
 const navItems: NavItem[] = [
@@ -18,6 +20,7 @@ const navItems: NavItem[] = [
     to: '/',
     glyph: 'M',
     labelKey: 'marketplace',
+    disabled: true,
     metric: `${apps.length}`,
     isActive: (p) =>
       p === '/' || p.startsWith('/apps/') || p === '/news' || p === '/changelog',
@@ -38,54 +41,22 @@ const navItems: NavItem[] = [
       p === '/balance' || p.startsWith('/wallet/'),
   },
   {
-    to: '/me',
-    glyph: 'S',
-    labelKey: 'me',
-    metric: '',
-    isActive: (p) => p === '/me' || p.startsWith('/settings'),
+    to: '/liquidity',
+    glyph: 'L',
+    labelKey: 'liquidityMarket',
+    metric: `${mockDashboardData.total_matches}`,
+    isActive: (p) => p === '/liquidity' || p.startsWith('/liquidity'),
   },
 ]
 
 export function TopBar() {
-  const { t, locale, setLocale } = useLocale()
-  const { theme, setTheme } = useTheme()
+  const { t, locale } = useLocale()
+  const { theme } = useTheme()
   const { pathname } = useLocation()
-
-  const cycleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark')
-  const cycleLocale = () => setLocale(locale === 'zh' ? 'en' : 'zh')
 
   return (
     <div className="top-bar-wrapper">
       <header className="top-bar">
-        {/* Mini top bar — visible in collapsed state, same layout as expanded */}
-        <div className="top-bar-mini" aria-hidden="true">
-          <span className="top-bar-mini-brand" />
-
-          <span className="top-bar-mini-nav">
-            {navItems.map((item) => {
-              const active = item.isActive(pathname)
-              return (
-                <span
-                  key={item.to}
-                  className={`top-bar-mini-glyph${active ? ' active' : ''}`}
-                >
-                  {item.glyph}
-                </span>
-              )
-            })}
-          </span>
-
-          <span className="top-bar-mini-right">
-            <span className="top-bar-mini-glyph">
-              {theme === 'dark' ? '☀' : '☾'}
-            </span>
-            <span className="top-bar-mini-glyph">
-              {locale === 'zh' ? 'EN' : '中'}
-            </span>
-          </span>
-        </div>
-
-        {/* Full expanded nav */}
         <div className="top-bar-inner">
           <div className="top-bar-brand">
             <div className="top-bar-brand-mark" />
@@ -98,20 +69,28 @@ export function TopBar() {
               const displayMetric =
                 item.labelKey === 'marketplace'
                   ? `${item.metric} ${t.appCountSuffix}`
-                  : item.labelKey === 'me'
-                    ? ''
-                    : item.metric
-              return (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  className={`top-bar-nav-item${active ? ' active' : ''}`}
-                >
+                  : item.metric
+              const className = `top-bar-nav-item${active ? ' active' : ''}${item.disabled ? ' disabled' : ''}`
+              const content = (
+                <>
                   <span className="top-bar-nav-glyph">{item.glyph}</span>
                   <span className="top-bar-nav-label">{t[item.labelKey]}</span>
                   {displayMetric ? (
                     <span className="top-bar-nav-metric">{displayMetric}</span>
                   ) : null}
+                  {item.disabled ? <LockIcon /> : null}
+                </>
+              )
+              if (item.disabled) {
+                return (
+                  <span key={item.to} className={className} aria-disabled="true">
+                    {content}
+                  </span>
+                )
+              }
+              return (
+                <NavLink key={item.to} to={item.to} className={className}>
+                  {content}
                 </NavLink>
               )
             })}
@@ -121,7 +100,7 @@ export function TopBar() {
             <button
               type="button"
               className="top-bar-quick-btn"
-              onClick={cycleTheme}
+              disabled
               title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
             >
               {theme === 'dark' ? '☀' : '☾'}
@@ -129,7 +108,7 @@ export function TopBar() {
             <button
               type="button"
               className="top-bar-quick-btn"
-              onClick={cycleLocale}
+              disabled
               title={locale === 'zh' ? 'English' : '中文'}
               style={{ fontSize: 11, fontWeight: 600, width: 'auto', padding: '0 8px' }}
             >
@@ -139,5 +118,26 @@ export function TopBar() {
         </div>
       </header>
     </div>
+  )
+}
+
+/* Small lock glyph — revealed on hover of a disabled nav entry */
+function LockIcon() {
+  return (
+    <span className="top-bar-lock" aria-hidden="true">
+      <svg
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <rect x="4" y="11" width="16" height="10" rx="2" />
+        <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+      </svg>
+    </span>
   )
 }

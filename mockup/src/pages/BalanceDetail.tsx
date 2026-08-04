@@ -206,29 +206,6 @@ export function BalanceDetail() {
               </div>
             </div>
 
-            <div className="balance-split">
-              <div className="balance-split-item">
-                <div className="label">{t.availableCkb}</div>
-                <div className="value">
-                  {wallet.availableCkb.toLocaleString(undefined, {
-                    maximumFractionDigits: 2,
-                  })}
-                </div>
-              </div>
-              <div className="balance-split-item">
-                <div className="label">{t.lockedFiber}</div>
-                <div className="value">
-                  {wallet.lockedCkb.toLocaleString(undefined, {
-                    maximumFractionDigits: 2,
-                  })}
-                </div>
-              </div>
-            </div>
-
-            <div className="address-chip">
-              <span className="label">{t.address}</span>
-              <CopyableText value={wallet.address} />
-            </div>
           </section>
 
           {/* HD wallet — same width as the balance stage, stacked below it */}

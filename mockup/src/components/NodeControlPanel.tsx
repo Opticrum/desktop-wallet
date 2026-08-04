@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { ConfirmModal } from './ConfirmModal'
 import { CopyableText } from './CopyableText'
 import { useLocale } from '../i18n/LocaleContext'
 import { nodeRuntime, nodeWatchtower, type WatchtowerConfig } from '../mock/node'
+import { channels } from '../mock/channels'
 
 type Props = {
   onToast: (msg: string) => void
@@ -62,6 +64,8 @@ export function NodeControlPanel({ onToast }: Props) {
     onToast(t.nodeRestartToast)
   }
 
+  const lockedCkb = channels.reduce((sum, ch) => sum + ch.localBalanceCkb, 0)
+
   const handleWatchtowerSwitch = () => {
     const next: WatchtowerConfig =
       watchtower.mode === 'local'
@@ -78,119 +82,102 @@ export function NodeControlPanel({ onToast }: Props) {
 
   return (
     <section className="panel node-control-panel">
-      <header className="ncp-header">
-        <div className="ncp-id">
-          <div className="ncp-status-row">
-            <span className={`ncp-status-dot ${running ? 'running' : 'stopped'}`}>
-              {running ? <span className="pulse-dot" /> : <span className="dot-static" />}
-            </span>
-            <span className="ncp-status-text">
-              {running ? t.nodeRunning : t.nodeStopped}
-            </span>
-            <span className="ncp-divider">·</span>
-            <span className="ncp-alias">{nodeRuntime.nodeAlias}</span>
-            <span className="ncp-divider">·</span>
-            <span className="ncp-chain">{nodeRuntime.chain}</span>
-          </div>
+      {/* ── Status header row ─────────────────────────────────────────── */}
+      <div className="ncp-status-bar">
+        <div className="ncp-status-left">
+          {running ? (
+            <span className="pulse-dot" />
+          ) : (
+            <span className="dot-static" />
+          )}
+          <span className={`ncp-status-badge${running ? '' : ' stopped'}`}>
+            {running ? t.nodeRunning : t.nodeStopped}
+          </span>
+          <span className="ncp-meta-line">
+            {nodeRuntime.nodeAlias}
+            <span className="ncp-meta-sep">·</span>
+            {nodeRuntime.chain}
+            <span className="ncp-meta-sep">·</span>
+            {nodeRuntime.uptimeHours}h
+            <span className="ncp-meta-sep">·</span>
+            <Link to="/node/logs" className="ncp-logs-link">
+              {t.viewNodeLogs} →
+            </Link>
+          </span>
         </div>
         <div className="ncp-actions">
           {running ? (
-            <button
-              type="button"
-              className="btn-danger btn-icon"
-              onClick={() => setStopOpen(true)}
-            >
+            <button type="button" className="btn-danger btn-icon" onClick={() => setStopOpen(true)}>
               <IconStop />
               <span>{t.nodeStop}</span>
             </button>
           ) : (
-            <button
-              type="button"
-              className="btn-primary btn-icon"
-              onClick={handleStart}
-            >
+            <button type="button" className="btn-primary btn-icon" onClick={handleStart}>
               <IconPlay />
               <span>{t.nodeStart}</span>
             </button>
           )}
-          <button
-            type="button"
-            className="btn-secondary btn-icon"
-            onClick={handleRestart}
-            disabled={!running}
-          >
+          <button type="button" className="btn-secondary btn-icon" onClick={handleRestart} disabled={!running}>
             <IconRestart />
             <span>{t.nodeRestart}</span>
           </button>
         </div>
-      </header>
+      </div>
 
-      <div className="ncp-grid">
-        <div className="ncp-row" style={{ gridColumn: '1 / -1' }}>
+      {/* ── Detail rows ──────────────────────────────────────────────── */}
+      <div className="ncp-detail-rows">
+        <div className="ncp-detail-row">
           <span className="ncp-label">{t.fiberPubkey}</span>
           <span className="ncp-value mono ncp-pubkey">
             <CopyableText value={nodeRuntime.fiberPubkey} />
           </span>
         </div>
-        <div className="ncp-row">
-          <span className="ncp-label">{t.chain}</span>
+        <div className="ncp-detail-row">
+          <span className="ncp-label">{t.totalLocked}</span>
           <span className="ncp-value">
-            {nodeRuntime.chain}
-            <span className="ncp-meta"> · #{nodeRuntime.tipHeight.toLocaleString()}</span>
-            <span className="ncp-meta"> · {nodeRuntime.synced ? t.synced : '…'}</span>
+            {lockedCkb.toLocaleString()} CKB
           </span>
-        </div>
-        <div className="ncp-row">
-          <span className="ncp-label">{t.uptime}</span>
-          <span className="ncp-value">{nodeRuntime.uptimeHours}h</span>
         </div>
       </div>
 
+      {/* ── Watchtower row ───────────────────────────────────────────── */}
       <div className="ncp-watchtower">
         <div className="ncp-wt-left">
-          <div className="ncp-label">{t.watchtower}</div>
-          <div className="ncp-wt-status">
-            <span className={`wt-mode wt-${watchtower.mode}`}>
-              {watchtower.mode === 'local' ? (
-                <>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <rect x="4" y="3" width="16" height="14" rx="2" />
-                    <path d="M8 21h8M12 17v4" />
-                  </svg>
-                  {t.watchtowerLocal}
-                </>
-              ) : (
-                <>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M12 3v3M12 18v3M3 12h3M18 12h3" />
-                    <circle cx="12" cy="12" r="4" />
-                  </svg>
-                  {t.watchtowerRemote}
-                </>
-              )}
+          <span className="ncp-label">{t.watchtower}</span>
+          <span className={`wt-mode wt-${watchtower.mode}`}>
+            {watchtower.mode === 'local' ? (
+              <>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="4" y="3" width="16" height="14" rx="2" />
+                  <path d="M8 21h8M12 17v4" />
+                </svg>
+                {t.watchtowerLocal}
+              </>
+            ) : (
+              <>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 3v3M12 18v3M3 12h3M18 12h3" />
+                  <circle cx="12" cy="12" r="4" />
+                </svg>
+                {t.watchtowerRemote}
+              </>
+            )}
+          </span>
+          <span className="ncp-wt-detail">
+            {watchtower.mode === 'remote' && watchtower.endpoint ? (
+              <span className="mono">{watchtower.endpoint}</span>
+            ) : null}
+            <span className="ncp-meta">
+              {' · '}{watchtower.sessions} {t.watchtowerSessions}
+              {watchtower.mode === 'remote' && watchtower.latencyMs
+                ? ` · ${watchtower.latencyMs} ms`
+                : ''}
             </span>
-            <span className="ncp-wt-detail">
-              {watchtower.mode === 'remote' && watchtower.endpoint ? (
-                <span className="mono">{watchtower.endpoint}</span>
-              ) : null}
-              <span className="ncp-meta">
-                {' · '}{watchtower.sessions} {t.watchtowerSessions}
-                {watchtower.mode === 'remote' && watchtower.latencyMs
-                  ? ` · ${watchtower.latencyMs} ms`
-                  : ''}
-              </span>
-            </span>
-          </div>
+          </span>
         </div>
-        <button
-          type="button"
-          className="btn-secondary btn-with-chevron"
-          onClick={handleWatchtowerSwitch}
-        >
+        <button type="button" className="btn-secondary btn-with-chevron" onClick={handleWatchtowerSwitch}>
           <span>
-            {watchtower.mode === 'local'
-              ? t.watchtowerSwitchRemote
-              : t.watchtowerSwitchLocal}
+            {watchtower.mode === 'local' ? t.watchtowerSwitchRemote : t.watchtowerSwitchLocal}
           </span>
           <IconChevron />
         </button>

@@ -1,5 +1,7 @@
 export type AppCategory = 'payments' | 'defi' | 'tools' | 'games'
 
+export type AppPlatform = 'web' | 'mobile' | 'both'
+
 export type MarketApp = {
   id: string
   nameZh: string
@@ -14,6 +16,8 @@ export type MarketApp = {
   featured?: boolean
   rating?: number    // 1-5
   downloads?: string // e.g. "12K", "3.2M"
+  badge?: 'hot' | 'new'
+  platform: AppPlatform
 }
 
 export const banners = [
@@ -66,6 +70,8 @@ export const apps: MarketApp[] = [
     featured: true,
     rating: 4.8,
     downloads: '56K',
+    badge: 'hot',
+    platform: 'web',
   },
   {
     id: 'invoice-desk',
@@ -78,6 +84,7 @@ export const apps: MarketApp[] = [
     accent: '#15b8ed',
     rating: 4.5,
     downloads: '12K',
+    platform: 'web',
   },
   {
     id: 'tip-jar',
@@ -90,6 +97,7 @@ export const apps: MarketApp[] = [
     accent: '#ff6b1a',
     rating: 4.6,
     downloads: '8K',
+    platform: 'mobile',
   },
   {
     id: 'lp-desk',
@@ -105,6 +113,8 @@ export const apps: MarketApp[] = [
     featured: true,
     rating: 4.3,
     downloads: '23K',
+    badge: 'hot',
+    platform: 'both',
   },
   {
     id: 'channel-scout',
@@ -117,6 +127,7 @@ export const apps: MarketApp[] = [
     accent: '#0891b2',
     rating: 4.1,
     downloads: '9K',
+    platform: 'web',
   },
   {
     id: 'yield-radar',
@@ -129,6 +140,7 @@ export const apps: MarketApp[] = [
     accent: '#ca8a04',
     rating: 3.9,
     downloads: '15K',
+    platform: 'web',
   },
   {
     id: 'peer-map',
@@ -141,6 +153,8 @@ export const apps: MarketApp[] = [
     accent: '#0891b2',
     rating: 4.4,
     downloads: '31K',
+    badge: 'hot',
+    platform: 'web',
   },
   {
     id: 'hashtime-lab',
@@ -153,6 +167,8 @@ export const apps: MarketApp[] = [
     accent: '#4f46e5',
     rating: 4.0,
     downloads: '6K',
+    badge: 'new',
+    platform: 'both',
   },
   {
     id: 'bridge-watch',
@@ -165,6 +181,7 @@ export const apps: MarketApp[] = [
     accent: '#ea580c',
     rating: 4.2,
     downloads: '18K',
+    platform: 'web',
   },
   {
     id: 'pixel-faucet',
@@ -177,6 +194,8 @@ export const apps: MarketApp[] = [
     accent: '#db2777',
     rating: 4.9,
     downloads: '42K',
+    badge: 'hot',
+    platform: 'mobile',
   },
   {
     id: 'sat-runner',
@@ -189,5 +208,7 @@ export const apps: MarketApp[] = [
     accent: '#2563eb',
     rating: 4.7,
     downloads: '28K',
+    badge: 'new',
+    platform: 'mobile',
   },
 ]
