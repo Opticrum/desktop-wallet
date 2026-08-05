@@ -86,10 +86,6 @@ export const en: Messages = {
 
   // Liquidity — dashboard
   dashboardTitle: 'Liquidity Overview',
-  tvlLabel: 'Total Value Locked',
-  activeOrdersLabel: 'Active Orders',
-  activeMatchesLabel: 'Active Matches',
-  averageApyLabel: 'Avg. APY',
   yieldDistribution: 'Yield Distribution',
 
   // Liquidity — match monitoring

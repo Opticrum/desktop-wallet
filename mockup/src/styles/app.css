@@ -3356,15 +3356,42 @@
 
 /* ── Liquidity Marketplace ──────────────────────────────────────────────── */
 
-/* Connection panel */
+/* Two-column layout: match table main + connection/yield aside */
+
+.lm-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 20px;
+  align-items: start;
+}
+
+.lm-main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.lm-aside {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  align-self: start;
+}
+
+/* Connection panel (vertical stack inside the aside) */
 
 .lm-connection-panel {
   display: flex;
-  align-items: center;
-  gap: 20px;
-  flex-wrap: wrap;
-  padding: 18px 24px;
-  margin-bottom: 12px;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+}
+
+.lm-connection-panel .section-label {
+  margin: 0 0 2px;
 }
 
 .lm-connection-field {
@@ -3382,7 +3409,7 @@
 }
 
 .lm-connection-field .search-input {
-  width: 280px;
+  width: 100%;
   min-height: 38px;
   font-size: 13px;
 }
@@ -3394,8 +3421,11 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--ink-3);
-  margin-left: auto;
-  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.lm-connect-button {
+  width: 100%;
 }
 
 .lm-connection-status .pulse-dot.off {
@@ -3410,8 +3440,7 @@
 /* Yield distribution bars */
 
 .lm-yield-section {
-  margin-bottom: 12px;
-  padding: 18px 24px 20px;
+  padding: 18px 20px 20px;
 }
 
 .lm-yield-bars {
@@ -3519,18 +3548,12 @@
 
 /* Connection panel responsive fallback */
 
-@media (max-width: 900px) {
-  .lm-connection-panel {
-    flex-direction: column;
-    align-items: stretch;
+@media (max-width: 1080px) {
+  .lm-layout {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .lm-connection-field .search-input {
-    width: 100%;
-  }
-
-  .lm-connection-status {
-    margin-left: 0;
-    justify-content: flex-end;
+  .lm-aside {
+    position: static;
   }
 }

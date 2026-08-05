@@ -86,10 +86,6 @@ export const zh: Messages = {
 
   // Liquidity — dashboard
   dashboardTitle: '流动性概览',
-  tvlLabel: '总锁仓量',
-  activeOrdersLabel: '活跃订单',
-  activeMatchesLabel: '活跃匹配',
-  averageApyLabel: '平均年化',
   yieldDistribution: '收益率分布',
 
   // Liquidity — match monitoring

@@ -88,10 +88,6 @@ export type Messages = {
 
   // Liquidity — dashboard
   dashboardTitle: string
-  tvlLabel: string
-  activeOrdersLabel: string
-  activeMatchesLabel: string
-  averageApyLabel: string
   yieldDistribution: string
 
   // Liquidity — match monitoring
