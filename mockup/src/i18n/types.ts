@@ -37,7 +37,6 @@ export type Messages = {
   changelog: string
   recentTxs: string
   channelTable: string
-  peerList: string
   recentLogs: string
   openApp: string
   category: string
@@ -46,7 +45,6 @@ export type Messages = {
   memory: string
   tipHeight: string
   notFound: string
-  peerAddr: string
 
   // Sidebar intent blocks
   wallet: string
@@ -173,13 +171,10 @@ export type Messages = {
   txChannelClose: string
 
   // Peer / channel table headers
-  peer: string
   capacity: string
   local: string
   remote: string
   state: string
-  fees: string
-  latency: string
   asset: string
 
   // Send page + balance QR
@@ -210,17 +205,29 @@ export type Messages = {
   copied: string
 
   // Node page — sections + redesigned sidebar
-  nodeChannelsSection: string
-  nodePeersSection: string
-  nodeTabsLabel: string
+  nodeConnectionsSection: string
+  nodeExpand: string
+  nodeCollapse: string
+  nodeNoChannels: string
+  nodeOnchainTx: string
+  nodeOutbound: string
+  nodeInbound: string
+  nodeOutboundBalance: string
+  nodeInboundBalance: string
+  nodeKpiNodes: string
+  nodeKpiChannels: string
+  hubConnect: string
+  hubConnected: string
+  hubLocal: string
   nodeLogsSection: string
   nodeChannelCount: string
-  nodePeerCount: string
   viewNodeLogs: string
 
   // Node page — create + delete actions
   nodeNewChannel: string
   nodeNewConnection: string
+  nodeRefresh: string
+  nodeRefreshToast: string
   nodeFormPeerAlias: string
   nodeFormPeerAddr: string
   nodeFormCapacity: string
@@ -238,14 +245,10 @@ export type Messages = {
   nodeDeleteCancel: string
   nodeDeleteToast: string
 
-  // Peer connection status
-  peerConnected: string
-  peerDisconnected: string
-
   // Node control panel
   nodeAlias: string
   fiberPubkey: string
-  totalLocked: string
+  fiberAddr: string
   chain: string
   nodeRunning: string
   nodeStopped: string

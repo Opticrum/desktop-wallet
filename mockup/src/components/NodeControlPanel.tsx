@@ -6,7 +6,6 @@ import { NodeConfigModal } from './config/NodeConfigModal'
 import { useLocale } from '../i18n/LocaleContext'
 import { useNode } from '../node/NodeContext'
 import { nodeRuntime, nodeWatchtower, type WatchtowerConfig } from '../mock/node'
-import { channels } from '../mock/channels'
 
 type Props = {
   onToast: (msg: string) => void
@@ -63,8 +62,6 @@ export function NodeControlPanel({ onToast }: Props) {
     setRunning(true)
     onToast(t.nodeStartedToast)
   }
-
-  const lockedCkb = channels.reduce((sum, ch) => sum + ch.localBalanceCkb, 0)
 
   return (
     <section className="panel node-control-panel">
@@ -123,9 +120,9 @@ export function NodeControlPanel({ onToast }: Props) {
           </span>
         </div>
         <div className="ncp-detail-row">
-          <span className="ncp-label">{t.totalLocked}</span>
-          <span className="ncp-value">
-            {lockedCkb.toLocaleString()} CKB
+          <span className="ncp-label">{t.fiberAddr}</span>
+          <span className="ncp-value mono">
+            <CopyableText value={nodeRuntime.fiberAddr} />
           </span>
         </div>
       </div>
