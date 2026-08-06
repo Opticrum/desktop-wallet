@@ -11,7 +11,6 @@ import {
   type BuyOrder,
   type MatchHealth,
   type MyMatch,
-  type OrderStatus,
 } from '../mock/liquidity'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { Toast } from '../components/Toast'
@@ -56,18 +55,6 @@ function MatchHealthBadge({ health }: { health: MatchHealth }) {
   }
   return (
     <span className={`badge health-${health.toLowerCase()}`}>{labelMap[health]}</span>
-  )
-}
-
-function OrderStatusBadge({ status }: { status: OrderStatus }) {
-  const { t } = useLocale()
-  const labelMap: Record<OrderStatus, string> = {
-    open: t.lmStatusOpen,
-    matched: t.lmStatusMatched,
-    cancelled: t.lmStatusCancelled,
-  }
-  return (
-    <span className={`badge order-${status}`}>{labelMap[status]}</span>
   )
 }
 
@@ -204,6 +191,7 @@ export function LiquidityMarket() {
   const [orders, setOrders] = useState<BuyOrder[]>(mockMyOrders)
   const [matches, setMatches] = useState<MyMatch[]>(mockMyMatches)
   const [toast, setToast] = useState<string | null>(null)
+  const [listTab, setListTab] = useState<'orders' | 'matches'>('orders')
 
   const [buyOpen, setBuyOpen] = useState(false)
   const [adjust, setAdjust] = useState<{ match: MyMatch; mode: AdjustMode } | null>(null)
@@ -254,14 +242,6 @@ export function LiquidityMarket() {
 
   return (
     <div className="page-wide">
-      <div className="page-kicker lm-kicker">
-        <span className={`lm-net-badge net-${chain}`}>
-          {chain === 'mainnet' ? t.networkMainnet : t.networkTestnet}
-        </span>
-        <span className="lm-follows">{t.lmFollowsNode}</span>
-      </div>
-      <h1 className="page-title">{t.liquidityMarket}</h1>
-
       <div className="lm-layout">
         {/* ── Left main: my liquidity ─────────────────────────────────── */}
         <div className="lm-main">
@@ -298,111 +278,155 @@ export function LiquidityMarket() {
             </div>
           </section>
 
-          {/* My purchase orders */}
+          {/* My purchase orders / matched liquidity — tabbed lists */}
           <section className="panel panel-flush">
-            <div className="section-head toolbar">
-              <h2>{t.lmMyOrders}</h2>
-              <span className="lm-count">{orders.length}</span>
+            <div className="lm-tabs" role="tablist" aria-label={t.liquidityMarket}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={listTab === 'orders'}
+                className={listTab === 'orders' ? 'lm-tab is-active' : 'lm-tab'}
+                onClick={() => setListTab('orders')}
+              >
+                {t.lmMyOrders}
+                <span className="lm-tab-count">{orders.length}</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={listTab === 'matches'}
+                className={listTab === 'matches' ? 'lm-tab is-active' : 'lm-tab'}
+                onClick={() => setListTab('matches')}
+              >
+                {t.lmMyMatches}
+                <span className="lm-tab-count">{matches.length}</span>
+              </button>
             </div>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>{t.lmOrderOutpoint}</th>
-                  <th className="num">{t.matchCapacity}</th>
-                  <th className="num">{t.matchRate}</th>
-                  <th className="num">{t.lmDeposit}</th>
-                  <th>{t.lmOrderStatus}</th>
-                  <th>{t.lmCreatedAt}</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {orders.map((o) => (
-                  <tr key={o.outpoint}>
-                    <td className="mono">{truncateOutpoint(o.outpoint)}</td>
-                    <td className="num">{formatCkb(o.channelCapacityCkb)} {t.unitCkb}</td>
-                    <td className="num">
-                      {o.shannonsPerBlock.toLocaleString()} {t.shannonsPerBlock}
-                      <br />
-                      <span className="text-secondary">{formatBps(o.annualYieldBps)}</span>
-                    </td>
-                    <td className="num">{formatCkb(o.depositCkb)} {t.unitCkb}</td>
-                    <td>
-                      <OrderStatusBadge status={o.status} />
-                    </td>
-                    <td className="num text-secondary">{formatTimestamp(o.createdAt)}</td>
-                    <td className="lm-row-actions">
-                      {o.status === 'open' && (
-                        <button type="button" className="lm-link-btn" onClick={() => setCancelTarget(o)}>
-                          {t.lmCancelOrder}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
 
-          {/* My matched liquidity */}
-          <section className="panel panel-flush">
-            <div className="section-head toolbar">
-              <h2>{t.lmMyMatches}</h2>
-              <span className="lm-count">{matches.length}</span>
-            </div>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>{t.matchOutpoint}</th>
-                  <th className="num">{t.matchCapacity}</th>
-                  <th className="num">{t.lmDeposit}</th>
-                  <th className="num">{t.lmWithdrawable}</th>
-                  <th className="num">{t.matchRate}</th>
-                  <th>{t.matchHealth}</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {matches.map((m) => (
-                  <tr key={m.outpoint}>
-                    <td className="mono">{truncateOutpoint(m.channelOutpoint)}</td>
-                    <td className="num">
-                      {m.isExhausted ? (
-                        <span className="text-secondary">—</span>
-                      ) : (
-                        <>{formatCkb(m.channelCapacityCkb)} {t.unitCkb}</>
-                      )}
-                    </td>
-                    <td className="num">{formatCkb(m.depositCkb)} {t.unitCkb}</td>
-                    <td className="num">{formatCkb(m.withdrawableCkb)} {t.unitCkb}</td>
-                    <td className="num">
-                      {m.shannonsPerBlock.toLocaleString()} {t.shannonsPerBlock}
-                      <br />
-                      <span className="text-secondary">{formatBps(m.annualYieldBps)}</span>
-                    </td>
-                    <td>
-                      <MatchHealthBadge health={m.health} />
-                    </td>
-                    <td className="lm-row-actions">
-                      {m.isExhausted ? (
-                        <button type="button" className="lm-danger-btn" onClick={() => setExtractTarget(m)}>
-                          {t.lmExtractDelete}
-                        </button>
-                      ) : (
-                        <>
-                          <button type="button" className="lm-action-btn" onClick={() => setAdjust({ match: m, mode: 'inject' })}>
-                            {t.lmInject}
-                          </button>
-                          <button type="button" className="lm-action-btn" onClick={() => setAdjust({ match: m, mode: 'withdraw' })}>
-                            {t.lmWithdraw}
-                          </button>
-                        </>
-                      )}
-                    </td>
+            {listTab === 'orders' ? (
+              <table className="data-table lm-table">
+                <colgroup>
+                  <col style={{ width: '32%' }} />
+                  <col style={{ width: '17%' }} />
+                  <col style={{ width: '19%' }} />
+                  <col style={{ width: '15%' }} />
+                  <col style={{ width: '17%' }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>{t.lmOrderOutpoint}</th>
+                    <th className="num">{t.matchCapacity}</th>
+                    <th className="num">{t.matchRate}</th>
+                    <th className="num">{t.lmDeposit}</th>
+                    <th />
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {orders.map((o) => (
+                    <tr key={o.outpoint}>
+                      <td>
+                        <div className="lm-cell-main mono" title={o.outpoint}>
+                          {truncateOutpoint(o.outpoint)}
+                        </div>
+                        <div className="lm-cell-sub">{formatTimestamp(o.createdAt)}</div>
+                      </td>
+                      <td className="num">
+                        {formatCkb(o.channelCapacityCkb)} <span className="lm-unit">{t.unitCkb}</span>
+                      </td>
+                      <td className="num">
+                        <div className="lm-cell-main">{formatBps(o.annualYieldBps)}</div>
+                        <div className="lm-cell-sub">
+                          {o.shannonsPerBlock.toLocaleString()} {t.shannonsPerBlock}
+                        </div>
+                      </td>
+                      <td className="num">
+                        {formatCkb(o.depositCkb)} <span className="lm-unit">{t.unitCkb}</span>
+                      </td>
+                      <td className="lm-row-actions">
+                        {o.status === 'open' && (
+                          <button type="button" className="lm-link-btn" onClick={() => setCancelTarget(o)}>
+                            {t.lmCancelOrder}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <table className="data-table lm-table">
+                <colgroup>
+                  <col style={{ width: '30%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '16%' }} />
+                  <col style={{ width: '17%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '12%' }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>{t.matchOutpoint}</th>
+                    <th className="num">{t.matchCapacity}</th>
+                    <th className="num">{t.lmDeposit}</th>
+                    <th className="num">{t.matchRate}</th>
+                    <th>{t.matchHealth}</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {matches.map((m) => (
+                    <tr key={m.outpoint}>
+                      <td>
+                        <div className="lm-cell-main mono" title={m.channelOutpoint}>
+                          {truncateOutpoint(m.channelOutpoint)}
+                        </div>
+                        <div className="lm-cell-sub">{formatTimestamp(m.createdAt)}</div>
+                      </td>
+                      <td className="num">
+                        {m.isExhausted ? (
+                          <span className="text-secondary">—</span>
+                        ) : (
+                          <>
+                            {formatCkb(m.channelCapacityCkb)} <span className="lm-unit">{t.unitCkb}</span>
+                          </>
+                        )}
+                      </td>
+                      <td className="num">
+                        <div className="lm-cell-main">{formatCkb(m.depositCkb)}</div>
+                        <div className="lm-cell-sub">
+                          {t.lmWithdrawable} {formatCkb(m.withdrawableCkb)}
+                        </div>
+                      </td>
+                      <td className="num">
+                        <div className="lm-cell-main">{formatBps(m.annualYieldBps)}</div>
+                        <div className="lm-cell-sub">
+                          {m.shannonsPerBlock.toLocaleString()} {t.shannonsPerBlock}
+                        </div>
+                      </td>
+                      <td>
+                        <MatchHealthBadge health={m.health} />
+                      </td>
+                      <td className="lm-row-actions">
+                        {m.isExhausted ? (
+                          <button type="button" className="lm-danger-btn" onClick={() => setExtractTarget(m)}>
+                            {t.lmExtractDelete}
+                          </button>
+                        ) : (
+                          <>
+                            <button type="button" className="lm-action-btn" onClick={() => setAdjust({ match: m, mode: 'inject' })}>
+                              {t.lmInject}
+                            </button>
+                            <button type="button" className="lm-action-btn" onClick={() => setAdjust({ match: m, mode: 'withdraw' })}>
+                              {t.lmWithdraw}
+                            </button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </section>
         </div>
 

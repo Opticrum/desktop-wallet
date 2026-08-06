@@ -6,16 +6,6 @@ export type Tx = {
   txHash: string
 }
 
-export type HdAccount = {
-  id: string
-  nameZh: string
-  nameEn: string
-  path: string
-  address: string
-  addressShort: string
-  balanceCkb: number
-}
-
 export const wallet = {
   address:
     'ckt1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsqds6edszer3w0fkx63kvxu6znl0z2vhrza3x9s2p',
@@ -96,64 +86,4 @@ export const wallet = {
       txHash: '0xccddeeff00112233445566778899aabbccddeeff00112233445566778899aabb',
     },
   ] satisfies Tx[],
-}
-
-export const hdAccounts: HdAccount[] = [
-  {
-    id: 'acc-0',
-    nameZh: '主钱包',
-    nameEn: 'Primary wallet',
-    path: "m/44'/309'/0'/0/0",
-    address: 'ckt1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsqds6edszer3w0fkx63kvxu6znl0z2vhrza3x9s2p',
-    addressShort: 'ckt1…s2p',
-    balanceCkb: 9860.32,
-  },
-  {
-    id: 'acc-1',
-    nameZh: '储蓄钱包',
-    nameEn: 'Savings wallet',
-    path: "m/44'/309'/0'/0/1",
-    address: 'ckt1qrf9syv8pnj5z3y9j4h8k7c2d6wxt5a4b3e2f1g0h9i8j7k6l5m4n3o2p1q0r9s8t7u6v5w4x3y2z1a0b9c8d7e6f5g4h3i2j1k0l9m8n7o6p5q4r3s2t1u0v',
-    addressShort: 'ckt1…h7q',
-    balanceCkb: 2620.2,
-  },
-]
-
-// ── HD account derivation ───────────────────────────────────────────────
-// Deterministic pseudo-address so a freshly derived account looks real but
-// is stable across renders.
-
-function pseudoCkbAddress(seed: number) {
-  let h = 0x811c9dc5
-  const s = `opticrum-hd-${seed}`
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i)
-    h = Math.imul(h, 0x01000193)
-  }
-  let x = h >>> 0
-  const digits = '0123456789abcdef'
-  let hex = ''
-  for (let i = 0; i < 44; i++) {
-    x ^= x << 13
-    x ^= x >>> 17
-    x ^= x << 5
-    x >>>= 0
-    hex += digits[x % 16]
-  }
-  return { address: `ckt1${hex}`, addressShort: `ckt1…${hex.slice(-3)}` }
-}
-
-/** Derive the Nth account from the wallet's master seed path. Newly derived
- * accounts are empty (0 CKB) — just like a fresh HD account. */
-export function deriveHdAccount(index: number): HdAccount {
-  const { address, addressShort } = pseudoCkbAddress(index)
-  return {
-    id: `acc-${index}`,
-    nameZh: index === 0 ? '主钱包' : index === 1 ? '储蓄钱包' : `钱包 ${index + 1}`,
-    nameEn: index === 0 ? 'Primary wallet' : index === 1 ? 'Savings wallet' : `Wallet ${index + 1}`,
-    path: `m/44'/309'/0'/0/${index}`,
-    address,
-    addressShort,
-    balanceCkb: 0,
-  }
 }

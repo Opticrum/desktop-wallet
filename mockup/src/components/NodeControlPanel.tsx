@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { ConfirmModal } from './ConfirmModal'
 import { CopyableText } from './CopyableText'
 import { NodeConfigModal } from './config/NodeConfigModal'
@@ -79,35 +78,34 @@ export function NodeControlPanel({ onToast }: Props) {
           <span className="ncp-meta-line">
             {nodeRuntime.nodeAlias}
             <span className="ncp-meta-sep">·</span>
-            {chain}
-            <span className="ncp-meta-sep">·</span>
             {nodeRuntime.uptimeHours}h
-            <span className="ncp-meta-sep">·</span>
-            <Link to="/node/logs" className="ncp-logs-link">
-              {t.viewNodeLogs} →
-            </Link>
           </span>
         </div>
-        <div className="ncp-actions">
-          {running ? (
-            <button type="button" className="btn-danger btn-icon" onClick={() => setStopOpen(true)}>
-              <IconStop />
-              <span>{t.nodeStop}</span>
+        <div className="ncp-status-right">
+          <span className={`ncp-net-badge net-${chain}`}>
+            {chain === 'mainnet' ? t.networkMainnet : t.networkTestnet}
+          </span>
+          <div className="ncp-actions">
+            {running ? (
+              <button type="button" className="btn-danger btn-icon" onClick={() => setStopOpen(true)}>
+                <IconStop />
+                <span>{t.nodeStop}</span>
+              </button>
+            ) : (
+              <button type="button" className="btn-primary btn-icon" onClick={handleStart}>
+                <IconPlay />
+                <span>{t.nodeStart}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn-secondary btn-icon"
+              onClick={() => setConfigOpen(true)}
+            >
+              <IconGear />
+              <span>{t.nodeConfig}</span>
             </button>
-          ) : (
-            <button type="button" className="btn-primary btn-icon" onClick={handleStart}>
-              <IconPlay />
-              <span>{t.nodeStart}</span>
-            </button>
-          )}
-          <button
-            type="button"
-            className="btn-secondary btn-icon"
-            onClick={() => setConfigOpen(true)}
-          >
-            <IconGear />
-            <span>{t.nodeConfig}</span>
-          </button>
+          </div>
         </div>
       </div>
 
@@ -127,21 +125,19 @@ export function NodeControlPanel({ onToast }: Props) {
         </div>
       </div>
 
-      {/* ── Watchtower — set at startup, displayed as local / remote + URL ── */}
+      {/* ── Watchtower — set at startup, displayed as a status capsule ── */}
       <div className="ncp-watchtower">
-        <div className="ncp-wt-head">
+        <div className="ncp-wt-capsule">
+          {watchtower.mode === 'remote' && watchtower.endpoint && (
+            <span className="wt-url mono">{watchtower.endpoint}</span>
+          )}
+          <span className={`wt-badge wt-${watchtower.mode}`}>
+            {watchtower.mode === 'local' ? t.watchtowerLocal : t.watchtowerRemote}
+          </span>
           <span className="ncp-wt-title">
             <IconShield />
             {t.watchtower}
           </span>
-          <div className="ncp-wt-value">
-            <span className={`wt-badge wt-${watchtower.mode}`}>
-              {watchtower.mode === 'local' ? t.watchtowerLocal : t.watchtowerRemote}
-            </span>
-            {watchtower.mode === 'remote' && watchtower.endpoint && (
-              <span className="wt-url mono">{watchtower.endpoint}</span>
-            )}
-          </div>
         </div>
       </div>
 

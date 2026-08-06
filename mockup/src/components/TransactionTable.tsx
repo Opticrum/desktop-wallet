@@ -31,11 +31,43 @@ function txLabel(type: Tx['type'], t: ReturnType<typeof useLocale>['t']) {
 export function TransactionTable({
   transactions,
   fullHash = false,
+  compact = false,
 }: {
   transactions: Tx[]
   fullHash?: boolean
+  /** Single-line rows without the tx hash — used by the wallet module. */
+  compact?: boolean
 }) {
   const { t, locale } = useLocale()
+
+  if (compact) {
+    return (
+      <div className="activity activity-compact">
+        {transactions.map((tx) => (
+          <div key={tx.id} className="activity-row">
+            <div className="activity-main">
+              <span className={`activity-dot ${tx.type}`} aria-hidden />
+              <span className="activity-compact-text">
+                {txLabel(tx.type, t)}
+                <span className="activity-compact-date">
+                  {new Date(tx.timestamp).toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US', {
+                    month: 'numeric',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </span>
+              </span>
+            </div>
+            <div className={`activity-amount ${tx.amountCkb >= 0 ? 'positive' : 'negative'}`}>
+              {tx.amountCkb >= 0 ? '+' : ''}
+              {tx.amountCkb.toLocaleString(undefined, { maximumFractionDigits: 2 })} CKB
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
 
   return (
     <div className="activity">

@@ -9,9 +9,6 @@ import { NewsPage } from './pages/NewsPage'
 import { ChangelogPage } from './pages/ChangelogPage'
 import { NodeDetail } from './pages/NodeDetail'
 import { NodeLogsPage } from './pages/NodeLogsPage'
-import { BalanceDetail } from './pages/BalanceDetail'
-import { HdWalletDetail } from './pages/HdWalletDetail'
-import { OnChainDetail } from './pages/OnChainDetail'
 import { ActivityDetail } from './pages/ActivityDetail'
 import { LiquidityMarket } from './pages/LiquidityMarket'
 
@@ -30,11 +27,7 @@ export default function App() {
 
                 <Route path="node" element={<NodeDetail />} />
                 <Route path="node/logs" element={<NodeLogsPage />} />
-
-                <Route path="balance" element={<BalanceDetail />} />
-                <Route path="wallet/hd" element={<HdWalletDetail />} />
-                <Route path="wallet/onchain" element={<OnChainDetail />} />
-                <Route path="wallet/activity" element={<ActivityDetail />} />
+                <Route path="node/wallet/activity" element={<ActivityDetail />} />
 
                 <Route path="liquidity" element={<LiquidityMarket />} />
 

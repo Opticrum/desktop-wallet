@@ -12,9 +12,12 @@ import { useLocale } from '../i18n/LocaleContext'
  */
 export function CopyableText({
   value,
+  display,
   className = '',
 }: {
   value: string
+  /** Optional shorter text to render while still copying the full `value`. */
+  display?: string
   className?: string
 }) {
   const { t } = useLocale()
@@ -53,7 +56,7 @@ export function CopyableText({
       onKeyDown={handleKeyDown}
       aria-label={`${t.copied}: ${value}`}
     >
-      <span className="copyable-text">{value}</span>
+      <span className="copyable-text">{display ?? value}</span>
       <svg
         viewBox="0 0 24 24"
         width="12"

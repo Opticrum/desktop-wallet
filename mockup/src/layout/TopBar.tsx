@@ -2,14 +2,13 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { useLocale } from '../i18n/LocaleContext'
 import { useTheme } from '../theme/ThemeContext'
 import { apps } from '../mock/apps'
-import { wallet } from '../mock/wallet'
 import { channelsSummary } from '../mock/channels'
 import { mockDashboardData } from '../mock/liquidity'
 
 type NavItem = {
   to: string
   glyph: string
-  labelKey: 'marketplace' | 'nodeLabel' | 'wallet' | 'liquidityMarket'
+  labelKey: 'marketplace' | 'nodeLabel' | 'liquidityMarket'
   metric: string
   isActive: (pathname: string) => boolean
   disabled?: boolean
@@ -33,14 +32,6 @@ const navItems: NavItem[] = [
     isActive: (p) => p === '/node' || p.startsWith('/node/'),
   },
   {
-    to: '/balance',
-    glyph: 'W',
-    labelKey: 'wallet',
-    metric: `${wallet.totalCkb.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
-    isActive: (p) =>
-      p === '/balance' || p.startsWith('/wallet/'),
-  },
-  {
     to: '/liquidity',
     glyph: 'L',
     labelKey: 'liquidityMarket',
@@ -50,8 +41,8 @@ const navItems: NavItem[] = [
 ]
 
 export function TopBar() {
-  const { t, locale } = useLocale()
-  const { theme } = useTheme()
+  const { t, locale, setLocale } = useLocale()
+  const { theme, setTheme } = useTheme()
   const { pathname } = useLocation()
 
   return (
@@ -100,17 +91,17 @@ export function TopBar() {
             <button
               type="button"
               className="top-bar-quick-btn"
-              disabled
               title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             >
               {theme === 'dark' ? '☀' : '☾'}
             </button>
             <button
               type="button"
               className="top-bar-quick-btn"
-              disabled
               title={locale === 'zh' ? 'English' : '中文'}
               style={{ fontSize: 11, fontWeight: 600, width: 'auto', padding: '0 8px' }}
+              onClick={() => setLocale(locale === 'zh' ? 'en' : 'zh')}
             >
               {locale === 'zh' ? 'EN' : '中'}
             </button>

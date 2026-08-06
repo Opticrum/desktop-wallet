@@ -24,6 +24,11 @@ export const nodeWatchtower: WatchtowerConfig = {
 
 export const logs = [
   {
+    ts: '2026-07-29T10:12:44+08:00',
+    level: 'ERROR' as const,
+    msg: 'HTLC payment timeout on channel ch-02, retrying',
+  },
+  {
     ts: '2026-07-29T10:01:12+08:00',
     level: 'INFO' as const,
     msg: 'Channel ch-02 updated local balance +12.4 CKB',

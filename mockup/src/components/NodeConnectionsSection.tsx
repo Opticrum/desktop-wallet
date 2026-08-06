@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ConfirmModal } from './ConfirmModal'
 import { CopyableText } from './CopyableText'
 import { useLocale } from '../i18n/LocaleContext'
@@ -6,9 +6,6 @@ import { connectedNodes, type ConnectedNode } from '../mock/channels'
 
 type Props = {
   onToast: (msg: string) => void
-  /** Set by the sidebar's top-hub "connect" — opens the form pre-filled. */
-  connectRequest: { alias: string; addr: string } | null
-  onConnectHandled: () => void
 }
 
 // Seed the default expansion with the first node that already has channels,
@@ -17,7 +14,7 @@ const firstWithChannelsId = connectedNodes.find((n) => n.channels.length > 0)?.i
 
 const round1 = (n: number) => Math.round(n * 10) / 10
 
-export function NodeConnectionsSection({ onToast, connectRequest, onConnectHandled }: Props) {
+export function NodeConnectionsSection({ onToast }: Props) {
   const { t } = useLocale()
   // Channel data lives in state so the refresh button can re-drive the
   // KPI row, per-node liquidity and the channel tables together.
@@ -32,19 +29,6 @@ export function NodeConnectionsSection({ onToast, connectRequest, onConnectHandl
   const [channelFormOpen, setChannelFormOpen] = useState<string | null>(null)
   const [pendingCloseId, setPendingCloseId] = useState<string | null>(null)
   const [pendingRemoveId, setPendingRemoveId] = useState<string | null>(null)
-
-  // A top-hub "connect" from the sidebar opens the form and pre-fills it.
-  useEffect(() => {
-    if (!connectRequest) return
-    setConnectAlias(connectRequest.alias)
-    setConnectAddr(connectRequest.addr)
-    setConnectOpen(true)
-    onConnectHandled()
-  }, [connectRequest, onConnectHandled])
-
-  const nodeChannels = nodes.flatMap((n) => n.channels)
-  const outboundCkb = nodeChannels.reduce((sum, c) => sum + c.localBalanceCkb, 0)
-  const inboundCkb = nodeChannels.reduce((sum, c) => sum + c.remoteBalanceCkb, 0)
 
   const handleRefresh = () => {
     setRefreshing(true)
@@ -83,30 +67,6 @@ export function NodeConnectionsSection({ onToast, connectRequest, onConnectHandl
 
   return (
     <>
-      {/* KPI row: node-wide out/in balances + node/channel counts */}
-      <div className="kpi-grid conn-kpis">
-        <div className="kpi">
-          <div className="kpi-label">
-            {t.nodeOutboundBalance} <span className="kpi-label-unit">CKB</span>
-          </div>
-          <div className="kpi-value">{outboundCkb.toLocaleString()}</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">
-            {t.nodeInboundBalance} <span className="kpi-label-unit">CKB</span>
-          </div>
-          <div className="kpi-value">{inboundCkb.toLocaleString()}</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">{t.nodeKpiNodes}</div>
-          <div className="kpi-value">{nodes.length}</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">{t.nodeKpiChannels}</div>
-          <div className="kpi-value">{nodeChannels.length}</div>
-        </div>
-      </div>
-
       {/* Toolbar: refresh + new-connection actions */}
       <div className="node-tabbar">
         <button

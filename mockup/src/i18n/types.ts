@@ -4,8 +4,6 @@ export type Messages = {
   brand: string
   brandSub: string
   nodeLabel: string
-  balance: string
-  available: string
   locked: string
   availableCkb: string
   lockedFiber: string
@@ -25,13 +23,6 @@ export type Messages = {
   catDefi: string
   catTools: string
   catGames: string
-  networkOverview: string
-  networkNodes: string
-  networkChannels: string
-  networkCapacity: string
-  networkTopology: string
-  publicChannels: string
-  topHubs: string
   settlements24h: string
   news: string
   changelog: string
@@ -53,24 +44,14 @@ export type Messages = {
 
   // Hub nav cards + descriptions
   nodeOverview: string
-  walletOverview: string
   channelsDescription: string
   peersDescription: string
   runtimeDescription: string
   connectedPeers: string
   pending: string
-  hdWallet: string
-  hdWalletDescription: string
-  hdCreateWallet: string
-  hdImportWallet: string
   nodeNavChannels: string
   nodeNavPeers: string
   nodeNavRuntime: string
-  onchainAssets: string
-  onchainDescription: string
-  walletAccounts: string
-  transactionCount: string
-  derivationPath: string
 
   // Liquidity — network (follows the node's configured chain)
   lmFollowsNode: string
@@ -155,16 +136,16 @@ export type Messages = {
   newApps: string
   platformWeb: string
   platformMobile: string
-  sendReceive: string
   sendReceiveDesc: string
   viewAll: string
-  activity: string
+  txMoreRemaining: string
 
   // Transaction table
   txType: string
   amount: string
   time: string
   transaction: string
+  txHistory: string
   txReceive: string
   txSend: string
   txChannelOpen: string
@@ -186,21 +167,6 @@ export type Messages = {
   scanToReceive: string
   clickToSend: string
   zoomQr: string
-  hdSectionTitle: string
-  hdAccountsSuffix: string
-  hdAddAccount: string
-  hdActive: string
-  hdAccountCreated: string
-  hdImportToast: string
-  hdDeleteAccount: string
-  hdDeleteNeedZero: string
-  hdDeleteBalanceToast: string
-  hdDeleteConfirmTitle: string
-  hdDeleteConfirmBody: string
-  hdDeleteConfirm: string
-  hdDeleteCancel: string
-  hdDeleteToast: string
-  hdDeleteHint: string
   close: string
   copied: string
 
@@ -221,7 +187,7 @@ export type Messages = {
   hubLocal: string
   nodeLogsSection: string
   nodeChannelCount: string
-  viewNodeLogs: string
+  viewAllLogs: string
 
   // Node page — create + delete actions
   nodeNewChannel: string
