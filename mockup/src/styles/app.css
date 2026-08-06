@@ -473,6 +473,12 @@
   line-height: 1;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
+  animation: balance-figure-in 180ms ease-out;
+}
+
+@keyframes balance-figure-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .balance-figure .unit {
@@ -565,8 +571,7 @@
   gap: 12px;
   position: sticky;
   top: 24px;
-  align-self: stretch;
-  min-height: 640px;
+  align-self: start;
   margin-top: 0;
   padding-top: 0;
 }
@@ -576,7 +581,6 @@
 }
 
 .balance-aside .activity {
-  flex: 1;
   display: flex;
   flex-direction: column;
 }
@@ -661,6 +665,7 @@
 }
 
 .balance-qr {
+  position: relative;
   width: 168px;
   height: 168px;
   padding: 12px;
@@ -671,6 +676,22 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  cursor: zoom-in;
+  font-family: inherit;
+  color: inherit;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.balance-qr:hover,
+.balance-qr:focus-visible {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.balance-qr:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  outline-offset: 2px;
 }
 
 .balance-qr svg {
@@ -687,47 +708,114 @@
   letter-spacing: 0.02em;
 }
 
-/* Send button — softer accent style (different from the primary blue) */
-.balance-send-btn {
+/* Zoom hint chip — appears on hover to signal the QR can be enlarged */
+.balance-qr-zoom {
+  position: absolute;
+  top: 6px;
+  right: 6px;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 40px;
-  padding: 0 18px;
-  background: var(--accent-muted);
-  color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
-  border-radius: var(--radius-sm);
-  font-size: 13px;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 10px;
   font-weight: 700;
-  font-family: inherit;
-  text-decoration: none;
-  transition: background 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-soft);
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  pointer-events: none;
+  z-index: 1;
 }
 
-.balance-send-btn:hover {
-  background: color-mix(in srgb, var(--accent) 18%, var(--accent-muted));
-  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
-  transform: translateY(-1px);
+.balance-qr:hover .balance-qr-zoom,
+.balance-qr:focus-visible .balance-qr-zoom {
+  opacity: 1;
+  transform: translateY(0);
 }
 
-.balance-send-btn:active {
-  transform: scale(0.98);
-}
-
-.balance-send-btn svg {
-  width: 16px;
-  height: 16px;
+.balance-qr-zoom svg {
+  width: 11px;
+  height: 11px;
   stroke: currentColor;
   fill: none;
-  stroke-width: 1.7;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Balance account — hover highlights the block and reveals the send hint;
+   clicking it opens the send dialog */
+.balance-account {
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin: 4px -12px 0;
+  padding: 8px 12px 10px;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  transition: background-color 0.15s ease;
+}
+
+.balance-account:hover,
+.balance-account:focus-visible {
+  background: var(--accent-muted);
+}
+
+.balance-account:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  outline-offset: 2px;
+}
+
+.balance-account:hover .balance-figure,
+.balance-account:focus-visible .balance-figure {
+  color: var(--accent);
+}
+
+.balance-send-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  pointer-events: none;
+}
+
+.balance-account:hover .balance-send-hint,
+.balance-account:focus-visible .balance-send-hint {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.balance-send-hint svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
   transition: transform 0.18s ease;
 }
 
-.balance-send-btn:hover svg {
+.balance-account:hover .balance-send-hint svg,
+.balance-account:focus-visible .balance-send-hint svg {
   transform: translate(1px, -1px);
 }
 
@@ -882,16 +970,6 @@
   font-size: 14px;
   font-weight: 700;
   color: var(--ink-3);
-}
-
-/* Multi-line memo — same chrome as .search-input, but resizes vertically
-   and supports wrapping. Keeps the 14px font for readability. */
-.send-form-textarea {
-  min-height: 80px;
-  padding: 12px 14px;
-  resize: vertical;
-  line-height: 1.5;
-  font-family: inherit;
 }
 
 .send-form-actions {
@@ -1706,19 +1784,100 @@
   font-family: var(--font-mono);
 }
 
+/* ── HD wallet section head ────────────────────────────────────────────── */
+
+.hd-section-head {
+  margin-top: 24px;
+}
+
+.hd-head-info {
+  min-width: 0;
+}
+
+.hd-head-meta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-4);
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── HD accounts ───────────────────────────────────────────────────────── */
 
 .hd-account-row {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 18px 22px 20px;
   border-bottom: 1px solid var(--line);
   min-height: 72px;
+  cursor: pointer;
+  transition: background-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.hd-account-row:hover {
+  background: var(--surface-hover);
+}
+
+.hd-account-row:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  outline-offset: -2px;
+}
+
+/* Soft rounded left indicator — fades and settles in on selection instead of
+   a hard full-height bar, so switching accounts feels smooth */
+.hd-account-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 18px;
+  bottom: 18px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--accent);
+  opacity: 0;
+  transform: scaleY(0.5);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  pointer-events: none;
+}
+
+.hd-account-row.active {
+  /* Raised (凸) selection: elevated surface + drop shadow + a light top edge,
+     so the selected row pops out of the list instead of sinking in. */
+  background: var(--surface-hover);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--accent-ink) 6%, transparent),
+    var(--shadow-elevate);
+}
+
+.hd-account-row.active::before {
+  opacity: 1;
+  transform: scaleY(1);
 }
 
 .hd-account-row:last-child {
   border-bottom: none;
+}
+
+.hd-active-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 1px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-radius: var(--radius-pill);
+  vertical-align: 2px;
+  animation: hd-badge-in 0.18s ease-out;
+}
+
+@keyframes hd-badge-in {
+  from { opacity: 0; transform: scale(0.9); }
+  to   { opacity: 1; transform: scale(1); }
 }
 
 .hd-account-top {
@@ -1758,6 +1917,79 @@
   color: var(--ink);
   text-align: right;
   white-space: nowrap;
+}
+
+.hd-account-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Delete an account — only possible once its balance reaches 0 */
+.hd-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink-4);
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.hd-delete-btn:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.hd-delete-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  outline-offset: -2px;
+}
+
+.hd-delete-btn svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Non-zero balance: deletion is blocked until the account is drained */
+.hd-delete-btn.restricted {
+  color: var(--ink-4);
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.hd-delete-btn.restricted:hover {
+  color: var(--ink-4);
+  background: none;
+}
+
+.hd-delete-hint {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--ink-4);
+  line-height: 1.5;
+}
+
+.hd-delete-hint::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
 }
 
 .hd-account-address {
@@ -2060,6 +2292,783 @@
 .modal-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Enlarged receive QR dialog (click the QR on the wallet page) */
+.qr-modal {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  width: 100%;
+  max-width: 340px;
+  box-shadow: var(--shadow-panel);
+  animation: modal-in 180ms ease-out;
+}
+
+.qr-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.qr-modal-kicker {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.qr-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.qr-modal-close:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.qr-modal-close svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.qr-modal-qr {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.qr-modal-qr svg {
+  width: 220px;
+  height: 220px;
+  color: var(--ink);
+}
+
+.qr-modal-address {
+  margin-top: 14px;
+  display: flex;
+  justify-content: center;
+}
+
+/* Large node config modal — YAML view/edit */
+.config-modal {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 880px;
+  height: min(78vh, 720px);
+  box-shadow: var(--shadow-panel);
+  animation: modal-in 180ms ease-out;
+  overflow: hidden;
+}
+
+.config-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.config-modal-title {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.config-modal-head-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.config-modal-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.config-modal-sub-path {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-4);
+  letter-spacing: 0.03em;
+}
+
+.config-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.config-modal-close:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.config-modal-close svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.config-modal-body {
+  flex: 1;
+  min-height: 0;
+  padding: 16px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+/* Structured config sections */
+
+.config-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+
+.config-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.config-section-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.config-section-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.config-section-title-row {
+  flex: 1;
+  min-width: 0;
+}
+
+.config-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.config-collapse {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  text-align: left;
+}
+
+.config-collapse svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--ink-3);
+}
+
+.config-advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+  align-items: start;
+}
+
+.config-advanced-grid .config-toggle-row,
+.config-advanced-grid .config-url-row {
+  align-self: start;
+}
+
+/* Check chip grid (services / rpc modules) */
+
+.config-check-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.config-check-grid .chip {
+  min-height: 30px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+/* Tag editor (bootnode addresses) */
+
+.config-tag-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.config-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.config-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 10px;
+  font-size: 11px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+
+.config-tag button {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-4);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.config-tag button:hover {
+  background: var(--surface-hover);
+  color: var(--ink-2);
+}
+
+.config-tag-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.config-tag-input-row .config-url-input {
+  flex: 1;
+}
+
+.config-tag-input-row .btn-secondary {
+  flex-shrink: 0;
+}
+
+/* Read-only rows (scripts / UDT whitelist) */
+
+.config-readonly-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.config-readonly-name {
+  font-weight: 700;
+  color: var(--ink-2);
+  flex-shrink: 0;
+}
+
+.config-readonly-meta {
+  font-size: 11px;
+  color: var(--ink-3);
+  text-align: right;
+  word-break: break-all;
+  min-width: 0;
+}
+
+/* Section with an inline action (add script / add UDT) */
+
+.config-section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.config-section-title-row .btn-sm {
+  flex-shrink: 0;
+}
+
+.btn-sm {
+  padding: 5px 12px;
+  font-size: 12px;
+  min-height: 28px;
+}
+
+/* Network detection (CKB section) */
+
+.config-net-detect {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.config-net-unknown {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--warn);
+}
+
+.config-net-hint {
+  font-size: 11px;
+  color: var(--ink-4);
+  margin-left: auto;
+}
+
+/* Editable repeated cards (scripts / UDT whitelist) */
+
+.config-item-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.config-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.config-item-head-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.config-item-remove {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--ink-4);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.config-item-remove:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.config-item-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 14px;
+  align-items: start;
+}
+
+.config-item-grid .config-url-row {
+  min-width: 0;
+}
+
+.config-select {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  border-radius: 8px;
+}
+
+.config-udt-name {
+  font-weight: 700;
+  color: var(--ink-2);
+  max-width: 220px;
+}
+
+.config-list-add {
+  align-self: flex-start;
+}
+
+/* Soft blue add button (scripts cell_deps / UDT whitelist) */
+
+.config-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  align-self: flex-start;
+  min-height: 28px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: filter 0.15s ease, background 0.15s ease;
+}
+
+.config-add-btn:hover {
+  filter: brightness(1.05);
+  background: var(--accent-muted);
+}
+
+/* Empty list placeholder (UDT whitelist) */
+
+.config-empty {
+  padding: 8px 2px;
+  font-size: 12px;
+  color: var(--ink-4);
+}
+
+/* Disabled config section (watchtower when built-in disabled) */
+
+.config-section.is-disabled .config-section-body {
+  opacity: 0.5;
+}
+
+.config-section-body[disabled] {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.config-title-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.config-title-switch .config-row-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-3);
+}
+
+/* Fixed script names */
+
+.config-script-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* cell_deps editor inside a script card */
+
+.config-celldeps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.config-celldep {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+
+.config-celldep-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.config-celldep-kind {
+  width: max-content;
+}
+
+.config-celldep-kind button {
+  min-height: 26px;
+  padding: 0 12px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+/* Disabled tag editor (announced addresses when announce is off) */
+
+.config-tag-editor.is-disabled {
+  opacity: 0.5;
+}
+
+/* Subtle advanced disclosure at the very bottom */
+
+.config-advanced {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.config-advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 9px 8px 1px;
+  background: none;
+  border: none;
+  border-top: 1px dashed var(--line);
+  color: var(--ink-4);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+
+.config-advanced-toggle:hover {
+  color: var(--ink-2);
+}
+
+.config-advanced-toggle svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.config-advanced-toggle svg:last-child {
+  transition: transform 0.15s ease;
+}
+
+.config-advanced-toggle.open svg:last-child {
+  transform: rotate(180deg);
+}
+
+.config-advanced-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+
+/* ── Structured watchtower config (remote on/off + URL) ──────────────── */
+
+.config-watchtower {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+
+.config-chain-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.config-chain-pill {
+  width: max-content;
+}
+
+.config-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  cursor: pointer;
+}
+
+.config-row-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.config-row-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.config-row-desc {
+  font-size: 11px;
+  color: var(--ink-4);
+}
+
+.config-switch {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.config-switch input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.config-switch-track {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.config-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--ink-4);
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.config-switch input:checked + .config-switch-track {
+  background: var(--accent);
+  border-color: transparent;
+}
+
+.config-switch input:checked + .config-switch-track .config-switch-thumb {
+  transform: translateX(16px);
+  background: var(--accent-ink);
+}
+
+.config-url-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.config-url-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ink-4);
+}
+
+.config-url-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 12.5px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.config-url-input:focus {
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.config-modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 24px 20px;
+  border-top: 1px solid var(--line);
+}
+
+.config-modal-path {
+  font-size: 12px;
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+
+.config-modal-actions {
+  display: flex;
   gap: 8px;
 }
 
@@ -2510,7 +3519,6 @@
 /* Pubkey / detail rows */
 .ncp-detail-rows {
   padding: 4px 0;
-  border-bottom: 1px solid var(--line);
 }
 
 .ncp-detail-row {
@@ -2551,57 +3559,69 @@
 
 /* Watchtower row */
 .ncp-watchtower {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.ncp-wt-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.ncp-wt-left {
-  display: flex;
-  align-items: center;
   gap: 12px;
-  flex: 1;
-  min-width: 0;
-  flex-wrap: wrap;
 }
 
-.wt-mode {
+.ncp-wt-title {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 9px;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.ncp-wt-title svg {
+  width: 15px;
+  height: 15px;
+  color: var(--accent);
+}
+
+.ncp-wt-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Watchtower mode — local / remote (+ URL). Read-only, set at startup. */
+.wt-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
   border-radius: var(--radius-pill);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
   flex-shrink: 0;
 }
 
-.wt-mode svg {
-  width: 12px;
-  height: 12px;
-}
-
-.wt-mode.wt-local {
+.wt-badge.wt-local {
   background: var(--ok-soft);
   color: var(--ok);
 }
 
-.wt-mode.wt-remote {
+.wt-badge.wt-remote {
   background: color-mix(in srgb, var(--cyan) 18%, transparent);
   color: var(--cyan);
 }
 
-.ncp-wt-detail {
+.wt-url {
   font-size: 12px;
   color: var(--ink-3);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Shared button helpers */
@@ -2679,71 +3699,116 @@
   font-size: 13.5px;
 }
 
-.node-main .section-head {
-  margin-top: 24px;
-}
-
-.node-main .section-head:first-of-type {
-  margin-top: 20px;
-}
-
 /* ── Node page tabs (Channels / Peers) ────────────────────────────────── */
+/* Segmented capsule control: a soft track with a solid royal-blue capsule
+   that slides between the two options (200ms ease-out). Active label sits
+   on the blue capsule in white; inactive labels stay transparent gray.
+   The capsule and the create action share one toolbar row (.node-tabbar). */
+
+.node-tabbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 20px;
+  margin-bottom: 12px;
+}
 
 .node-tabs {
-  display: flex;
-  gap: 0;
-  border-bottom: 1px solid var(--line);
-  margin-bottom: 12px;
-  margin-top: 20px;
-}
-
-.node-tab {
   position: relative;
-  padding: 10px 18px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ink-3);
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-family: inherit;
-  transition: color 0.15s ease;
-  letter-spacing: -0.01em;
-}
-
-.node-tab:hover {
-  color: var(--ink);
-}
-
-.node-tab.active {
-  color: var(--accent);
-}
-
-.node-tab.active::after {
-  content: '';
-  position: absolute;
-  bottom: -1px;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--accent);
-  border-radius: 1px 1px 0 0;
-}
-
-.node-tab-count {
-  margin-left: 6px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--ink-4);
-  padding: 1px 6px;
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
   background: var(--surface-2);
   border-radius: var(--radius-pill);
 }
 
-.node-tab.active .node-tab-count {
-  background: var(--accent-muted);
-  color: var(--accent);
+.node-tab {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink-3);
+  background: none;
+  border: none;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: color 0.15s ease;
 }
+
+.node-tab:hover {
+  color: var(--ink-2);
+}
+
+.node-tab:focus-visible {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.node-tab.active {
+  color: var(--accent-ink);
+}
+
+.node-tab.active:focus-visible {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent-ink) 55%, transparent);
+}
+
+.node-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--ink-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.node-tab.active .node-tab-count {
+  color: var(--accent-ink);
+  background: color-mix(in srgb, var(--accent-ink) 16%, transparent);
+  border-color: transparent;
+}
+
+/* Create action on the right of the toolbar row — shares the capsule's
+   pill radius so the two read as one unit */
+.node-tabbar-action.btn-primary {
+  border-radius: var(--radius-pill);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.node-tabbar-action.btn-secondary {
+  border-radius: var(--radius-pill);
+}
+
+/* Sliding solid-blue capsule behind the active tab */
+.node-tab-indicator {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: 0;
+  background: var(--accent);
+  border-radius: var(--radius-pill);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--accent) 30%, transparent);
+  transition: left 200ms cubic-bezier(0.4, 0, 0.2, 1),
+              width 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* No entry animation on tab switch — content swaps instantly to avoid a
+   visible flicker when changing between Channels and Peers. */
 
 /* ── Channel table enhancements ───────────────────────────────────────── */
 
@@ -2847,81 +3912,95 @@
   margin-top: 0;
 }
 
-/* ── Top articles (sidebar) ───────────────────────────────────────────── */
+/* ── Network topology sidebar (from get_network_graph) ────────────────── */
 
-.article-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.article-row {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  padding: 10px 0;
-  border-top: 1px solid var(--line);
-}
-
-.article-row:first-child {
-  border-top: none;
-  padding-top: 4px;
-}
-
-.article-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
+.section-head-suffix {
   margin-left: 8px;
-  padding: 0;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--ink-4);
+  vertical-align: 2px;
 }
 
-.article-tag::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
+.topo-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.topo-stat {
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+
+.topo-stat-wide {
+  grid-column: 1 / -1;
+}
+
+.topo-stat-value {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.topo-stat-label {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+
+.topo-hub-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.topo-hub-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.topo-hub-row:last-child {
+  border-bottom: none;
+}
+
+.topo-hub-rank {
+  width: 16px;
   flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
 }
 
-.article-tag.tag-fiber::before {
-  background: var(--orange);
-}
-
-.article-tag.tag-lightning::before {
-  background: var(--cyan);
-}
-
-.article-body {
+.topo-hub-name {
   flex: 1;
   min-width: 0;
-}
-
-.article-title {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--ink);
-  line-height: 1.4;
-  letter-spacing: -0.01em;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.article-meta {
-  margin-top: 4px;
-  font-size: 11px;
-  color: var(--ink-4);
-  font-weight: 500;
+.topo-hub-capacity {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
 }
 .balance-secondary-value { font-size: 20px; font-weight: 800; letter-spacing: -0.03em; }
 
@@ -3381,26 +4460,172 @@
   align-self: start;
 }
 
-/* Connection panel (vertical stack inside the aside) */
+/* Network badge — follows the node's configured chain */
 
-.lm-connection-panel {
+.lm-kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lm-net-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.lm-net-badge::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+.lm-net-badge.net-testnet::before {
+  background: var(--warn);
+}
+
+.lm-follows {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-4);
+}
+
+/* Inbound liquidity hero */
+
+.lm-hero {
+  padding: 22px 24px 20px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
+  background:
+    radial-gradient(560px 220px at 100% -10%, var(--accent-soft), transparent 70%),
+    var(--surface);
+}
+
+.lm-hero-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.lm-hero-title {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--ink-2);
+}
+
+.lm-hero-desc {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ink-4);
+}
+
+.lm-hero-body {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.lm-hero-primary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.lm-hero-value {
+  font-size: clamp(34px, 4vw, 46px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.lm-hero-unit {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-3);
+}
+
+.lm-hero-metrics {
+  display: flex;
+  gap: 28px;
+}
+
+.lm-hero-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lm-hero-metric-value {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Network info (read-only, driven by node config) */
+
+.lm-network-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   padding: 18px 20px;
 }
 
-.lm-connection-panel .section-label {
+.lm-network-panel .section-label {
   margin: 0 0 2px;
 }
 
-.lm-connection-field {
+.lm-net-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.lm-net-label {
+  font-weight: 600;
+  color: var(--ink-4);
+  flex-shrink: 0;
+}
+
+.lm-net-url {
+  font-size: 11px;
+  color: var(--ink-3);
+  text-align: right;
+  word-break: break-all;
+  min-width: 0;
+}
+
+/* Modal form fields (buy order / adjust deposit) */
+
+.lm-form-field {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.lm-connection-field label {
+.lm-form-field label {
   font-size: 11px;
   font-weight: 700;
   color: var(--ink-4);
@@ -3408,33 +4633,20 @@
   letter-spacing: 0.04em;
 }
 
-.lm-connection-field .search-input {
+.lm-form-field .search-input {
   width: 100%;
   min-height: 38px;
   font-size: 13px;
 }
 
-.lm-connection-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink-3);
-  margin-top: 2px;
+.lm-form-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--ink-4);
 }
 
-.lm-connect-button {
-  width: 100%;
-}
-
-.lm-connection-status .pulse-dot.off {
-  background: var(--ink-4);
-  animation: none;
-}
-
-.lm-connection-status .pulse-dot.off::after {
-  display: none;
+.lm-form-hint strong {
+  color: var(--ink-2);
 }
 
 /* Yield distribution bars */
@@ -3490,25 +4702,9 @@
   flex-shrink: 0;
 }
 
-/* Match monitoring: filter row */
+/* Table count chip */
 
-.lm-filter-row {
-  display: flex;
-  gap: 8px;
-  padding: 8px 20px 12px;
-  flex-wrap: wrap;
-  border-bottom: 1px solid var(--line);
-}
-
-.lm-filter-row .chip {
-  min-height: 30px;
-  padding: 0 12px;
-  font-size: 12px;
-}
-
-/* Match count badge */
-
-.lm-match-count {
+.lm-count {
   font-size: 12px;
   font-weight: 600;
   color: var(--ink-4);
@@ -3516,6 +4712,82 @@
   background: var(--surface-2);
   border-radius: var(--radius-pill);
   flex-shrink: 0;
+}
+
+/* Table row action buttons */
+
+.lm-row-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.lm-row-actions .lm-action-btn {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: filter 0.15s ease, background 0.15s ease;
+}
+
+.lm-row-actions .lm-action-btn:hover {
+  filter: brightness(1.06);
+  background: var(--accent-muted);
+}
+
+.lm-row-actions .lm-action-btn + .lm-action-btn {
+  margin-left: 6px;
+}
+
+.lm-row-actions .lm-danger-btn {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--danger);
+  background: var(--danger-soft);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.lm-row-actions .lm-danger-btn:hover {
+  filter: brightness(1.06);
+}
+
+.lm-row-actions .lm-link-btn {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-4);
+  background: none;
+  border: none;
+  padding: 5px 8px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.lm-row-actions .lm-link-btn:hover {
+  color: var(--ink-2);
+  background: var(--surface-hover);
+}
+
+/* Order status badge color variants */
+
+.badge.order-open {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.badge.order-matched {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.badge.order-cancelled {
+  background: var(--surface-2);
+  color: var(--ink-4);
 }
 
 /* Health badge color variants */

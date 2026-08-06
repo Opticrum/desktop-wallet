@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useLocale } from '../i18n/LocaleContext'
-import { wallet, hdAccounts, type Tx } from '../mock/wallet'
+import { wallet, hdAccounts, deriveHdAccount, type HdAccount, type Tx } from '../mock/wallet'
 import { SendDetail } from './SendDetail'
+import { ConfirmModal } from '../components/ConfirmModal'
 import { CopyableText } from '../components/CopyableText'
+import { Toast } from '../components/Toast'
 
 function IconArrowUpRight() {
   return (
@@ -142,6 +144,79 @@ function QrPlaceholder({ value }: { value: string }) {
   )
 }
 
+function IconZoomIn() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m21 21-4.3-4.3" />
+      <path d="M11 8v6M8 11h6" />
+    </svg>
+  )
+}
+
+function IconClose() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path d="M6 6 18 18" />
+      <path d="M18 6 6 18" />
+    </svg>
+  )
+}
+
+/** Enlarged receive QR dialog — click the QR on the wallet page to open it. */
+function QrModal({
+  open,
+  onClose,
+  address,
+}: {
+  open: boolean
+  onClose: () => void
+  address: string
+}) {
+  const { t } = useLocale()
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [open, onClose])
+
+  if (!open) return null
+
+  return (
+    <div className="modal-backdrop" onClick={onClose} role="presentation">
+      <div
+        className="qr-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t.scanToReceive}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="qr-modal-head">
+          <div className="qr-modal-kicker">{t.scanToReceive}</div>
+          <button
+            type="button"
+            className="qr-modal-close"
+            aria-label={t.close}
+            onClick={onClose}
+          >
+            <IconClose />
+          </button>
+        </div>
+        <div className="qr-modal-qr">
+          <QrPlaceholder value={address} />
+        </div>
+        <div className="qr-modal-address">
+          <CopyableText value={address} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function txLabel(
   type: Tx['type'],
   t: ReturnType<typeof useLocale>['t'],
@@ -160,99 +235,189 @@ function txLabel(
 
 export function BalanceDetail() {
   const { t, locale } = useLocale()
-  const [whole, frac] = wallet.totalCkb.toFixed(2).split('.')
+  const [accounts, setAccounts] = useState<HdAccount[]>(hdAccounts)
+  const [activeId, setActiveId] = useState(hdAccounts[0].id)
   const [sendOpen, setSendOpen] = useState(false)
+  const [qrOpen, setQrOpen] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<HdAccount | null>(null)
+
+  const active = accounts.find((a) => a.id === activeId) ?? accounts[0]
+  const [whole, frac] = active.balanceCkb.toFixed(2).split('.')
+  const fiatUsd = (active.balanceCkb / wallet.totalCkb) * wallet.fiatUsd
+
+  const addAccount = () => {
+    const next = deriveHdAccount(accounts.length)
+    setAccounts((list) => [...list, next])
+    setActiveId(next.id)
+    setToast(t.hdAccountCreated)
+  }
+
+  const importWallet = () => {
+    setToast(t.hdImportToast)
+  }
+
+  // Accounts can only be deleted when their balance is 0 (the primary wallet
+  // can never be deleted). Surface the constraint with a hint + toast.
+  const requestDelete = (acc: HdAccount) => {
+    if (acc.balanceCkb > 0) {
+      setToast(t.hdDeleteBalanceToast)
+      return
+    }
+    setPendingDelete(acc)
+  }
+
+  const confirmDelete = () => {
+    if (!pendingDelete) return
+    const id = pendingDelete.id
+    setAccounts((list) => list.filter((a) => a.id !== id))
+    setActiveId((current) => (current === id ? hdAccounts[0].id : current))
+    setPendingDelete(null)
+    setToast(t.hdDeleteToast)
+  }
 
   return (
     <div className="page-wide balance-page">
       <div className="balance-layout">
         <div className="balance-main">
-          {/* Total balance + QR */}
+          {/* Active account balance + QR */}
           <section className="balance-stage">
             <div className="balance-stage-grid">
               <div className="balance-stage-left">
                 <div className="page-title" style={{ margin: 0 }}>
-                  {t.yourBalance}
+                  {locale === 'zh' ? active.nameZh : active.nameEn}
                 </div>
-                <div
-                  className="balance-figure"
-                  aria-label={`${wallet.totalCkb} CKB`}
+
+                {/* Hover → highlight + hint; click → send */}
+                <button
+                  type="button"
+                  className="balance-account"
+                  onClick={() => setSendOpen(true)}
+                  aria-label={t.clickToSend}
                 >
-                  {Number(whole).toLocaleString()}
-                  <span style={{ color: 'var(--ink-4)', fontWeight: 500 }}>
-                    .{frac}
+                  <span key={active.id} className="balance-figure" aria-label={`${active.balanceCkb} CKB`}>
+                    {Number(whole).toLocaleString()}
+                    <span style={{ color: 'var(--ink-4)', fontWeight: 500 }}>
+                      .{frac}
+                    </span>
+                    <span className="unit">CKB</span>
                   </span>
-                  <span className="unit">CKB</span>
-                </div>
-                <div className="balance-fiat">
-                  ≈ ${wallet.fiatUsd.toLocaleString()} USD
-                </div>
+                  <span className="balance-fiat">
+                    ≈ ${fiatUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })} USD
+                  </span>
+                  <span className="balance-send-hint">
+                    <IconArrowUpRight />
+                    {t.clickToSend}
+                  </span>
+                </button>
               </div>
 
               <div className="balance-stage-right">
-                <div className="balance-qr" aria-label={t.scanToReceive}>
-                  <QrPlaceholder value={wallet.address} />
-                  <div className="balance-qr-caption">{t.scanToReceive}</div>
-                </div>
-
                 <button
                   type="button"
-                  className="balance-send-btn"
-                  onClick={() => setSendOpen(true)}
+                  className="balance-qr"
+                  onClick={() => setQrOpen(true)}
+                  aria-label={t.zoomQr}
+                  title={t.zoomQr}
                 >
-                  <IconArrowUpRight />
-                  <span>{t.send}</span>
+                  <QrPlaceholder value={active.address} />
+                  <div className="balance-qr-caption">{t.scanToReceive}</div>
+                  <span className="balance-qr-zoom">
+                    <IconZoomIn />
+                    {t.zoomQr}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {/* HD wallet accounts — same width as the balance stage */}
+          <section className="hd-section">
+            <div className="section-head toolbar hd-section-head">
+              <div className="hd-head-info">
+                <h2>{t.hdSectionTitle}</h2>
+                <div className="hd-head-meta">
+                  m/44'/309'/0'/0 · {accounts.length} {t.hdAccountsSuffix}
+                </div>
+              </div>
+              <div className="toolbar-actions">
+                <button type="button" className="btn-secondary" onClick={importWallet}>
+                  {t.hdImportWallet}
+                </button>
+                <button type="button" className="btn-primary" onClick={addAccount}>
+                  + {t.hdAddAccount}
                 </button>
               </div>
             </div>
 
-          </section>
-
-          {/* HD wallet — same width as the balance stage, stacked below it */}
-          <section className="hd-section">
-            <div className="hd-toolbar">
-              <button type="button" className="btn-primary">
-                {t.hdCreateWallet}
-              </button>
-              <button type="button" className="btn-secondary">
-                {t.walletAccounts}
-              </button>
-              <button type="button" className="btn-secondary">
-                {t.derivationPath}
-              </button>
-            </div>
-
             <div className="panel panel-flush">
-              {hdAccounts.map((acc) => (
-                <div key={acc.id} className="hd-account-row">
-                  <div className="hd-account-top">
-                    <div className="hd-account-info">
-                      <div className="hd-account-name">
-                        {locale === 'zh' ? acc.nameZh : acc.nameEn}
+              {accounts.map((acc) => {
+                const isActive = acc.id === activeId
+                const isPrimary = acc.id === hdAccounts[0].id
+                return (
+                  <div
+                    key={acc.id}
+                    role="button"
+                    tabIndex={0}
+                    className={`hd-account-row${isActive ? ' active' : ''}`}
+                    onClick={() => setActiveId(acc.id)}
+                    onKeyDown={(e) => {
+                      if (e.target !== e.currentTarget) return
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        setActiveId(acc.id)
+                      }
+                    }}
+                  >
+                    <div className="hd-account-top">
+                      <div className="hd-account-info">
+                        <div className="hd-account-name">
+                          {locale === 'zh' ? acc.nameZh : acc.nameEn}
+                          {isActive && <span className="hd-active-badge">{t.hdActive}</span>}
+                        </div>
+                        <div className="hd-account-path">{acc.path}</div>
                       </div>
-                      <div className="hd-account-path">{acc.path}</div>
+                      <div className="hd-account-meta">
+                        <span className="hd-account-balance">
+                          {acc.balanceCkb.toLocaleString(undefined, {
+                            maximumFractionDigits: 2,
+                          })}{' '}
+                          CKB
+                        </span>
+                        {!isPrimary && (
+                          <button
+                            type="button"
+                            className={`hd-delete-btn${acc.balanceCkb > 0 ? ' restricted' : ''}`}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              requestDelete(acc)
+                            }}
+                            aria-label={t.hdDeleteAccount}
+                            title={acc.balanceCkb > 0 ? t.hdDeleteNeedZero : t.hdDeleteAccount}
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div className="hd-account-balance">
-                      {acc.balanceCkb.toLocaleString(undefined, {
-                        maximumFractionDigits: 2,
-                      })}{' '}
-                      CKB
+                    <div className="hd-account-address">
+                      <CopyableText value={acc.address} />
                     </div>
                   </div>
-                  <div className="hd-account-address">
-                    <CopyableText value={acc.address} />
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
-          </section>
 
+            <p className="hd-delete-hint">{t.hdDeleteHint}</p>
+          </section>
         </div>
 
         {/* Activity sidebar — stretches to match the full left column height */}
         <aside className="balance-aside">
           <div className="activity">
-            {wallet.txs.slice(0, 5).map((tx) => (
+            {wallet.txs.slice(0, 10).map((tx) => (
               <div key={tx.id} className="activity-row">
                 <div className="activity-main">
                   <span className={`activity-dot ${tx.type}`} aria-hidden />
@@ -293,6 +458,18 @@ export function BalanceDetail() {
       </div>
 
       <SendDetail open={sendOpen} onClose={() => setSendOpen(false)} />
+      <QrModal open={qrOpen} onClose={() => setQrOpen(false)} address={active.address} />
+      <ConfirmModal
+        open={!!pendingDelete}
+        title={t.hdDeleteConfirmTitle}
+        body={t.hdDeleteConfirmBody}
+        confirmLabel={t.hdDeleteConfirm}
+        cancelLabel={t.hdDeleteCancel}
+        danger
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={confirmDelete}
+      />
+      <Toast message={toast} onDismiss={() => setToast(null)} />
     </div>
   )
 }

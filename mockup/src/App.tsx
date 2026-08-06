@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { LocaleProvider } from './i18n/LocaleContext'
 import { ThemeProvider } from './theme/ThemeContext'
+import { NodeProvider } from './node/NodeContext'
 import { AppShell } from './layout/AppShell'
 import { Home } from './pages/Home'
 import { AppDetail } from './pages/AppDetail'
@@ -18,28 +19,30 @@ export default function App() {
   return (
     <ThemeProvider>
       <LocaleProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route element={<AppShell />}>
-              <Route index element={<Home />} />
-              <Route path="apps/:id" element={<AppDetail />} />
-              <Route path="news" element={<NewsPage />} />
-              <Route path="changelog" element={<ChangelogPage />} />
+        <NodeProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route element={<AppShell />}>
+                <Route index element={<Home />} />
+                <Route path="apps/:id" element={<AppDetail />} />
+                <Route path="news" element={<NewsPage />} />
+                <Route path="changelog" element={<ChangelogPage />} />
 
-              <Route path="node" element={<NodeDetail />} />
-              <Route path="node/logs" element={<NodeLogsPage />} />
+                <Route path="node" element={<NodeDetail />} />
+                <Route path="node/logs" element={<NodeLogsPage />} />
 
-              <Route path="balance" element={<BalanceDetail />} />
-              <Route path="wallet/hd" element={<HdWalletDetail />} />
-              <Route path="wallet/onchain" element={<OnChainDetail />} />
-              <Route path="wallet/activity" element={<ActivityDetail />} />
+                <Route path="balance" element={<BalanceDetail />} />
+                <Route path="wallet/hd" element={<HdWalletDetail />} />
+                <Route path="wallet/onchain" element={<OnChainDetail />} />
+                <Route path="wallet/activity" element={<ActivityDetail />} />
 
-              <Route path="liquidity" element={<LiquidityMarket />} />
+                <Route path="liquidity" element={<LiquidityMarket />} />
 
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Route>
-          </Routes>
-        </BrowserRouter>
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Route>
+            </Routes>
+          </BrowserRouter>
+        </NodeProvider>
       </LocaleProvider>
     </ThemeProvider>
   )

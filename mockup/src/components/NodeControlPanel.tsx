@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ConfirmModal } from './ConfirmModal'
 import { CopyableText } from './CopyableText'
+import { NodeConfigModal } from './config/NodeConfigModal'
 import { useLocale } from '../i18n/LocaleContext'
+import { useNode } from '../node/NodeContext'
 import { nodeRuntime, nodeWatchtower, type WatchtowerConfig } from '../mock/node'
 import { channels } from '../mock/channels'
 
@@ -26,27 +28,29 @@ function IconStop() {
   )
 }
 
-function IconRestart() {
+function IconGear() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M3 12a9 9 0 1 0 3-6.7" />
-      <path d="M3 4v5h5" />
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
   )
 }
 
-function IconChevron() {
+function IconShield() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="m9 6 6 6-6 6" />
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
     </svg>
   )
 }
 
 export function NodeControlPanel({ onToast }: Props) {
   const { t, locale } = useLocale()
+  const { chain } = useNode()
   const [running, setRunning] = useState(true)
   const [stopOpen, setStopOpen] = useState(false)
+  const [configOpen, setConfigOpen] = useState(false)
   const [watchtower, setWatchtower] = useState<WatchtowerConfig>(nodeWatchtower)
 
   const handleStop = () => {
@@ -60,25 +64,7 @@ export function NodeControlPanel({ onToast }: Props) {
     onToast(t.nodeStartedToast)
   }
 
-  const handleRestart = () => {
-    onToast(t.nodeRestartToast)
-  }
-
   const lockedCkb = channels.reduce((sum, ch) => sum + ch.localBalanceCkb, 0)
-
-  const handleWatchtowerSwitch = () => {
-    const next: WatchtowerConfig =
-      watchtower.mode === 'local'
-        ? {
-            mode: 'remote',
-            endpoint: '/ip4/45.77.65.221/tcp/8115',
-            sessions: watchtower.sessions,
-            latencyMs: 38,
-          }
-        : { mode: 'local', sessions: watchtower.sessions }
-    setWatchtower(next)
-    onToast(t.watchtowerSwitchedToast)
-  }
 
   return (
     <section className="panel node-control-panel">
@@ -96,7 +82,7 @@ export function NodeControlPanel({ onToast }: Props) {
           <span className="ncp-meta-line">
             {nodeRuntime.nodeAlias}
             <span className="ncp-meta-sep">·</span>
-            {nodeRuntime.chain}
+            {chain}
             <span className="ncp-meta-sep">·</span>
             {nodeRuntime.uptimeHours}h
             <span className="ncp-meta-sep">·</span>
@@ -117,9 +103,13 @@ export function NodeControlPanel({ onToast }: Props) {
               <span>{t.nodeStart}</span>
             </button>
           )}
-          <button type="button" className="btn-secondary btn-icon" onClick={handleRestart} disabled={!running}>
-            <IconRestart />
-            <span>{t.nodeRestart}</span>
+          <button
+            type="button"
+            className="btn-secondary btn-icon"
+            onClick={() => setConfigOpen(true)}
+          >
+            <IconGear />
+            <span>{t.nodeConfig}</span>
           </button>
         </div>
       </div>
@@ -140,47 +130,22 @@ export function NodeControlPanel({ onToast }: Props) {
         </div>
       </div>
 
-      {/* ── Watchtower row ───────────────────────────────────────────── */}
+      {/* ── Watchtower — set at startup, displayed as local / remote + URL ── */}
       <div className="ncp-watchtower">
-        <div className="ncp-wt-left">
-          <span className="ncp-label">{t.watchtower}</span>
-          <span className={`wt-mode wt-${watchtower.mode}`}>
-            {watchtower.mode === 'local' ? (
-              <>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <rect x="4" y="3" width="16" height="14" rx="2" />
-                  <path d="M8 21h8M12 17v4" />
-                </svg>
-                {t.watchtowerLocal}
-              </>
-            ) : (
-              <>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M12 3v3M12 18v3M3 12h3M18 12h3" />
-                  <circle cx="12" cy="12" r="4" />
-                </svg>
-                {t.watchtowerRemote}
-              </>
-            )}
+        <div className="ncp-wt-head">
+          <span className="ncp-wt-title">
+            <IconShield />
+            {t.watchtower}
           </span>
-          <span className="ncp-wt-detail">
-            {watchtower.mode === 'remote' && watchtower.endpoint ? (
-              <span className="mono">{watchtower.endpoint}</span>
-            ) : null}
-            <span className="ncp-meta">
-              {' · '}{watchtower.sessions} {t.watchtowerSessions}
-              {watchtower.mode === 'remote' && watchtower.latencyMs
-                ? ` · ${watchtower.latencyMs} ms`
-                : ''}
+          <div className="ncp-wt-value">
+            <span className={`wt-badge wt-${watchtower.mode}`}>
+              {watchtower.mode === 'local' ? t.watchtowerLocal : t.watchtowerRemote}
             </span>
-          </span>
+            {watchtower.mode === 'remote' && watchtower.endpoint && (
+              <span className="wt-url mono">{watchtower.endpoint}</span>
+            )}
+          </div>
         </div>
-        <button type="button" className="btn-secondary btn-with-chevron" onClick={handleWatchtowerSwitch}>
-          <span>
-            {watchtower.mode === 'local' ? t.watchtowerSwitchRemote : t.watchtowerSwitchLocal}
-          </span>
-          <IconChevron />
-        </button>
       </div>
 
       <ConfirmModal
@@ -192,6 +157,13 @@ export function NodeControlPanel({ onToast }: Props) {
         danger
         onCancel={() => setStopOpen(false)}
         onConfirm={handleStop}
+      />
+      <NodeConfigModal
+        open={configOpen}
+        onClose={() => setConfigOpen(false)}
+        onToast={onToast}
+        watchtower={watchtower}
+        onWatchtowerChange={setWatchtower}
       />
       <span style={{ display: 'none' }}>{locale}</span>
     </section>

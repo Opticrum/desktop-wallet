@@ -29,6 +29,9 @@ export type Messages = {
   networkNodes: string
   networkChannels: string
   networkCapacity: string
+  networkTopology: string
+  publicChannels: string
+  topHubs: string
   settlements24h: string
   news: string
   changelog: string
@@ -57,7 +60,6 @@ export type Messages = {
   peersDescription: string
   runtimeDescription: string
   connectedPeers: string
-  averageLatency: string
   pending: string
   hdWallet: string
   hdWalletDescription: string
@@ -72,38 +74,71 @@ export type Messages = {
   transactionCount: string
   derivationPath: string
 
-  // Liquidity — connection
-  connectionPanel: string
+  // Liquidity — network (follows the node's configured chain)
+  lmFollowsNode: string
   networkLabel: string
   networkMainnet: string
   networkTestnet: string
   rpcUrlLabel: string
-  rpcUrlPlaceholder: string
   indexerUrlLabel: string
-  indexerUrlPlaceholder: string
-  connectionStatus: string
-  statusConnected: string
-  statusDisconnected: string
-  connectButton: string
 
-  // Liquidity — dashboard
-  dashboardTitle: string
+  // Liquidity — inbound liquidity hero
+  lmInboundLiquidity: string
+  lmInboundDesc: string
+  lmActiveMatches: string
+  lmTotalDeposit: string
+  lmAvgRate: string
+  lmBuyLiquidity: string
+  lmBuyDesc: string
+
+  // Liquidity — buy order modal
+  lmNewOrder: string
+  lmChannelCapacity: string
+  lmRateShPerBlock: string
+  lmDeposit: string
+  lmFiberAddressOptional: string
+  lmEstimatedApy: string
+  lmPublishOrder: string
+  lmOrderPublished: string
+
+  // Liquidity — my orders (purchase records)
+  lmMyOrders: string
+  lmOrderOutpoint: string
+  lmChannelOutpoint: string
+  lmOrderStatus: string
+  lmStatusOpen: string
+  lmStatusMatched: string
+  lmStatusCancelled: string
+  lmCancelOrder: string
+  lmCancelOrderTitle: string
+  lmCancelOrderBody: string
+  lmOrderCancelled: string
+  lmCreatedAt: string
+
+  // Liquidity — my matched liquidity
+  lmMyMatches: string
+  lmWithdrawable: string
+  lmInject: string
+  lmWithdraw: string
+  lmAdjustTitle: string
+  lmAdjustAmount: string
+  lmDepositAdjusted: string
+  lmExtractDelete: string
+  lmExtractDeleteTitle: string
+  lmExtractDeleteBody: string
+  lmExtractDeleted: string
+
+  // Liquidity — shared table labels + health
   yieldDistribution: string
-
-  // Liquidity — match monitoring
-  matchMonitorTitle: string
   matchOutpoint: string
   matchCapacity: string
   matchRate: string
   matchRemaining: string
-  matchExtractable: string
   matchHealth: string
-  matchDeadline: string
   healthHealthy: string
   healthWarning: string
   healthCritical: string
   healthExhausted: string
-  filterAll: string
   shannonsPerBlock: string
   unitCkb: string
   unitBlocks: string
@@ -122,7 +157,6 @@ export type Messages = {
   newApps: string
   platformWeb: string
   platformMobile: string
-  yourBalance: string
   sendReceive: string
   sendReceiveDesc: string
   viewAll: string
@@ -154,25 +188,39 @@ export type Messages = {
   sendConfirm: string
   sendAddress: string
   sendAmount: string
-  sendMemo: string
   scanToReceive: string
+  clickToSend: string
+  zoomQr: string
   hdSectionTitle: string
+  hdAccountsSuffix: string
+  hdAddAccount: string
+  hdActive: string
+  hdAccountCreated: string
+  hdImportToast: string
+  hdDeleteAccount: string
+  hdDeleteNeedZero: string
+  hdDeleteBalanceToast: string
+  hdDeleteConfirmTitle: string
+  hdDeleteConfirmBody: string
+  hdDeleteConfirm: string
+  hdDeleteCancel: string
+  hdDeleteToast: string
+  hdDeleteHint: string
   close: string
   copied: string
 
   // Node page — sections + redesigned sidebar
   nodeChannelsSection: string
   nodePeersSection: string
+  nodeTabsLabel: string
   nodeLogsSection: string
   nodeChannelCount: string
   nodePeerCount: string
-  capacityBreakdown: string
-  topArticles: string
   viewNodeLogs: string
 
   // Node page — create + delete actions
   nodeNewChannel: string
-  nodeNewPeer: string
+  nodeNewConnection: string
   nodeFormPeerAlias: string
   nodeFormPeerAddr: string
   nodeFormCapacity: string
@@ -203,18 +251,66 @@ export type Messages = {
   nodeStopped: string
   nodeStart: string
   nodeStop: string
-  nodeRestart: string
+  nodeConfig: string
   stopNodeTitle: string
   stopNodeBody: string
   nodeStoppedToast: string
   nodeStartedToast: string
-  nodeRestartToast: string
+  nodeConfigReset: string
+  nodeConfigSave: string
+  nodeConfigSaved: string
   watchtower: string
   watchtowerLocal: string
   watchtowerRemote: string
-  watchtowerSessions: string
-  watchtowerEndpoint: string
-  watchtowerSwitchLocal: string
-  watchtowerSwitchRemote: string
-  watchtowerSwitchedToast: string
+  watchtowerRemoteEnable: string
+  watchtowerRemoteDesc: string
+  watchtowerUrl: string
+  configFile: string
+  nodeChainDesc: string
+
+  // Node config — structured sections
+  cfgSectionServices: string
+  cfgSectionNetwork: string
+  cfgSectionAdvanced: string
+  cfgSectionScripts: string
+  cfgSectionRpc: string
+  cfgSectionCkb: string
+  cfgNodeName: string
+  cfgListenAddr: string
+  cfgAnnounceListen: string
+  cfgBootnodes: string
+  cfgAddAddr: string
+  cfgAnnouncedAddrs: string
+  cfgWatchtowerInterval: string
+  cfgDisableBuiltinWatchtower: string
+  cfgAutoAcceptMin: string
+  cfgAutoAcceptAmount: string
+  cfgTlcExpiry: string
+  cfgTlcFee: string
+  cfgFundingTimeout: string
+  cfgMaxInbound: string
+  cfgMinOutbound: string
+  cfgSyncGraph: string
+  cfgAutoAnnounceNode: string
+  cfgProxyUrl: string
+  cfgRpcListenAddr: string
+  cfgEnabledModules: string
+  cfgCkbPolling: string
+  cfgUdtWhitelist: string
+  cfgScriptCodeHash: string
+  cfgHashType: string
+  cfgArgs: string
+  cfgUdtAutoAccept: string
+  cfgShowAdvanced: string
+  cfgCollapseAdvanced: string
+  cfgDetectNetwork: string
+  cfgNetworkFromRpc: string
+  cfgNetworkUnknown: string
+  cfgAddUdt: string
+  cfgRemove: string
+  cfgCellDeps: string
+  cfgTxHash: string
+  cfgIndex: string
+  cfgDepType: string
+  cfgUdtEmpty: string
 }

@@ -1,6 +1,6 @@
 export const nodeRuntime = {
   nodeAlias: 'ckb-bot-sg',
-  chain: 'mainnet',
+  chain: 'testnet' as 'mainnet' | 'testnet',
   fiberPubkey: '02ab91f4c5d27b8e6a1f4d3c9a72e881f0c5b7d4e3a9f8b6c1d2e5f4a3b7c9d1',
   tipHeight: 12_804_221,
   peers: 48,
@@ -12,14 +12,13 @@ export const nodeRuntime = {
 
 export type WatchtowerConfig = {
   mode: 'local' | 'remote'
+  /** Remote watchtower URL — only present when mode is 'remote'. */
   endpoint?: string
-  sessions: number
-  latencyMs?: number
 }
 
 export const nodeWatchtower: WatchtowerConfig = {
-  mode: 'local',
-  sessions: 3,
+  mode: 'remote',
+  endpoint: '/ip4/45.77.65.221/tcp/8115',
 }
 
 export type PeerStatus = 'connected' | 'disconnected'

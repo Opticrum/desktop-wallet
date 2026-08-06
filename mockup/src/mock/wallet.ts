@@ -60,6 +60,41 @@ export const wallet = {
       timestamp: '2026-07-24T08:05:00+08:00',
       txHash: '0xabcdef0123456789fedcba9876543210abcdef0123456789fedcba9876543210',
     },
+    {
+      id: 'tx6',
+      type: 'send' as const,
+      amountCkb: -250,
+      timestamp: '2026-07-23T14:05:00+08:00',
+      txHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+    },
+    {
+      id: 'tx7',
+      type: 'receive' as const,
+      amountCkb: 1200,
+      timestamp: '2026-07-22T09:33:00+08:00',
+      txHash: '0xfedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210',
+    },
+    {
+      id: 'tx8',
+      type: 'channel_open' as const,
+      amountCkb: -800,
+      timestamp: '2026-07-21T18:22:00+08:00',
+      txHash: '0x0f1e2d3c4b5a69788796a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3',
+    },
+    {
+      id: 'tx9',
+      type: 'send' as const,
+      amountCkb: -15.75,
+      timestamp: '2026-07-20T07:48:00+08:00',
+      txHash: '0x11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff',
+    },
+    {
+      id: 'tx10',
+      type: 'receive' as const,
+      amountCkb: 320.5,
+      timestamp: '2026-07-19T21:10:00+08:00',
+      txHash: '0xccddeeff00112233445566778899aabbccddeeff00112233445566778899aabb',
+    },
   ] satisfies Tx[],
 }
 
@@ -83,3 +118,42 @@ export const hdAccounts: HdAccount[] = [
     balanceCkb: 2620.2,
   },
 ]
+
+// ── HD account derivation ───────────────────────────────────────────────
+// Deterministic pseudo-address so a freshly derived account looks real but
+// is stable across renders.
+
+function pseudoCkbAddress(seed: number) {
+  let h = 0x811c9dc5
+  const s = `opticrum-hd-${seed}`
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  let x = h >>> 0
+  const digits = '0123456789abcdef'
+  let hex = ''
+  for (let i = 0; i < 44; i++) {
+    x ^= x << 13
+    x ^= x >>> 17
+    x ^= x << 5
+    x >>>= 0
+    hex += digits[x % 16]
+  }
+  return { address: `ckt1${hex}`, addressShort: `ckt1…${hex.slice(-3)}` }
+}
+
+/** Derive the Nth account from the wallet's master seed path. Newly derived
+ * accounts are empty (0 CKB) — just like a fresh HD account. */
+export function deriveHdAccount(index: number): HdAccount {
+  const { address, addressShort } = pseudoCkbAddress(index)
+  return {
+    id: `acc-${index}`,
+    nameZh: index === 0 ? '主钱包' : index === 1 ? '储蓄钱包' : `钱包 ${index + 1}`,
+    nameEn: index === 0 ? 'Primary wallet' : index === 1 ? 'Savings wallet' : `Wallet ${index + 1}`,
+    path: `m/44'/309'/0'/0/${index}`,
+    address,
+    addressShort,
+    balanceCkb: 0,
+  }
+}

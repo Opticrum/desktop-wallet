@@ -5,6 +5,8 @@ import { channels } from '../mock/channels'
 
 type Props = {
   onToast: (msg: string) => void
+  createOpen: boolean
+  onCreateToggle: () => void
 }
 
 function stateLabel(state: string) {
@@ -16,29 +18,12 @@ function stateLabel(state: string) {
   }
 }
 
-export function NodeChannelSection({ onToast }: Props) {
+export function NodeChannelSection({ onToast, createOpen, onCreateToggle }: Props) {
   const { t } = useLocale()
-  const [createOpen, setCreateOpen] = useState(false)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
-
-  const totalCapacity = channels.reduce((sum, ch) => sum + ch.capacityCkb, 0)
 
   return (
     <>
-      <div className="section-head toolbar" style={{ marginTop: 0 }}>
-        <span className="text-tertiary" style={{ fontWeight: 500, fontSize: 13 }}>
-          {t.capacity} {totalCapacity.toLocaleString()} CKB
-        </span>
-        <div className="toolbar-actions">
-          <button
-            className={createOpen ? 'btn-secondary' : 'btn-primary'}
-            onClick={() => setCreateOpen((o) => !o)}
-          >
-            {createOpen ? t.nodeFormCancel : `+ ${t.nodeNewChannel}`}
-          </button>
-        </div>
-      </div>
-
       {createOpen && (
         <div className="panel inline-form">
           <div className="form-row">
@@ -58,13 +43,13 @@ export function NodeChannelSection({ onToast }: Props) {
             <input className="form-input" placeholder="100" inputMode="numeric" />
           </div>
           <div className="form-actions">
-            <button className="btn-secondary" onClick={() => setCreateOpen(false)}>
+            <button className="btn-secondary" onClick={onCreateToggle}>
               {t.nodeFormCancel}
             </button>
             <button
               className="btn-primary"
               onClick={() => {
-                setCreateOpen(false)
+                onCreateToggle()
                 onToast(t.nodeCreateToast)
               }}
             >

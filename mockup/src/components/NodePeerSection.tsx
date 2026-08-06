@@ -6,6 +6,8 @@ import { peers } from '../mock/node'
 
 type Props = {
   onToast: (msg: string) => void
+  createOpen: boolean
+  onCreateToggle: () => void
 }
 
 function latencyClass(ms: number, status: string) {
@@ -15,30 +17,12 @@ function latencyClass(ms: number, status: string) {
   return 'latency-slow'
 }
 
-export function NodePeerSection({ onToast }: Props) {
+export function NodePeerSection({ onToast, createOpen, onCreateToggle }: Props) {
   const { t } = useLocale()
-  const [createOpen, setCreateOpen] = useState(false)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
-
-  const totalLatency = peers.reduce((sum, p) => sum + p.latencyMs, 0)
-  const avgLatency = Math.round(totalLatency / Math.max(peers.length, 1))
 
   return (
     <>
-      <div className="section-head toolbar" style={{ marginTop: 0 }}>
-        <span className="text-tertiary" style={{ fontWeight: 500, fontSize: 13 }}>
-          {t.averageLatency} {avgLatency} ms
-        </span>
-        <div className="toolbar-actions">
-          <button
-            className={createOpen ? 'btn-secondary' : 'btn-primary'}
-            onClick={() => setCreateOpen((o) => !o)}
-          >
-            {createOpen ? t.nodeFormCancel : `+ ${t.nodeNewPeer}`}
-          </button>
-        </div>
-      </div>
-
       {createOpen && (
         <div className="panel inline-form">
           <div className="form-row">
@@ -54,13 +38,13 @@ export function NodePeerSection({ onToast }: Props) {
             />
           </div>
           <div className="form-actions">
-            <button className="btn-secondary" onClick={() => setCreateOpen(false)}>
+            <button className="btn-secondary" onClick={onCreateToggle}>
               {t.nodeFormCancel}
             </button>
             <button
               className="btn-primary"
               onClick={() => {
-                setCreateOpen(false)
+                onCreateToggle()
                 onToast(t.nodeCreateToast)
               }}
             >

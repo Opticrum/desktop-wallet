@@ -96,20 +96,6 @@ export function SendDetail({
             </div>
           </div>
 
-          <div className="send-form-row">
-            <label className="send-form-label" htmlFor="send-memo">
-              {t.sendMemo}
-            </label>
-            <textarea
-              id="send-memo"
-              className="search-input send-form-textarea"
-              placeholder="—"
-              rows={3}
-              defaultValue=""
-              readOnly
-            />
-          </div>
-
           <div className="send-form-actions">
             <button type="button" className="btn-primary" disabled>
               {t.sendConfirm}
