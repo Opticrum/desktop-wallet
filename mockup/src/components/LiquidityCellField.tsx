@@ -300,20 +300,9 @@ function stepSim(sims: SimCell[], w: number, h: number, dt: number, frozenKey: s
 
 function OrderTooltipContent({ order }: { order: BuyOrder }) {
   const { t } = useLocale()
-  const status =
-    order.status === 'cancelled'
-      ? t.lmStatusCancelled
-      : order.status === 'matched'
-        ? t.lmStatusMatched
-        : t.meAwaitingMatch
   return (
     <>
       <div className="lm-tooltip-head">
-        <span className="mg-tag mg-tag-order">{t.mgOrderTag}</span>
-        <span className={`mg-pill ${order.status === 'cancelled' ? 'muted' : order.status === 'matched' ? 'ok' : 'wait'}`}>
-          {order.status === 'open' && <i className="mg-dot" />}
-          {status}
-        </span>
         <span className="lm-tooltip-tx mono">{truncateOutpoint(order.outpoint)}</span>
       </div>
       <div className="lm-tooltip-body">
@@ -358,7 +347,6 @@ function MatchTooltipContent({ match }: { match: MyMatch }) {
   return (
     <>
       <div className="lm-tooltip-head">
-        <span className="mg-tag mg-tag-match">{t.mgMatchTag}</span>
         <MatchHealthBadge health={life.label} />
         <span className="lm-tooltip-tx mono">{truncateOutpoint(match.channelOutpoint)}</span>
       </div>
