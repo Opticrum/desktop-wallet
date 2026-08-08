@@ -34,6 +34,17 @@
   --violet: #633de8;
   --cyan: #15b8ed;
 
+  /* Liquidity-market accent (teal) — the market's own visuals; buttons keep --accent */
+  --me-accent: #0f766e;
+  --me-accent-hover: #115e59;
+  --me-accent-soft: #e0f4f2;
+  --me-accent-ink: #ffffff;
+  --me-glow: rgba(15, 118, 110, 0.28);
+  --me-glow-strong: rgba(15, 118, 110, 0.42);
+
+  /* Match theme (royal blue) — the executing side of the market */
+  --lm-glow-blue: rgba(63, 97, 255, 0.20);
+
   --donut-1: #3f61ff;
   --donut-2: #ff6b1a;
   --donut-3: #633de8;
@@ -101,6 +112,17 @@
   --orange: #ff8040;
   --violet: #8b7cff;
   --cyan: #22c5f0;
+
+  /* Liquidity-market accent (teal) — the market's own visuals; buttons keep --accent */
+  --me-accent: #2dd4bf;
+  --me-accent-hover: #5eead4;
+  --me-accent-soft: #0e2a28;
+  --me-accent-ink: #04211d;
+  --me-glow: rgba(45, 212, 191, 0.30);
+  --me-glow-strong: rgba(45, 212, 191, 0.45);
+
+  /* Match theme (royal blue) — the executing side of the market */
+  --lm-glow-blue: rgba(91, 122, 255, 0.26);
 
   --donut-1: #5b7aff;
   --donut-2: #ff8040;

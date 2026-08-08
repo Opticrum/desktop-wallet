@@ -4789,10 +4789,13 @@
   min-width: 0;
 }
 
-/* ── Liquidity Marketplace ──────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════
+   Liquidity Marketplace — Floating Cell Pool
+   Left column: top strip (per-tab dashboard) + square floating-cell pool.
+   Right sidebar: market dashboard. Orders are teal, matches are royal blue.
+   ═══════════════════════════════════════════════════════════════════════ */
 
-/* Two-column layout: match table main + connection/yield aside */
-
+/* Node-style page layout: main + sticky dashboard sidebar */
 .lm-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
@@ -4803,9 +4806,494 @@
 .lm-main {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   min-width: 0;
 }
+
+/* Theme split — the page chrome (strip + pool) takes the active tab's colour. */
+.lm-main.is-orders {
+  --cell-accent: var(--me-accent);
+  --cell-accent-hover: var(--me-accent-hover);
+  --cell-accent-soft: var(--me-accent-soft);
+  --cell-accent-ink: var(--me-accent-ink);
+  --cell-glow: var(--me-glow);
+  --cell-glow-strong: var(--me-glow-strong);
+}
+
+.lm-main.is-matches {
+  --cell-accent: var(--accent);
+  --cell-accent-hover: var(--accent-hover);
+  --cell-accent-soft: var(--accent-muted);
+  --cell-accent-ink: var(--accent-ink);
+  --cell-glow: var(--lm-glow-blue);
+  --cell-glow-strong: var(--lm-glow-blue);
+}
+
+/* ── Top strip — tab switch + active-tab dashboard ─────────────────────── */
+
+.lm-strip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 20px 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: border-color 0.3s ease;
+}
+
+.lm-strip::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 20px;
+  right: 20px;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: var(--cell-accent);
+  transition: background 0.3s ease;
+}
+
+.lm-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface-2);
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+}
+
+.lm-switch-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: none;
+  background: none;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-3);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.lm-switch-btn:hover {
+  color: var(--ink-2);
+}
+
+.lm-switch-btn:focus-visible {
+  outline: 2px solid var(--cell-accent);
+  outline-offset: 2px;
+}
+
+.lm-switch-btn.is-active {
+  color: var(--cell-accent);
+  background: var(--surface);
+  box-shadow: var(--shadow-elevate);
+}
+
+.lm-switch-count {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--ink-4);
+  background: var(--surface-2);
+  border-radius: var(--radius-pill);
+  padding: 1px 7px;
+  font-variant-numeric: tabular-nums;
+}
+
+.lm-switch-btn.is-active .lm-switch-count {
+  color: var(--cell-accent);
+  background: var(--cell-accent-soft);
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+/* Strip dashboard KPIs — remounts on tab switch, cross-fades in */
+.lm-strip-kpis {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  min-width: 0;
+  animation: lm-kpi-in 0.28s ease-out;
+}
+
+@keyframes lm-kpi-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.lm-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.lm-kpi-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  white-space: nowrap;
+}
+
+.lm-kpi-value {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--cell-accent);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transition: color 0.3s ease;
+}
+
+.lm-kpi-value small {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ink-4);
+  margin-left: 2px;
+}
+
+/* ── Square floating-cell pool ──────────────────────────────────────────── */
+
+.lm-pool {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  margin-inline: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background-color: var(--surface-2);
+  background-image:
+    radial-gradient(130% 110% at 50% -10%, var(--cell-glow), transparent 58%),
+    radial-gradient(color-mix(in srgb, var(--line-strong) 50%, transparent) 1px, transparent 1.2px);
+  background-size: 100% 100%, 26px 26px;
+  overflow: hidden;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Frozen cell — the hovered one pauses; a static ring marks it as inspected.
+   No animation or transition here: entering/leaving the frozen state must snap
+   instantly, never re-trigger the mount pop-in (the `animation` property is
+   deliberately left on the base `.cell` so toggling the class can't replay it). */
+.cell.is-frozen {
+  border-color: color-mix(in srgb, var(--tier) 85%, var(--line-strong));
+  box-shadow: var(--shadow-panel), 0 0 0 5px color-mix(in srgb, var(--tier) 20%, transparent);
+  transition: none;
+}
+
+/* Hover detail tooltip — fixed so it escapes the pool's overflow:hidden. */
+.lm-tooltip {
+  position: fixed;
+  z-index: 120;
+  width: 244px;
+  padding: 12px 14px 13px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 12px));
+  animation: lm-tooltip-in 0.14s ease-out;
+}
+
+.lm-tooltip.is-below {
+  transform: translate(-50%, 12px);
+}
+
+.lm-tooltip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 10px;
+  height: 10px;
+  background: var(--surface);
+  border-right: 1px solid var(--line-strong);
+  border-bottom: 1px solid var(--line-strong);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.lm-tooltip.is-below::after {
+  top: -6px;
+  bottom: auto;
+  border-right: none;
+  border-bottom: none;
+  border-left: 1px solid var(--line-strong);
+  border-top: 1px solid var(--line-strong);
+}
+
+@keyframes lm-tooltip-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.lm-tooltip-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.lm-tooltip-tx {
+  min-width: 0;
+  font-size: 10px;
+  color: var(--ink-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lm-tooltip-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.lm-tooltip-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.lm-tooltip-row > span {
+  color: var(--ink-4);
+  flex-shrink: 0;
+}
+
+.lm-tooltip-row > strong {
+  color: var(--ink-2);
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.lm-pool-legend {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  z-index: 3;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-3);
+  background-color: color-mix(in srgb, var(--surface) 78%, transparent);
+  border: 1px solid var(--line);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.lm-pool-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 12px;
+  z-index: 3;
+  padding: 0 14px;
+  text-align: center;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--ink-4);
+  pointer-events: none;
+  text-wrap: balance;
+}
+
+/* No z-index here: a positioned element with z-index:auto does not create a
+   stacking context, so a hovered cell (z-index 4) can paint above the pool
+   tag/legend/hint (z-index 3) instead of being trapped under them. */
+.lm-pool-cells {
+  position: absolute;
+  inset: 0;
+}
+
+/* ── Cells ──────────────────────────────────────────────────────────────── */
+
+.cell {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--tier) 42%, var(--line-strong));
+  background-color: color-mix(in srgb, var(--tier) 10%, var(--surface));
+  box-shadow: var(--shadow-soft);
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  will-change: transform;
+  animation: cell-in 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: box-shadow 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.cell:hover {
+  border-color: color-mix(in srgb, var(--tier) 78%, var(--line-strong));
+  box-shadow: var(--shadow-panel), 0 0 0 4px color-mix(in srgb, var(--tier) 26%, transparent);
+  z-index: 4;
+}
+
+.cell:focus-visible {
+  outline: 2px solid var(--cell-accent);
+  outline-offset: 2px;
+}
+
+@keyframes cell-in {
+  from {
+    opacity: 0;
+    scale: 0.55;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+/* Match cells carry their own life colour (green → red tiers); orders keep
+   the page theme colour through --tier (= --cell-accent). */
+.cell-match {
+  background-color: color-mix(in srgb, var(--tier) 16%, var(--surface));
+}
+
+.cell-match.is-exhausted {
+  border-color: var(--line-strong);
+  background-color: color-mix(in srgb, var(--ink-4) 10%, var(--surface));
+}
+
+.cell-match.is-exhausted:hover {
+  border-color: var(--ink-4);
+}
+
+/* Outer ring — remaining rental time as a progress arc, same hue as the
+   background but a stronger shade (the "colour difference"). */
+.cell-ring {
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: conic-gradient(
+    from -90deg,
+    color-mix(in srgb, var(--tier) 72%, var(--surface)) 0deg,
+    color-mix(in srgb, var(--tier) 72%, var(--surface)) calc(var(--ring-deg) * 1deg),
+    color-mix(in srgb, var(--tier) 18%, transparent) calc(var(--ring-deg) * 1deg),
+    color-mix(in srgb, var(--tier) 18%, transparent) 360deg
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
+}
+
+/* Cell face */
+.cell-core {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px;
+  text-align: center;
+}
+
+.cell-apy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+}
+
+.cell-apy-num {
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--cell-accent);
+  font-variant-numeric: tabular-nums;
+  transition: color 0.3s ease;
+}
+
+.cell-match .cell-apy-num {
+  color: var(--ink);
+}
+
+.cell-apy-num i {
+  font-style: normal;
+  font-size: 0.62em;
+  font-weight: 700;
+  color: inherit;
+  opacity: 0.68;
+  margin-left: 1px;
+}
+
+.cell-apy-tag {
+  margin-top: 3px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--ink-4);
+}
+
+.cell-line {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cell-line em {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--ink-4);
+  margin-right: 3px;
+}
+
+.cell-line small {
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--ink-4);
+}
+
+.cell-dwell,
+.cell-remaining {
+  color: var(--ink-3);
+}
+
+.cell-dwell em,
+.cell-remaining em {
+  color: var(--ink-4);
+}
+
+/* ── Right sidebar — market dashboard ───────────────────────────────────── */
 
 .lm-aside {
   display: flex;
@@ -4816,7 +5304,131 @@
   align-self: start;
 }
 
-/* Network badge — follows the node's configured chain */
+.lm-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  line-height: 1.3;
+}
+
+.lm-title::before {
+  content: '';
+  width: 3px;
+  height: 15px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.lm-dash {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.lm-dash .section-head,
+.lm-split .section-head {
+  margin: 0;
+  align-items: center;
+}
+
+.lm-dash-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lm-dash-value {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.lm-dash-unit {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-4);
+  margin-left: 4px;
+}
+
+.lm-dash-kpis {
+  margin-bottom: 0;
+}
+
+.lm-buy-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.lm-split {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.lm-split-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.lm-split-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.lm-split-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.lm-split-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.lm-split-fill.is-order {
+  background: var(--me-accent);
+}
+
+.lm-split-fill.is-match {
+  background: var(--accent);
+}
+
+.lm-split-val {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (max-width: 1080px) {
+  .lm-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .lm-aside {
+    position: static;
+  }
+}
+
+/* ── Network badge (follows the node's configured chain) ───────────────── */
 
 .lm-net-badge {
   display: inline-flex;
@@ -4846,128 +5458,7 @@
   background: var(--warn);
 }
 
-.lm-follows {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--ink-4);
-}
-
-/* Inbound liquidity hero */
-
-.lm-hero {
-  padding: 22px 24px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  background:
-    radial-gradient(560px 220px at 100% -10%, var(--accent-soft), transparent 70%),
-    var(--surface);
-}
-
-.lm-hero-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.lm-hero-title {
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-  color: var(--ink-2);
-}
-
-.lm-hero-desc {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--ink-4);
-}
-
-.lm-hero-body {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
-}
-
-.lm-hero-primary {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.lm-hero-value {
-  font-size: clamp(34px, 4vw, 46px);
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1;
-  color: var(--accent);
-  font-variant-numeric: tabular-nums;
-}
-
-.lm-hero-unit {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--ink-3);
-}
-
-.lm-hero-metrics {
-  display: flex;
-  gap: 28px;
-}
-
-.lm-hero-metric {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.lm-hero-metric-value {
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-
-/* Network info (read-only, driven by node config) */
-
-.lm-network-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 18px 20px;
-}
-
-.lm-network-panel .section-label {
-  margin: 0 0 2px;
-}
-
-.lm-net-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 12px;
-}
-
-.lm-net-label {
-  font-weight: 600;
-  color: var(--ink-4);
-  flex-shrink: 0;
-}
-
-.lm-net-url {
-  font-size: 11px;
-  color: var(--ink-3);
-  text-align: right;
-  word-break: break-all;
-  min-width: 0;
-}
-
-/* Modal form fields (buy order / adjust deposit) */
+/* ── Modal form fields (buy order / adjust deposit) ────────────────────── */
 
 .lm-form-field {
   display: flex;
@@ -4999,257 +5490,257 @@
   color: var(--ink-2);
 }
 
-/* Yield distribution bars */
+/* ── Order / match tags (sheet headers) ────────────────────────────────── */
 
-.lm-yield-section {
-  padding: 18px 20px 20px;
-}
-
-.lm-yield-bars {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.lm-yield-bar-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.lm-yield-bar-label {
-  width: 68px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ink-3);
-  text-align: right;
-  flex-shrink: 0;
-}
-
-.lm-yield-bar-track {
-  flex: 1;
-  height: 18px;
-  border-radius: 4px;
-  background: var(--surface-2);
-  overflow: hidden;
-}
-
-.lm-yield-bar-fill {
-  height: 100%;
-  border-radius: 4px;
-  background: var(--accent);
-  min-width: 3px;
-  transition: width 0.4s ease;
-}
-
-.lm-yield-bar-count {
-  width: 36px;
-  font-size: 12px;
+.mg-tag {
+  font-size: 10px;
   font-weight: 700;
-  color: var(--ink-2);
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-}
-
-/* Tab bar — DESIGN.md §7.3: 13px tabs, active = accent text + 2px accent
-   underline sitting on a 1px separator line spanning the panel */
-
-.lm-tabs {
-  display: flex;
-  align-items: center;
-  gap: 28px;
-  padding: 0 20px;
-  border-bottom: 1px solid var(--line);
-}
-
-.lm-tab {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 15px 0 13px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ink-3);
-  background: none;
-  border: none;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: color 0.15s ease;
-}
-
-.lm-tab:hover {
-  color: var(--ink-2);
-}
-
-.lm-tab.is-active {
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.lm-tab.is-active::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 2px;
-  border-radius: 2px 2px 0 0;
-  background: var(--accent);
-}
-
-.lm-tab-count {
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1.4;
-  color: var(--ink-4);
-  background: var(--surface-2);
+  letter-spacing: 0.05em;
   border-radius: var(--radius-pill);
   padding: 2px 8px;
-  font-variant-numeric: tabular-nums;
 }
 
-.lm-tab.is-active .lm-tab-count {
+.mg-tag-order {
+  color: var(--me-accent);
+  background: var(--me-accent-soft);
+}
+
+.mg-tag-match {
   color: var(--accent);
   background: var(--accent-muted);
 }
 
-/* Tabbed data tables — fixed column widths so the two lists align cleanly */
-
-.data-table.lm-table {
-  table-layout: fixed;
+.mg-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: var(--radius-pill);
+  padding: 3px 10px;
 }
 
-.data-table.lm-table th,
-.data-table.lm-table td {
-  padding: 13px 14px;
+.mg-pill.ok {
+  color: var(--ok);
+  background: var(--ok-soft);
 }
 
-.data-table.lm-table th:first-child,
-.data-table.lm-table td:first-child {
-  padding-left: 20px;
+.mg-pill.wait {
+  color: var(--me-accent);
+  background: var(--me-accent-soft);
 }
 
-.data-table.lm-table th:last-child,
-.data-table.lm-table td:last-child {
-  padding-right: 20px;
+.mg-pill.muted {
+  color: var(--ink-4);
+  background: var(--surface-2);
 }
 
-.lm-cell-main {
-  font-size: 13px;
+.mg-dot {
+  position: relative;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.mg-pill.wait .mg-dot::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  animation: pulse-ring 2.2s ease-out infinite;
+}
+
+/* ── Life bar (sheet) ──────────────────────────────────────────────────── */
+
+.mg-life {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.mg-life-track {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.mg-life-fill {
+  height: 100%;
+  border-radius: 3px;
+}
+
+.mg-life-text {
+  font-size: 10px;
   font-weight: 600;
-  color: var(--ink);
-  line-height: 1.3;
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+
+.mg-life-mini .mg-life-track {
+  height: 3px;
+}
+
+/* ── Bottom-sheet detail drawer ────────────────────────────────────────── */
+
+.ms-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--modal-backdrop);
+  z-index: 90;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: backdrop-in 140ms ease-out;
+}
+
+.ms-sheet {
+  width: 100%;
+  max-width: 680px;
+  max-height: 78vh;
+  overflow: auto;
+  background: var(--surface);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  box-shadow: var(--shadow-panel);
+  animation: ms-sheet-in 220ms ease-out;
+}
+
+@keyframes ms-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.ms-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 24px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ms-outpoint {
+  min-width: 0;
+  font-size: 12px;
+  color: var(--ink-3);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.lm-cell-sub {
-  margin-top: 3px;
-  font-size: 11px;
-  font-weight: 500;
+.ms-close {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.ms-body {
+  padding: 16px 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ms-detail {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 12px;
+}
+
+.ms-detail-label {
   color: var(--ink-4);
-  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ms-detail-value {
+  color: var(--ink-2);
+  text-align: right;
+  word-break: break-all;
   font-variant-numeric: tabular-nums;
 }
 
-.lm-unit {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--ink-4);
+.ms-life {
+  margin-top: 4px;
 }
 
-/* Table row action buttons */
-
-.lm-row-actions {
-  white-space: nowrap;
-  text-align: right;
-}
-
-.lm-row-actions .lm-action-btn {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--accent);
-  background: var(--accent-soft);
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  padding: 5px 12px;
+.ms-linked {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  margin-top: 4px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  text-align: left;
+  font: inherit;
+  color: inherit;
   cursor: pointer;
-  transition: filter 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-.lm-row-actions .lm-action-btn:hover {
-  filter: brightness(1.06);
-  background: var(--accent-muted);
-}
-
-.lm-row-actions .lm-action-btn + .lm-action-btn {
-  margin-left: 6px;
-}
-
-.lm-row-actions .lm-danger-btn {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--danger);
-  background: var(--danger-soft);
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  padding: 5px 12px;
-  cursor: pointer;
-}
-
-.lm-row-actions .lm-danger-btn:hover {
-  filter: brightness(1.06);
-}
-
-.lm-row-actions .lm-link-btn {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ink-4);
-  background: none;
-  border: none;
-  padding: 5px 8px;
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-}
-
-.lm-row-actions .lm-link-btn:hover {
-  color: var(--ink-2);
+.ms-linked:hover {
+  border-color: color-mix(in srgb, var(--me-accent) 45%, var(--line));
   background: var(--surface-hover);
 }
 
-/* Health badge color variants */
+.ms-linked-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+.ms-linked-val {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.ms-linked-life {
+  margin-top: 2px;
+}
+
+.ms-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 24px 20px;
+  border-top: 1px solid var(--line);
+}
+
+/* ── Health badge colour variants ──────────────────────────────────────── */
 
 .badge.health-healthy {
   background: var(--ok-soft);
   color: var(--ok);
+  border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
 }
 
 .badge.health-warning {
   background: var(--warn-soft);
   color: var(--warn);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
 }
 
 .badge.health-critical {
   background: var(--danger-soft);
   color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
 }
 
 .badge.health-exhausted {
   background: var(--surface-2);
   color: var(--ink-4);
-}
-
-/* Connection panel responsive fallback */
-
-@media (max-width: 1080px) {
-  .lm-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .lm-aside {
-    position: static;
-  }
+  border: 1px solid var(--line-strong);
 }

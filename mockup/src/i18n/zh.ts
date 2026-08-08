@@ -52,12 +52,9 @@ export const zh: Messages = {
   nodeNavRuntime: '运行日志',
 
   // Liquidity — network (follows the node's configured chain)
-  lmFollowsNode: '跟随节点配置',
-  networkLabel: '网络',
   networkMainnet: '主网',
   networkTestnet: '测试网',
   rpcUrlLabel: 'RPC 地址',
-  indexerUrlLabel: 'Indexer 地址',
 
   // Liquidity — inbound liquidity hero
   lmInboundLiquidity: '入向流动性',
@@ -66,7 +63,6 @@ export const zh: Messages = {
   lmTotalDeposit: '质押总额',
   lmAvgRate: '平均费率',
   lmBuyLiquidity: '发起流动性购买',
-  lmBuyDesc: '发布订单，购买入向通道流动性',
 
   // Liquidity — buy order modal
   lmNewOrder: '新购买订单',
@@ -74,27 +70,24 @@ export const zh: Messages = {
   lmRateShPerBlock: '费率 (sh/block)',
   lmDeposit: '质押 (CKB)',
   lmFiberAddressOptional: 'Fiber 地址（可选）',
-  lmEstimatedApy: '预估年化',
+  lmEstimatedApy: '预估年化：',
   lmPublishOrder: '发布订单',
   lmOrderPublished: '订单已发布（演示）',
 
   // Liquidity — my orders (purchase records)
   lmMyOrders: '我的购买订单',
-  lmOrderOutpoint: '订单交易',
-  lmChannelOutpoint: '通道 Outpoint',
-  lmOrderStatus: '状态',
-  lmStatusOpen: '开放',
   lmStatusMatched: '已匹配',
   lmStatusCancelled: '已取消',
   lmCancelOrder: '取消',
   lmCancelOrderTitle: '取消订单？',
   lmCancelOrderBody: '取消后质押将返还到你的钱包。',
   lmOrderCancelled: '订单已取消（演示）',
-  lmCreatedAt: '创建时间',
 
   // Liquidity — my matched liquidity
   lmMyMatches: '已匹配流动性',
   lmWithdrawable: '可抽离',
+  lmStakedHint: '质押：{amount} CKB',
+  lmWithdrawableHint: '可抽离：{amount} CKB',
   lmInject: '注入',
   lmWithdraw: '抽离',
   lmAdjustTitle: '调整质押',
@@ -106,19 +99,60 @@ export const zh: Messages = {
   lmExtractDeleted: '已提取 {amount} CKB 并删除订单（演示）',
 
   // Liquidity — shared table labels + health
-  yieldDistribution: '收益率分布',
-  matchOutpoint: '通道 Outpoint',
   matchCapacity: '容量',
   matchRate: '费率',
-  matchRemaining: '剩余',
-  matchHealth: '健康度',
   healthHealthy: '健康',
   healthWarning: '预警',
   healthCritical: '危险',
   healthExhausted: '已耗尽',
   shannonsPerBlock: 'sh/block',
   unitCkb: 'CKB',
-  unitBlocks: '个区块',
+
+  // Liquidity — awaiting-match pill
+  meAwaitingMatch: '等待撮合',
+
+  // Liquidity — card grid + bottom sheet
+  mgOrderTag: '订单',
+  mgMatchTag: '匹配',
+  mgDetails: '详情',
+  mgStatus: '状态',
+  mgRemainingDays: '剩余 {days} 天',
+  mgExpiresAt: '到期时间',
+  mgCreatedAt: '创建时间',
+  mgOrderTx: '订单交易',
+  mgChannelTx: '通道 Outpoint',
+  mgLinkedOrder: '来源订单',
+  mgLinkedMatch: '关联匹配',
+  mgNoOrders: '暂无购买订单',
+  mgNoMatches: '暂无匹配流动性',
+
+  // Liquidity — pool + top strip dashboard
+  lmPoolHint: '每个圆形代表一个链上流动性 Cell——尺寸 ∝ 流动性需求，Cell 无规则浮动模拟撮合过程',
+  lmPoolLegend: '绿 · 充裕    黄 · 预警    红 · 临期',
+  lmTotalDemand: '总需求',
+  lmAvgApy: '平均 APY',
+  lmPendingOrders: '待撮合',
+  lmAvgDwell: '平均滞留',
+  lmAvgRemaining: '平均剩余',
+
+  // Liquidity — market dashboard (right sidebar)
+  lmMarketOverview: '市场概览',
+  lmOrderMatchSplit: '订单 / 匹配',
+  lmOrderDemand: '订单需求',
+  lmMatchCapacity: '匹配容量',
+
+  // Liquidity — cell anatomy
+  lmApyLabel: 'APY',
+  lmRentalDuration: '租用',
+  lmRentalDays: '{days} 天',
+  lmDemand: '需求',
+  lmDwell: '滞留',
+  lmRemaining: '剩余',
+
+  // Liquidity — sheet rows
+  lmRentalTerm: '租用期',
+  lmDwellSince: '滞留时长',
+  lmDwellHoursFull: '{hours} 小时',
 
   marketHeroTitle: '发现 Fiber 应用',
   marketHeroLead: '即时支付、流动性与开发者工具——在 Opticrum 上一键打开。',

@@ -4,17 +4,8 @@ export type MatchHealth = 'Healthy' | 'Warning' | 'Critical' | 'Exhausted'
 
 export type OrderStatus = 'open' | 'matched' | 'cancelled'
 
-export type YieldBucket = {
-  range_label: string
-  order_count: number
-  total_capacity_ckb: number
-}
-
 export type DashboardData = {
-  total_capacity_locked_ckb: number
-  total_orders: number
   total_matches: number
-  yield_distribution: YieldBucket[]
 }
 
 /** A liquidity purchase order I posted (an Order cell where I'm the buyer). */
@@ -28,6 +19,8 @@ export type BuyOrder = {
   annualYieldBps: number
   /** CKB staked as the rent pool. */
   depositCkb: number
+  /** How long I want to rent the liquidity for (whole days). */
+  rentalDays: number
   status: OrderStatus
   createdAt: string
 }
@@ -44,8 +37,8 @@ export type MyMatch = {
   withdrawableCkb: number
   shannonsPerBlock: number
   annualYieldBps: number
-  health: MatchHealth
-  isExhausted: boolean
+  /** When this match's rented liquidity expires — drives the life bar. */
+  expiresAt: string
   createdAt: string
 }
 
@@ -55,12 +48,6 @@ export type InboundSummary = {
   activeMatches: number
   totalDepositCkb: number
   avgRateBps: number
-}
-
-export type ConnectionPreset = {
-  label: string
-  rpcUrl: string
-  indexerUrl: string
 }
 
 // ── Yield math (mirrors opticrum-calculator: rent_per_block × blocks/year) ──
@@ -75,6 +62,39 @@ export function shannonsPerBlockToApyBps(shannonsPerBlock: number, capacityCkb: 
   return Math.round(annualYield * 10_000)
 }
 
+// ── Derived state: match life + grid sorting ───────────────────────────────
+
+export type MatchLife = {
+  /** 0–100: remaining lifetime as a fraction of the match's full term. */
+  pct: number
+  label: MatchHealth
+  isExhausted: boolean
+}
+
+/** Rental term of a match in whole days (created → expires). */
+export function rentalDaysForMatch(match: MyMatch): number {
+  const start = new Date(match.createdAt).getTime()
+  const end = new Date(match.expiresAt).getTime()
+  return Math.max(1, Math.round((end - start) / 86_400_000))
+}
+
+/** Hours elapsed since an ISO timestamp (order dwell time). */
+export function dwellHours(iso: string, now: number = Date.now()): number {
+  return Math.max(0, (now - new Date(iso).getTime()) / 3_600_000)
+}
+
+/** Life of a match at a given instant — derived from its expiry, not stored. */
+export function matchLife(match: MyMatch, now: number = Date.now()): MatchLife {
+  const start = new Date(match.createdAt).getTime()
+  const end = new Date(match.expiresAt).getTime()
+  const total = end - start
+  const remaining = end - now
+  const pct = total > 0 ? Math.round(Math.max(0, Math.min(1, remaining / total)) * 100) : 0
+  const label: MatchHealth =
+    pct <= 0 ? 'Exhausted' : pct < 25 ? 'Critical' : pct < 50 ? 'Warning' : 'Healthy'
+  return { pct, label, isExhausted: pct <= 0 }
+}
+
 // ── My purchase orders (购买记录) ───────────────────────────────────────────
 
 export const mockMyOrders: BuyOrder[] = [
@@ -84,6 +104,7 @@ export const mockMyOrders: BuyOrder[] = [
     shannonsPerBlock: 100_000,
     annualYieldBps: shannonsPerBlockToApyBps(100_000, 50_000),
     depositCkb: 500,
+    rentalDays: 30,
     status: 'matched',
     createdAt: '2026-07-29T09:40:17+08:00',
   },
@@ -93,6 +114,7 @@ export const mockMyOrders: BuyOrder[] = [
     shannonsPerBlock: 80_000,
     annualYieldBps: shannonsPerBlockToApyBps(80_000, 35_000),
     depositCkb: 350,
+    rentalDays: 30,
     status: 'matched',
     createdAt: '2026-07-30T11:02:08+08:00',
   },
@@ -102,6 +124,7 @@ export const mockMyOrders: BuyOrder[] = [
     shannonsPerBlock: 60_000,
     annualYieldBps: shannonsPerBlockToApyBps(60_000, 42_000),
     depositCkb: 420,
+    rentalDays: 14,
     status: 'matched',
     createdAt: '2026-07-31T14:26:41+08:00',
   },
@@ -111,6 +134,7 @@ export const mockMyOrders: BuyOrder[] = [
     shannonsPerBlock: 90_000,
     annualYieldBps: shannonsPerBlockToApyBps(90_000, 25_000),
     depositCkb: 250,
+    rentalDays: 7,
     status: 'matched',
     createdAt: '2026-08-01T08:55:33+08:00',
   },
@@ -120,6 +144,7 @@ export const mockMyOrders: BuyOrder[] = [
     shannonsPerBlock: 110_000,
     annualYieldBps: shannonsPerBlockToApyBps(110_000, 60_000),
     depositCkb: 600,
+    rentalDays: 30,
     status: 'open',
     createdAt: '2026-08-03T10:14:52+08:00',
   },
@@ -129,6 +154,7 @@ export const mockMyOrders: BuyOrder[] = [
     shannonsPerBlock: 70_000,
     annualYieldBps: shannonsPerBlockToApyBps(70_000, 30_000),
     depositCkb: 300,
+    rentalDays: 14,
     status: 'open',
     createdAt: '2026-08-04T16:47:09+08:00',
   },
@@ -138,6 +164,7 @@ export const mockMyOrders: BuyOrder[] = [
     shannonsPerBlock: 72_000,
     annualYieldBps: shannonsPerBlockToApyBps(72_000, 18_000),
     depositCkb: 180,
+    rentalDays: 7,
     status: 'cancelled',
     createdAt: '2026-07-28T12:03:27+08:00',
   },
@@ -154,8 +181,7 @@ export const mockMyMatches: MyMatch[] = [
     withdrawableCkb: 432,
     shannonsPerBlock: 100_000,
     annualYieldBps: shannonsPerBlockToApyBps(100_000, 50_000),
-    health: 'Healthy',
-    isExhausted: false,
+    expiresAt: '2026-08-28T09:40:17+08:00',
     createdAt: '2026-07-29T09:40:17+08:00',
   },
   {
@@ -166,8 +192,7 @@ export const mockMyMatches: MyMatch[] = [
     withdrawableCkb: 282,
     shannonsPerBlock: 80_000,
     annualYieldBps: shannonsPerBlockToApyBps(80_000, 35_000),
-    health: 'Healthy',
-    isExhausted: false,
+    expiresAt: '2026-08-29T11:02:08+08:00',
     createdAt: '2026-07-30T11:02:08+08:00',
   },
   {
@@ -178,8 +203,7 @@ export const mockMyMatches: MyMatch[] = [
     withdrawableCkb: 352,
     shannonsPerBlock: 60_000,
     annualYieldBps: shannonsPerBlockToApyBps(60_000, 42_000),
-    health: 'Warning',
-    isExhausted: false,
+    expiresAt: '2026-08-14T14:26:41+08:00',
     createdAt: '2026-07-31T14:26:41+08:00',
   },
   {
@@ -190,20 +214,18 @@ export const mockMyMatches: MyMatch[] = [
     withdrawableCkb: 182,
     shannonsPerBlock: 90_000,
     annualYieldBps: shannonsPerBlockToApyBps(90_000, 25_000),
-    health: 'Critical',
-    isExhausted: false,
+    expiresAt: '2026-08-08T08:55:33+08:00',
     createdAt: '2026-08-01T08:55:33+08:00',
   },
   {
     outpoint: '0x5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f:0',
-    channelOutpoint: '0xe5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6:0',
+    channelOutpoint: '0xa7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8:0',
     channelCapacityCkb: 0,
     depositCkb: 68,
     withdrawableCkb: 0,
     shannonsPerBlock: 72_000,
     annualYieldBps: 1052,
-    health: 'Exhausted',
-    isExhausted: true,
+    expiresAt: '2026-07-30T18:20:55+08:00',
     createdAt: '2026-07-27T18:20:55+08:00',
   },
 ]
@@ -211,7 +233,7 @@ export const mockMyMatches: MyMatch[] = [
 // ── Inbound liquidity summary (computed from matches) ──────────────────────
 
 export function computeInboundSummary(matches: MyMatch[]): InboundSummary {
-  const active = matches.filter((m) => !m.isExhausted)
+  const active = matches.filter((m) => !matchLife(m).isExhausted)
   const totalInboundCkb = active.reduce((sum, m) => sum + m.channelCapacityCkb, 0)
   const totalDepositCkb = matches.reduce((sum, m) => sum + m.depositCkb, 0)
   const avgRateBps =
@@ -226,32 +248,8 @@ export function computeInboundSummary(matches: MyMatch[]): InboundSummary {
   }
 }
 
-// ── Market overview (yield distribution) ───────────────────────────────────
+// ── Market overview (TopBar nav badge uses total_matches) ──────────────────
 
 export const mockDashboardData: DashboardData = {
-  total_capacity_locked_ckb: 1_284_500.75,
-  total_orders: 347,
   total_matches: 42,
-  yield_distribution: [
-    { range_label: '0-5%',   order_count: 120, total_capacity_ckb: 480_000 },
-    { range_label: '5-10%',  order_count: 95,  total_capacity_ckb: 380_000 },
-    { range_label: '10-15%', order_count: 72,  total_capacity_ckb: 250_000 },
-    { range_label: '15-20%', order_count: 40,  total_capacity_ckb: 120_000 },
-    { range_label: '20%+',   order_count: 20,  total_capacity_ckb: 54_500.75 },
-  ],
-}
-
-// ── Connection Presets (driven by the node's chain) ────────────────────────
-
-export const connectionPresets: Record<'mainnet' | 'testnet', ConnectionPreset> = {
-  mainnet: {
-    label: 'CKB Mainnet',
-    rpcUrl: 'https://mainnet.ckb.dev/rpc',
-    indexerUrl: 'https://mainnet.ckb.dev/indexer',
-  },
-  testnet: {
-    label: 'CKB Testnet',
-    rpcUrl: 'https://testnet.ckb.dev/rpc',
-    indexerUrl: 'https://testnet.ckb.dev/indexer',
-  },
 }

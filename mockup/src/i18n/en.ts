@@ -52,12 +52,9 @@ export const en: Messages = {
   nodeNavRuntime: 'Runtime',
 
   // Liquidity — network (follows the node's configured chain)
-  lmFollowsNode: 'Follows node config',
-  networkLabel: 'Network',
   networkMainnet: 'Mainnet',
   networkTestnet: 'Testnet',
   rpcUrlLabel: 'RPC URL',
-  indexerUrlLabel: 'Indexer URL',
 
   // Liquidity — inbound liquidity hero
   lmInboundLiquidity: 'Inbound liquidity',
@@ -66,7 +63,6 @@ export const en: Messages = {
   lmTotalDeposit: 'Total deposit',
   lmAvgRate: 'Avg rate',
   lmBuyLiquidity: 'Buy liquidity',
-  lmBuyDesc: 'Post an order to buy inbound channel liquidity',
 
   // Liquidity — buy order modal
   lmNewOrder: 'New buy order',
@@ -74,27 +70,24 @@ export const en: Messages = {
   lmRateShPerBlock: 'Rate (sh/block)',
   lmDeposit: 'Deposit (CKB)',
   lmFiberAddressOptional: 'Fiber address (optional)',
-  lmEstimatedApy: 'Estimated APY',
+  lmEstimatedApy: 'Estimated APY:',
   lmPublishOrder: 'Publish order',
   lmOrderPublished: 'Order published (mock)',
 
   // Liquidity — my orders (purchase records)
   lmMyOrders: 'My orders',
-  lmOrderOutpoint: 'Transaction',
-  lmChannelOutpoint: 'Channel Outpoint',
-  lmOrderStatus: 'Status',
-  lmStatusOpen: 'Open',
   lmStatusMatched: 'Matched',
   lmStatusCancelled: 'Cancelled',
   lmCancelOrder: 'Cancel',
   lmCancelOrderTitle: 'Cancel order?',
   lmCancelOrderBody: 'The staked deposit will be returned to your wallet.',
   lmOrderCancelled: 'Order cancelled (mock)',
-  lmCreatedAt: 'Created',
 
   // Liquidity — my matched liquidity
   lmMyMatches: 'Matched liquidity',
   lmWithdrawable: 'Withdrawable',
+  lmStakedHint: 'Staked: {amount} CKB',
+  lmWithdrawableHint: 'Withdrawable: {amount} CKB',
   lmInject: 'Inject',
   lmWithdraw: 'Withdraw',
   lmAdjustTitle: 'Adjust deposit',
@@ -106,19 +99,60 @@ export const en: Messages = {
   lmExtractDeleted: 'Extracted {amount} CKB and deleted the order (mock)',
 
   // Liquidity — shared table labels + health
-  yieldDistribution: 'Yield Distribution',
-  matchOutpoint: 'Channel Outpoint',
   matchCapacity: 'Capacity',
   matchRate: 'Rate',
-  matchRemaining: 'Remaining',
-  matchHealth: 'Health',
   healthHealthy: 'Healthy',
   healthWarning: 'Warning',
   healthCritical: 'Critical',
   healthExhausted: 'Exhausted',
   shannonsPerBlock: 'sh/block',
   unitCkb: 'CKB',
-  unitBlocks: 'blocks',
+
+  // Liquidity — awaiting-match pill
+  meAwaitingMatch: 'Awaiting match',
+
+  // Liquidity — card grid + bottom sheet
+  mgOrderTag: 'Order',
+  mgMatchTag: 'Match',
+  mgDetails: 'Details',
+  mgStatus: 'Status',
+  mgRemainingDays: '{days} days left',
+  mgExpiresAt: 'Expires',
+  mgCreatedAt: 'Created',
+  mgOrderTx: 'Order TX',
+  mgChannelTx: 'Channel Outpoint',
+  mgLinkedOrder: 'Source order',
+  mgLinkedMatch: 'Linked match',
+  mgNoOrders: 'No buy orders',
+  mgNoMatches: 'No matched liquidity',
+
+  // Liquidity — pool + top strip dashboard
+  lmPoolHint: 'Each circle is an on-chain liquidity cell — size ∝ demand; cells drift to simulate matching',
+  lmPoolLegend: 'Green ample · Amber warning · Red near-expiry',
+  lmTotalDemand: 'Total demand',
+  lmAvgApy: 'Avg APY',
+  lmPendingOrders: 'Pending',
+  lmAvgDwell: 'Avg dwell',
+  lmAvgRemaining: 'Avg left',
+
+  // Liquidity — market dashboard (right sidebar)
+  lmMarketOverview: 'Market overview',
+  lmOrderMatchSplit: 'Orders / Matches',
+  lmOrderDemand: 'Order demand',
+  lmMatchCapacity: 'Matched capacity',
+
+  // Liquidity — cell anatomy
+  lmApyLabel: 'APY',
+  lmRentalDuration: 'Rental',
+  lmRentalDays: '{days} days',
+  lmDemand: 'Demand',
+  lmDwell: 'Dwell',
+  lmRemaining: 'left',
+
+  // Liquidity — sheet rows
+  lmRentalTerm: 'Rental term',
+  lmDwellSince: 'Dwell time',
+  lmDwellHoursFull: '{hours} hours',
 
   marketHeroTitle: 'Discover Fiber apps',
   marketHeroLead: 'Instant payments, liquidity, and developer tools — open in one click.',

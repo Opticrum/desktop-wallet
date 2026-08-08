@@ -54,12 +54,9 @@ export type Messages = {
   nodeNavRuntime: string
 
   // Liquidity — network (follows the node's configured chain)
-  lmFollowsNode: string
-  networkLabel: string
   networkMainnet: string
   networkTestnet: string
   rpcUrlLabel: string
-  indexerUrlLabel: string
 
   // Liquidity — inbound liquidity hero
   lmInboundLiquidity: string
@@ -68,7 +65,6 @@ export type Messages = {
   lmTotalDeposit: string
   lmAvgRate: string
   lmBuyLiquidity: string
-  lmBuyDesc: string
 
   // Liquidity — buy order modal
   lmNewOrder: string
@@ -82,21 +78,18 @@ export type Messages = {
 
   // Liquidity — my orders (purchase records)
   lmMyOrders: string
-  lmOrderOutpoint: string
-  lmChannelOutpoint: string
-  lmOrderStatus: string
-  lmStatusOpen: string
   lmStatusMatched: string
   lmStatusCancelled: string
   lmCancelOrder: string
   lmCancelOrderTitle: string
   lmCancelOrderBody: string
   lmOrderCancelled: string
-  lmCreatedAt: string
 
   // Liquidity — my matched liquidity
   lmMyMatches: string
   lmWithdrawable: string
+  lmStakedHint: string
+  lmWithdrawableHint: string
   lmInject: string
   lmWithdraw: string
   lmAdjustTitle: string
@@ -108,19 +101,60 @@ export type Messages = {
   lmExtractDeleted: string
 
   // Liquidity — shared table labels + health
-  yieldDistribution: string
-  matchOutpoint: string
   matchCapacity: string
   matchRate: string
-  matchRemaining: string
-  matchHealth: string
   healthHealthy: string
   healthWarning: string
   healthCritical: string
   healthExhausted: string
   shannonsPerBlock: string
   unitCkb: string
-  unitBlocks: string
+
+  // Liquidity — awaiting-match pill
+  meAwaitingMatch: string
+
+  // Liquidity — card grid + bottom sheet
+  mgOrderTag: string
+  mgMatchTag: string
+  mgDetails: string
+  mgStatus: string
+  mgRemainingDays: string
+  mgExpiresAt: string
+  mgCreatedAt: string
+  mgOrderTx: string
+  mgChannelTx: string
+  mgLinkedOrder: string
+  mgLinkedMatch: string
+  mgNoOrders: string
+  mgNoMatches: string
+
+  // Liquidity — pool + top strip dashboard
+  lmPoolHint: string
+  lmPoolLegend: string
+  lmTotalDemand: string
+  lmAvgApy: string
+  lmPendingOrders: string
+  lmAvgDwell: string
+  lmAvgRemaining: string
+
+  // Liquidity — market dashboard (right sidebar)
+  lmMarketOverview: string
+  lmOrderMatchSplit: string
+  lmOrderDemand: string
+  lmMatchCapacity: string
+
+  // Liquidity — cell anatomy
+  lmApyLabel: string
+  lmRentalDuration: string
+  lmRentalDays: string
+  lmDemand: string
+  lmDwell: string
+  lmRemaining: string
+
+  // Liquidity — sheet rows
+  lmRentalTerm: string
+  lmDwellSince: string
+  lmDwellHoursFull: string
 
   // Marketplace hero
   marketHeroTitle: string
