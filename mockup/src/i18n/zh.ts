@@ -143,11 +143,15 @@ export const zh: Messages = {
 
   // Liquidity — cell anatomy
   lmApyLabel: 'APY',
-  lmRentalDuration: '租用',
   lmRentalDays: '{days} 天',
   lmDemand: '需求',
+  lmInboundDemand: '入金需求',
+  lmShareOfTotal: '入金需求占比',
   lmDwell: '滞留',
   lmRemaining: '剩余',
+  lmRentalDaysShort: '{days}天',
+  lmSpent: '已耗尽',
+  lmPoolLegendOrder: '青·新鲜  琥珀·3-7天  红·7天+',
 
   // Liquidity — sheet rows
   lmRentalTerm: '租用期',

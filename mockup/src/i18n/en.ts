@@ -143,11 +143,15 @@ export const en: Messages = {
 
   // Liquidity — cell anatomy
   lmApyLabel: 'APY',
-  lmRentalDuration: 'Rental',
   lmRentalDays: '{days} days',
   lmDemand: 'Demand',
+  lmInboundDemand: 'Inbound demand',
+  lmShareOfTotal: 'Demand share',
   lmDwell: 'Dwell',
   lmRemaining: 'left',
+  lmRentalDaysShort: '{days}d',
+  lmSpent: 'SPENT',
+  lmPoolLegendOrder: 'Teal fresh · Amber 3-7d · Red 7d+',
 
   // Liquidity — sheet rows
   lmRentalTerm: 'Rental term',

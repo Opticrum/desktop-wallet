@@ -80,6 +80,13 @@ export function lifeTierColor(pct: number): string {
   return 'var(--ok)'
 }
 
+/** Order dwell freshness: hours waiting → background tier color. */
+export function dwellTierColor(hours: number): string {
+  if (hours <= 72) return 'var(--me-accent)' // <= 3d fresh
+  if (hours <= 168) return 'var(--warn)'      // 3-7d aging
+  return 'var(--danger)'                       // > 7d aged
+}
+
 export function MatchHealthBadge({ health }: { health: MatchHealth }) {
   const { t } = useLocale()
   const labelMap: Record<MatchHealth, string> = {
@@ -298,7 +305,7 @@ function stepSim(sims: SimCell[], w: number, h: number, dt: number, frozenKey: s
 
 // ── Hover tooltip content (relatively detailed cell info) ──────────────────
 
-function OrderTooltipContent({ order }: { order: BuyOrder }) {
+function OrderTooltipContent({ order, sharePct }: { order: BuyOrder; sharePct: number }) {
   const { t } = useLocale()
   return (
     <>
@@ -306,6 +313,10 @@ function OrderTooltipContent({ order }: { order: BuyOrder }) {
         <span className="lm-tooltip-tx mono">{truncateOutpoint(order.outpoint)}</span>
       </div>
       <div className="lm-tooltip-body">
+        <div className="lm-tooltip-row lm-tooltip-share">
+          <span>{t.lmShareOfTotal}</span>
+          <strong>{sharePct.toFixed(1)}%</strong>
+        </div>
         <div className="lm-tooltip-row">
           <span>{t.matchCapacity}</span>
           <strong>
@@ -396,6 +407,124 @@ function MatchTooltipContent({ match }: { match: MyMatch }) {
   )
 }
 
+// ── Pool Overview chart (first-glance market Overview) ────────────────────
+
+type DonutSegment = { value: number; color: string }
+
+/** Market Overview chart — a compact corner donut (matches: health
+    distribution) or a full-canvas ambient pie behind the cells (orders: dwell
+    distribution, drawn faint enough to melt into the pool). */
+function OverviewChart({
+  orders,
+  matches,
+  variant = 'corner',
+  hoverKey = null,
+}: {
+  orders: BuyOrder[]
+  matches: MyMatch[]
+  variant?: 'corner' | 'pie'
+  hoverKey?: string | null
+}) {
+  const { t } = useLocale()
+
+  // Ambient background for the orders pool: a full-canvas pie of every order's
+  // channel-demand share (angle ∝ capacity), in a cool blue/violet palette that
+  // deliberately never echoes the order cells' warm dwell colours (teal/amber/
+  // red). Barely-there sectors melt into the pool yet still read as a pie; the
+  // hovered order's sector lights up.
+  if (variant === 'pie') {
+    const active = orders
+      .filter((o) => o.status !== 'cancelled')
+      .sort((a, b) => b.channelCapacityCkb - a.channelCapacityCkb)
+    const total = active.reduce((sum, o) => sum + o.channelCapacityCkb, 0)
+    const PIE_COLORS = [
+      'var(--donut-1)',
+      'var(--donut-3)',
+      'color-mix(in srgb, var(--donut-1) 55%, var(--donut-3))',
+      'color-mix(in srgb, var(--donut-1) 55%, var(--surface))',
+      'color-mix(in srgb, var(--donut-3) 55%, var(--surface))',
+      'color-mix(in srgb, var(--donut-1) 70%, var(--surface))',
+    ]
+    const R = 46
+    const pt = (deg: number) => {
+      const rad = ((deg - 90) * Math.PI) / 180
+      return { x: 50 + R * Math.cos(rad), y: 50 + R * Math.sin(rad) }
+    }
+    const GAP = 0.8
+    let cum = 0
+    return (
+      <svg className="lm-pool-pie" viewBox="0 0 100 100" aria-hidden>
+        {total > 0 &&
+          active.map((o, i) => {
+            const from = (cum / total) * 360 + GAP
+            cum += o.channelCapacityCkb
+            const to = (cum / total) * 360 - GAP
+            if (to <= from) return null
+            const a = pt(from)
+            const b = pt(to)
+            const largeArc = to - from > 180 ? 1 : 0
+            const lit = hoverKey === o.outpoint
+            return (
+              <path
+                key={o.outpoint}
+                className={lit ? 'is-lit' : undefined}
+                d={`M 50 50 L ${a.x} ${a.y} A ${R} ${R} 0 ${largeArc} 1 ${b.x} ${b.y} Z`}
+                fill={PIE_COLORS[i % PIE_COLORS.length]}
+              />
+            )
+          })}
+      </svg>
+    )
+  }
+
+  const segments: DonutSegment[] = (() => {
+    const counts: Record<MatchHealth, number> = { Healthy: 0, Warning: 0, Critical: 0, Exhausted: 0 }
+    for (const m of matches) counts[matchLife(m).label]++
+    return [
+      { value: counts.Healthy, color: 'var(--ok)' },
+      { value: counts.Warning, color: 'var(--warn)' },
+      { value: counts.Critical, color: 'var(--danger)' },
+      { value: counts.Exhausted, color: 'var(--ink-4)' },
+    ]
+  })()
+
+  const total = segments.reduce((sum, s) => sum + s.value, 0)
+  const R = 40
+  const CIRC = 2 * Math.PI * R
+  let acc = 0
+
+  return (
+    <div className="lm-pool-donut" role="img" aria-label={`${total} ${t.mgMatchTag}`}>
+      <svg viewBox="0 0 100 100" aria-hidden>
+        {total > 0 &&
+          segments.map((seg, i) => {
+            if (seg.value === 0) return null
+            const frac = seg.value / total
+            const offset = -acc * CIRC
+            acc += frac
+            return (
+              <circle
+                key={i}
+                cx="50"
+                cy="50"
+                r={R}
+                fill="none"
+                stroke={seg.color}
+                strokeWidth="11"
+                strokeLinecap="butt"
+                transform="rotate(-90 50 50)"
+                strokeDasharray={`${frac * CIRC} ${CIRC}`}
+                strokeDashoffset={offset}
+                style={{ filter: `drop-shadow(0 0 3px color-mix(in srgb, ${seg.color} 60%, transparent))` }}
+              />
+            )
+          })}
+      </svg>
+      <span className="lm-pool-donut-count">{total}</span>
+    </div>
+  )
+}
+
 // ── Component ─────────────────────────────────────────────────────────────
 
 export type LiquidityCellFieldProps = {
@@ -419,6 +548,11 @@ export function LiquidityCellField({ orders, matches, mode, onSelect }: Liquidit
 
   const cells = useMemo(() => buildPoolCells(orders, matches, mode), [orders, matches, mode, tick])
   const maxCap = useMemo(() => Math.max(0, ...cells.map((c) => c.capacityCkb)), [cells])
+  // Sum of all active orders' channel demand — drives the pie share % on hover.
+  const totalDemand = useMemo(
+    () => orders.filter((o) => o.status !== 'cancelled').reduce((sum, o) => sum + o.channelCapacityCkb, 0),
+    [orders],
+  )
 
   const fieldRef = useRef<HTMLDivElement>(null)
   const cellEls = useRef(new Map<string, HTMLButtonElement>())
@@ -563,6 +697,13 @@ export function LiquidityCellField({ orders, matches, mode, onSelect }: Liquidit
   }, [cells])
 
   const themeClass = mode === 'orders' ? 'is-orders' : 'is-matches'
+  // Share of total demand for the hovered order — shown in the tooltip + pie.
+  const hoveredOrderShare =
+    hovered && hovered.data.kind === 'order'
+      ? totalDemand > 0
+        ? ((hovered.data.target.item as BuyOrder).channelCapacityCkb / totalDemand) * 100
+        : 0
+      : 0
 
   return (
     <>
@@ -575,11 +716,16 @@ export function LiquidityCellField({ orders, matches, mode, onSelect }: Liquidit
         <div className="lm-pool-cells" key={mode} ref={fieldRef}>
           {cells.map((c) => {
             const d = cellDiameter(c.capacityCkb, maxCap)
+            // Gauge dial: match = remaining life %; order = dwell progress toward 7 days.
+            const gauge = c.kind === 'match' ? (c.life?.pct ?? 0) : Math.min(100, (c.dwellH / 168) * 100)
             const style = {
               width: d,
               height: d,
-              '--tier': c.life ? lifeTierColor(c.life.pct) : 'var(--cell-accent)',
-              '--ring-deg': c.life ? Math.round(c.life.pct * 3.6) : 0,
+              '--cell-d': `${d}px`,
+              '--tier': c.kind === 'match'
+                ? (c.life ? lifeTierColor(c.life.pct) : 'var(--cell-accent)')
+                : dwellTierColor(c.dwellH),
+              '--gauge': gauge,
             } as CSSProperties
             const frozen = hovered?.key === c.key
             return (
@@ -616,49 +762,60 @@ export function LiquidityCellField({ orders, matches, mode, onSelect }: Liquidit
                   (c.kind === 'order' ? t.mgOrderTag : t.mgMatchTag) +
                   ` · ${t.lmApyLabel} ${formatApyShort(c.apyBps)}%` +
                   ` · ${t.lmDemand} ${formatCkb(c.capacityCkb)} CKB` +
-                  (c.kind === 'match' && c.life
-                    ? ` · ${t.lmRemaining} ${c.life.pct}%`
-                    : ` · ${t.lmDwell} ${Math.round(c.dwellH)}h`)
+                  (c.kind === 'order'
+                    ? ` · ${t.lmRentalDays.replace('{days}', String(c.rentalDays))} · ${t.lmDwell} ${Math.round(c.dwellH)}h`
+                    : ` · ${t.lmRemaining} ${c.life ? c.life.pct : 0}%`)
                 }
               >
-                {c.kind === 'match' && <span className="cell-ring" aria-hidden />}
+                {c.kind === 'match' && (
+                  <svg className="cell-gauge" viewBox="0 0 100 100" aria-hidden>
+                    <circle className="cell-gauge-track" cx="50" cy="50" r="46" />
+                    {gauge > 0 && <circle className="cell-gauge-arc" cx="50" cy="50" r="46" />}
+                  </svg>
+                )}
                 <span className="cell-core">
-                  <span className="cell-apy">
-                    <span className="cell-apy-num">
-                      {formatApyShort(c.apyBps)}
-                      <i>%</i>
-                    </span>
-                    <span className="cell-apy-tag">{t.lmApyLabel}</span>
-                  </span>
-                  <span className="cell-line cell-demand">
-                    <em>{t.lmDemand}</em>
-                    {formatCompact(c.capacityCkb)} <small>CKB</small>
-                  </span>
-                  <span className="cell-line cell-rental">
-                    <em>{t.lmRentalDuration}</em>
-                    {t.lmRentalDays.replace('{days}', String(c.rentalDays))}
-                  </span>
                   {c.kind === 'order' ? (
-                    <span className="cell-line cell-dwell">
-                      <em>{t.lmDwell}</em>
-                      {Math.round(c.dwellH)}
-                      <small>h</small>
-                    </span>
-                  ) : (
-                    c.life && (
-                      <span className="cell-line cell-remaining">
-                        <em>{t.lmRemaining}</em>
-                        {c.life.pct}%
+                    <>
+                      <span className="cell-label">{t.lmInboundDemand}</span>
+                      <span className="cell-hero">
+                        {formatCompact(c.capacityCkb)} <small>CKB</small>
                       </span>
-                    )
-                  )}
+                    </>
+                  ) : c.life?.isExhausted ? (
+                    <span className="cell-spent">{t.lmSpent}</span>
+                  ) : c.life ? (
+                    <>
+                      <span className="cell-label">{t.lmRemaining}</span>
+                      <span className="cell-hero">
+                        {c.life.pct}
+                        <small>%</small>
+                      </span>
+                      <span className="cell-footer">
+                        {t.matchCapacity} {formatCompact(c.capacityCkb)}
+                      </span>
+                      <span className="cell-footer">
+                        {t.lmApyLabel} {formatApyShort(c.apyBps)}%
+                      </span>
+                    </>
+                  ) : null}
                 </span>
+                {c.kind === 'order' && (
+                  <span className="cell-rental-badge">
+                    {t.lmRentalTerm} {t.lmRentalDaysShort.replace('{days}', String(c.rentalDays))}
+                  </span>
+                )}
+                {c.kind === 'order' && (
+                  <span className="cell-apy-badge">
+                    {t.lmApyLabel} {formatApyShort(c.apyBps)}%
+                  </span>
+                )}
               </button>
             )
           })}
         </div>
+        <OverviewChart orders={orders} matches={matches} variant={mode === 'orders' ? 'pie' : 'corner'} hoverKey={hovered?.key ?? null} />
         <span className="lm-pool-hint">{t.lmPoolHint}</span>
-        {mode === 'matches' && <span className="lm-pool-legend">{t.lmPoolLegend}</span>}
+        <span className="lm-pool-legend">{mode === 'orders' ? t.lmPoolLegendOrder : t.lmPoolLegend}</span>
       </div>
 
       {hovered && (
@@ -668,7 +825,7 @@ export function LiquidityCellField({ orders, matches, mode, onSelect }: Liquidit
           style={{ left: hovered.x, top: hovered.y }}
         >
           {hovered.data.kind === 'order' ? (
-            <OrderTooltipContent order={hovered.data.target.item as BuyOrder} />
+            <OrderTooltipContent order={hovered.data.target.item as BuyOrder} sharePct={hoveredOrderShare} />
           ) : (
             <MatchTooltipContent match={hovered.data.target.item as MyMatch} />
           )}

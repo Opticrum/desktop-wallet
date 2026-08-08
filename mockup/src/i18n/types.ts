@@ -145,11 +145,15 @@ export type Messages = {
 
   // Liquidity — cell anatomy
   lmApyLabel: string
-  lmRentalDuration: string
   lmRentalDays: string
   lmDemand: string
+  lmInboundDemand: string
+  lmShareOfTotal: string
   lmDwell: string
   lmRemaining: string
+  lmRentalDaysShort: string
+  lmSpent: string
+  lmPoolLegendOrder: string
 
   // Liquidity — sheet rows
   lmRentalTerm: string
