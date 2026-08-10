@@ -1925,17 +1925,55 @@
 /* ── Logs ──────────────────────────────────────────────────────────────── */
 
 .log-viewer {
-  background: #0f1218;
+  background: var(--log-bg);
   border-radius: var(--radius-lg);
   overflow: hidden;
   font-family: var(--font-mono);
 }
 
+/* Terminal window chrome — traffic-light dots + title bar */
+.lv-chrome {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  background: var(--log-chrome-bg);
+  border-bottom: 1px solid var(--log-line);
+}
+
+.lv-dots {
+  display: flex;
+  gap: 7px;
+  line-height: 0;
+}
+
+.lv-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+
+.lv-dot-red { background: #ff5f57; }
+.lv-dot-yellow { background: #febc2e; }
+.lv-dot-green { background: #28c840; }
+
+.lv-title {
+  font-size: 12px;
+  color: var(--log-title);
+  letter-spacing: 0.02em;
+}
+
+/* Embedded consoles keep the chrome pinned and scroll the body */
+.log-viewer.lv-scroll .lv-body {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
 .log-line {
   font-size: 13px;
   padding: 12px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-  color: #a8aebc;
+  border-bottom: 1px solid var(--log-line);
+  color: var(--log-ink);
   line-height: 1.5;
 }
 
@@ -1944,21 +1982,36 @@
 }
 
 .log-line .log-time {
-  color: #5c6378;
+  color: var(--log-time);
   margin-right: 12px;
 }
 
 .log-line .log-level-info {
-  color: #7aa2d4;
+  color: var(--log-info);
 }
 
 .log-line .log-level-warn {
-  color: #e0b35c;
+  color: var(--log-warn);
 }
 
 .log-line .log-level-error {
-  color: #e06c75;
+  color: var(--log-error);
 }
+
+/* Light theme: ANSI-style level badges so the levels pop like a console */
+[data-theme='light'] .log-line .log-level-info,
+[data-theme='light'] .log-line .log-level-warn,
+[data-theme='light'] .log-line .log-level-error {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+[data-theme='light'] .log-line .log-level-info { background: var(--log-info-soft); }
+[data-theme='light'] .log-line .log-level-warn { background: var(--log-warn-soft); }
+[data-theme='light'] .log-line .log-level-error { background: var(--log-error-soft); }
 
 /* ── Network ───────────────────────────────────────────────────────────── */
 
@@ -3651,16 +3704,6 @@
   text-decoration: none;
 }
 
-/* ── Logs page (full-width log viewer) ───────────────────────────────── */
-
-.log-viewer-full {
-  border-radius: var(--radius-lg);
-}
-
-.log-viewer .log-line {
-  font-size: 13.5px;
-}
-
 /* ── Node connections (nodes with nested channels) ────────────────────── */
 /* One toolbar row keeps the old tab-bar rhythm: section title + counts on
    the left, the "new connection" pill on the right. Below it, a stacked
@@ -4353,11 +4396,6 @@
 
 .node-logs-console .nlc-viewer {
   margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-  border-radius: var(--radius);
-  max-height: 340px;
-  overflow: auto;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -4845,18 +4883,6 @@
   transition: border-color 0.3s ease;
 }
 
-.lm-strip::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 20px;
-  right: 20px;
-  height: 2px;
-  border-radius: 0 0 2px 2px;
-  background: var(--cell-accent);
-  transition: background 0.3s ease;
-}
-
 .lm-switch {
   display: inline-flex;
   align-items: center;
@@ -4998,6 +5024,50 @@
   transition: none;
 }
 
+/* Selected cell — the one whose detail drawer is open. A thicker tier border
+   + static glow on the cell; the breathing pulse lives on ::after. Crucially
+   the `animation` property is NOT overridden, so toggling .is-selected never
+   replays the base `cell-in` pop-in (visible on deselect/back). */
+.cell.is-selected {
+  z-index: 4;
+  border-width: 2px;
+  border-color: var(--tier);
+  box-shadow:
+    var(--shadow-panel),
+    0 0 22px color-mix(in srgb, var(--tier) 42%, transparent);
+}
+
+/* Other cells while one is selected — dimmed, inert background. */
+.cell.is-dimmed {
+  opacity: 0.32;
+  filter: saturate(0.5);
+  box-shadow: none;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.cell.is-selected::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--tier) 70%, transparent);
+  pointer-events: none;
+  animation: cell-selected-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes cell-selected-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.07);
+    opacity: 0.35;
+  }
+}
+
 /* Hover detail tooltip — fixed so it escapes the pool's overflow:hidden. */
 .lm-tooltip {
   position: fixed;
@@ -5048,13 +5118,6 @@
   }
 }
 
-.lm-tooltip-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
 .lm-tooltip-tx {
   min-width: 0;
   font-size: 10px;
@@ -5098,24 +5161,6 @@
   font-size: 12.5px;
 }
 
-.lm-pool-legend {
-  position: absolute;
-  top: 14px;
-  left: 16px;
-  right: auto;
-  z-index: 3;
-  padding: 4px 10px;
-  border-radius: var(--radius-pill);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--ink-3);
-  background-color: color-mix(in srgb, var(--surface) 78%, transparent);
-  border: 1px solid var(--line);
-  pointer-events: none;
-  white-space: nowrap;
-}
-
 /* Pool-corner overview donut — the first-glance Overview anchor: dwell
    distribution (orders) / health distribution (matches). */
 .lm-pool-donut {
@@ -5147,52 +5192,9 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Orders tab: the legend + pool hint are dropped and the Overview becomes a
-   full-canvas ambient PIE of the dwell distribution behind the cells — the
-   sectors are faint enough to melt into the pool while still reading as an
-   order-Overview pie (the amber/red hues echo the order cells' dwell tiers). */
-.lm-pool.is-orders .lm-pool-legend,
-.lm-pool.is-orders .lm-pool-hint {
-  display: none;
-}
-
-.lm-pool-pie {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 0;
-  pointer-events: none;
-}
-
-.lm-pool-pie path {
-  opacity: 0.16;
-  transition: opacity 0.16s ease;
-}
-
-/* The hovered order's demand slice lights up so the cell ↔ pie link is obvious. */
-.lm-pool-pie path.is-lit {
-  opacity: 0.6;
-}
-
-.lm-pool-hint {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 12px;
-  z-index: 3;
-  padding: 0 14px;
-  text-align: center;
-  font-size: 10px;
-  line-height: 1.4;
-  color: var(--ink-4);
-  pointer-events: none;
-  text-wrap: balance;
-}
-
 /* No z-index here: a positioned element with z-index:auto does not create a
    stacking context, so a hovered cell (z-index 4) can paint above the pool
-   tag/legend/hint (z-index 3) instead of being trapped under them. */
+   donut (z-index 3) instead of being trapped under it. */
 .lm-pool-cells {
   position: absolute;
   inset: 0;
@@ -5226,7 +5228,7 @@
   cursor: pointer;
   will-change: transform;
   animation: cell-in 0.45s cubic-bezier(0.22, 1, 0.36, 1);
-  transition: box-shadow 0.18s ease, border-color 0.18s ease;
+  transition: box-shadow 0.18s ease, border-color 0.18s ease, opacity 0.22s ease, filter 0.22s ease;
 }
 
 .cell:hover {
@@ -5338,6 +5340,7 @@
   box-shadow: 0 2px 8px color-mix(in srgb, var(--cell-accent) 38%, transparent);
 }
 
+
 /* Exhausted matches: the glass core greys out via --tier = --ink-4; no arc
    is rendered (gauge 0), only the faint track remains. */
 .cell-match.is-exhausted .cell-gauge-track {
@@ -5411,6 +5414,15 @@
   white-space: nowrap;
   max-width: 100%;
   overflow: hidden;
+}
+
+/* Order-cell dwell — a parenthesised side note under the demand figure:
+   mid-size primary ink (not the muted grey) so it reads as an annotation. */
+.cell-dwell {
+  font-size: clamp(9px, calc(var(--cell-d) * 0.08), 12px);
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: 0.02em;
 }
 
 .cell-spent {
@@ -5701,81 +5713,163 @@
 }
 
 .mg-life-fill {
+  display: block;
   height: 100%;
   border-radius: 3px;
 }
 
 .mg-life-text {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
   font-size: 10px;
   font-weight: 600;
   color: var(--ink-4);
   font-variant-numeric: tabular-nums;
 }
 
+/* Expiry stamp in the bottom-right corner of the remaining-time bar. */
+.ms-life-expiry {
+  color: var(--ink-4);
+}
+
 .mg-life-mini .mg-life-track {
   height: 3px;
 }
 
-/* ── Bottom-sheet detail drawer ────────────────────────────────────────── */
+/* ── Order/match detail — right-side drawer in the aside ────────────────── */
 
-.ms-backdrop {
-  position: fixed;
-  inset: 0;
-  background: var(--modal-backdrop);
-  z-index: 90;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  animation: backdrop-in 140ms ease-out;
-}
-
-.ms-sheet {
-  width: 100%;
-  max-width: 680px;
-  max-height: 78vh;
-  overflow: auto;
-  background: var(--surface);
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  box-shadow: var(--shadow-panel);
-  animation: ms-sheet-in 220ms ease-out;
-}
-
-@keyframes ms-sheet-in {
-  from {
-    transform: translateY(100%);
-  }
-  to {
-    transform: translateY(0);
-  }
-}
-
-.ms-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 18px 24px 14px;
-  border-bottom: 1px solid var(--line);
-}
-
-.ms-outpoint {
-  min-width: 0;
-  font-size: 12px;
-  color: var(--ink-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.ms-close {
-  margin-left: auto;
-  flex-shrink: 0;
-}
-
-.ms-body {
-  padding: 16px 24px 20px;
+/* Slides into the right sidebar, replacing the market overview when a cell
+   is selected; back button returns to the overview. */
+/* Order/match detail — a right-side drawer styled like the market-overview
+   panels (white card, section head, big figure, kpi tiles). */
+.lm-drawer {
   display: flex;
   flex-direction: column;
+  gap: 16px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 18px;
+  box-shadow: var(--shadow-soft);
+  animation: lm-drawer-in 220ms ease-out;
+}
+
+/* The order drawer's title accent echoes its dwell freshness colour. */
+.lm-drawer-order .lm-title::before {
+  background: var(--tier);
+}
+
+@keyframes lm-drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Drawer head — back button + title + status, like a section-head. */
+.lm-drawer-head {
+  align-items: center;
+  margin: 0;
+  gap: 8px;
+}
+
+/* Minimal back control — a bare chevron, no button chrome. */
+.lm-drawer-back {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: 50%;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.lm-drawer-back:hover {
+  color: var(--accent);
+  background: var(--accent-muted);
+}
+
+.lm-drawer-status {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Big figure — the cell's headline metric, coloured by its freshness. */
+.lm-drawer-figure {
+  gap: 6px;
+}
+
+.lm-drawer-value {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  color: var(--tier);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Truncated tx — hover highlights and the native tooltip shows the full. */
+.lm-drawer-tx {
+  cursor: help;
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin: -1px -5px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.lm-drawer-tx:hover {
+  color: var(--ink);
+  background: var(--surface-hover);
+}
+
+/* KPI tiles — matching the market-overview grid, compact for the drawer. */
+.lm-drawer-kpis {
+  margin-bottom: 0;
   gap: 10px;
+}
+
+.lm-drawer-kpi {
+  min-height: 72px;
+  padding: 12px 14px;
+}
+
+/* Detail rows — low-contrast label/value list, split from the headline. */
+.lm-drawer-details {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+/* Actions — full-width buttons, like the overview's buy button. */
+.lm-drawer-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+/* Dwell time detail value echoes the cell circle's freshness colour. */
+.ms-detail-value.ms-detail-dwell {
+  color: var(--tier);
+  font-weight: 700;
 }
 
 .ms-detail {
@@ -5800,55 +5894,6 @@
 
 .ms-life {
   margin-top: 4px;
-}
-
-.ms-linked {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  width: 100%;
-  margin-top: 4px;
-  padding: 12px 14px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  text-align: left;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
-}
-
-.ms-linked:hover {
-  border-color: color-mix(in srgb, var(--me-accent) 45%, var(--line));
-  background: var(--surface-hover);
-}
-
-.ms-linked-label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-}
-
-.ms-linked-val {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ink-2);
-  font-variant-numeric: tabular-nums;
-}
-
-.ms-linked-life {
-  margin-top: 2px;
-}
-
-.ms-foot {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  padding: 14px 24px 20px;
-  border-top: 1px solid var(--line);
 }
 
 /* ── Health badge colour variants ──────────────────────────────────────── */

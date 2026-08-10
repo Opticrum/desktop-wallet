@@ -261,11 +261,6 @@ export function LiquidityMarket() {
     setToast(t.lmExtractDeleted.replace('{amount}', formatCkb(returned)))
   }
 
-  const handleSheetSwitch = (target: SheetTarget) => {
-    setActive(target)
-    setPoolTab(target.kind === 'order' ? 'orders' : 'matches')
-  }
-
   return (
     <div className="page-wide">
       <div className="lm-layout">
@@ -280,7 +275,10 @@ export function LiquidityMarket() {
                 aria-selected={poolTab === 'orders'}
                 aria-controls="pool-panel"
                 className={poolTab === 'orders' ? 'lm-switch-btn is-active' : 'lm-switch-btn'}
-                onClick={() => setPoolTab('orders')}
+                onClick={() => {
+                  setPoolTab('orders')
+                  setActive(null)
+                }}
               >
                 {t.mgOrderTag}
                 <span className="lm-switch-count">{orderStats.pending}</span>
@@ -292,7 +290,10 @@ export function LiquidityMarket() {
                 aria-selected={poolTab === 'matches'}
                 aria-controls="pool-panel"
                 className={poolTab === 'matches' ? 'lm-switch-btn is-active' : 'lm-switch-btn'}
-                onClick={() => setPoolTab('matches')}
+                onClick={() => {
+                  setPoolTab('matches')
+                  setActive(null)
+                }}
               >
                 {t.mgMatchTag}
                 <span className="lm-switch-count">{matchStats.active}</span>
@@ -349,11 +350,30 @@ export function LiquidityMarket() {
           </section>
 
           {/* Square floating-cell pool */}
-          <LiquidityCellField orders={orders} matches={matches} mode={poolTab} onSelect={setActive} />
+          <LiquidityCellField
+            orders={orders}
+            matches={matches}
+            mode={poolTab}
+            selected={active ? active.item.outpoint : null}
+            onSelect={setActive}
+          />
         </div>
 
-        {/* Right — market dashboard sidebar */}
+        {/* Right — market dashboard, or the selected cell's detail drawer */}
         <aside className="lm-aside">
+          {active ? (
+            <LiquiditySheet
+              target={active}
+              orders={orders}
+              matches={matches}
+              onClose={() => setActive(null)}
+              onCancelOrder={setCancelTarget}
+              onInject={(m) => setAdjust({ match: m, mode: 'inject' })}
+              onWithdraw={(m) => setAdjust({ match: m, mode: 'withdraw' })}
+              onExtract={setExtractTarget}
+            />
+          ) : (
+            <>
           <section className="panel lm-dash">
             <div className="section-head">
               <h2 className="lm-title">{t.lmMarketOverview}</h2>
@@ -408,21 +428,10 @@ export function LiquidityMarket() {
               <span className="lm-split-val">{formatCkb(matchCapTotal)}</span>
             </div>
           </section>
+            </>
+          )}
         </aside>
       </div>
-
-      {/* Bottom-sheet detail drawer */}
-      <LiquiditySheet
-        target={active}
-        orders={orders}
-        matches={matches}
-        onClose={() => setActive(null)}
-        onSwitch={handleSheetSwitch}
-        onCancelOrder={setCancelTarget}
-        onInject={(m) => setAdjust({ match: m, mode: 'inject' })}
-        onWithdraw={(m) => setAdjust({ match: m, mode: 'withdraw' })}
-        onExtract={setExtractTarget}
-      />
 
       <BuyOrderModal open={buyOpen} onClose={() => setBuyOpen(false)} onPublish={handlePublish} />
       <AdjustDepositModal

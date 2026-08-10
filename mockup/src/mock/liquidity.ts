@@ -105,7 +105,7 @@ export const mockMyOrders: BuyOrder[] = [
     annualYieldBps: shannonsPerBlockToApyBps(100_000, 50_000),
     depositCkb: 500,
     rentalDays: 30,
-    status: 'matched',
+    status: 'open',
     createdAt: '2026-07-29T09:40:17+08:00',
   },
   {
@@ -115,7 +115,7 @@ export const mockMyOrders: BuyOrder[] = [
     annualYieldBps: shannonsPerBlockToApyBps(80_000, 35_000),
     depositCkb: 350,
     rentalDays: 30,
-    status: 'matched',
+    status: 'open',
     createdAt: '2026-07-30T11:02:08+08:00',
   },
   {
@@ -125,7 +125,7 @@ export const mockMyOrders: BuyOrder[] = [
     annualYieldBps: shannonsPerBlockToApyBps(60_000, 42_000),
     depositCkb: 420,
     rentalDays: 14,
-    status: 'matched',
+    status: 'open',
     createdAt: '2026-07-31T14:26:41+08:00',
   },
   {
@@ -135,7 +135,7 @@ export const mockMyOrders: BuyOrder[] = [
     annualYieldBps: shannonsPerBlockToApyBps(90_000, 25_000),
     depositCkb: 250,
     rentalDays: 7,
-    status: 'matched',
+    status: 'open',
     createdAt: '2026-08-01T08:55:33+08:00',
   },
   {
@@ -146,7 +146,7 @@ export const mockMyOrders: BuyOrder[] = [
     depositCkb: 600,
     rentalDays: 30,
     status: 'open',
-    createdAt: '2026-08-03T10:14:52+08:00',
+    createdAt: '2026-08-09T10:14:52+08:00',
   },
   {
     outpoint: '0xf6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7:1',
@@ -156,7 +156,7 @@ export const mockMyOrders: BuyOrder[] = [
     depositCkb: 300,
     rentalDays: 14,
     status: 'open',
-    createdAt: '2026-08-04T16:47:09+08:00',
+    createdAt: '2026-08-08T16:47:09+08:00',
   },
   {
     outpoint: '0xa7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8:0',

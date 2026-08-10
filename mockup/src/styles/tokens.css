@@ -53,6 +53,20 @@
 
   --modal-backdrop: rgba(15, 17, 23, 0.55);
 
+  /* Log console terminal — light terminal window: gray surface + ANSI badges */
+  --log-bg: #e7ebf0;
+  --log-chrome-bg: #dfe4ec;
+  --log-title: #5b6370;
+  --log-ink: #2b2f38;
+  --log-time: #7c8698;
+  --log-info: #1f6fd0;
+  --log-warn: #a9700a;
+  --log-error: #cf3b42;
+  --log-line: rgba(15, 17, 23, 0.06);
+  --log-info-soft: #e3eefc;
+  --log-warn-soft: #fdf0d9;
+  --log-error-soft: #fbe7e9;
+
   --radius-sm: 10px;
   --radius: 16px;
   --radius-lg: 24px;
@@ -131,6 +145,17 @@
   --donut-track: rgba(242, 243, 247, 0.08);
 
   --modal-backdrop: rgba(0, 0, 0, 0.65);
+
+  /* Log console terminal — keep current palette in dark theme */
+  --log-bg: #0f1218;
+  --log-chrome-bg: #151a24;
+  --log-title: #8b91a3;
+  --log-ink: #a8aebc;
+  --log-time: #5c6378;
+  --log-info: #7aa2d4;
+  --log-warn: #e0b35c;
+  --log-error: #e06c75;
+  --log-line: rgba(255, 255, 255, 0.04);
 
   --shadow-soft: none;
   --shadow-panel: 0 24px 60px rgba(0, 0, 0, 0.45);

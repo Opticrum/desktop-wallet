@@ -123,6 +123,7 @@ export type Messages = {
   mgCreatedAt: string
   mgOrderTx: string
   mgChannelTx: string
+  mgMatchTx: string
   mgLinkedOrder: string
   mgLinkedMatch: string
   mgNoOrders: string
@@ -149,8 +150,15 @@ export type Messages = {
   lmDemand: string
   lmInboundDemand: string
   lmShareOfTotal: string
+  lmRentFlow: string
+  lmCkbPerBlock: string
+  lmRent: string
+  lmRevokeOrder: string
+  lmDaysUnit: string
+  lmBack: string
   lmDwell: string
   lmRemaining: string
+  lmRemainingRent: string
   lmRentalDaysShort: string
   lmSpent: string
   lmPoolLegendOrder: string
@@ -226,6 +234,7 @@ export type Messages = {
   nodeLogsSection: string
   nodeChannelCount: string
   viewAllLogs: string
+  logConsoleTitle: string
 
   // Node page — create + delete actions
   nodeNewChannel: string

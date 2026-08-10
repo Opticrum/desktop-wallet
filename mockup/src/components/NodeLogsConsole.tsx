@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useLocale } from '../i18n/LocaleContext'
 import { logs } from '../mock/node'
+import { LogViewer } from './LogViewer'
 
 function ConsoleIcon() {
   return (
@@ -71,7 +72,7 @@ function ExpandIcon() {
  * log viewer. Expanded: the latest 5 entries as a terminal console.
  */
 export function NodeLogsConsole() {
-  const { t, locale } = useLocale()
+  const { t } = useLocale()
   const [expanded, setExpanded] = useState(false)
 
   const stats = { INFO: 0, WARN: 0, ERROR: 0 }
@@ -107,24 +108,8 @@ export function NodeLogsConsole() {
       </div>
 
       {expanded && (
-        <div className="log-viewer nlc-viewer">
-          {logs.slice(0, 5).map((line, idx) => (
-            <div key={idx} className="log-line">
-              <span className="log-time">
-                {new Date(line.ts).toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US', {
-                  month: 'short',
-                  day: '2-digit',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  second: '2-digit',
-                })}
-              </span>
-              <span className={`log-level-${line.level.toLowerCase()}`}>
-                [{line.level}]
-              </span>{' '}
-              {line.msg}
-            </div>
-          ))}
+        <div className="nlc-viewer">
+          <LogViewer lines={logs.slice(0, 5)} scrollable />
         </div>
       )}
     </section>
