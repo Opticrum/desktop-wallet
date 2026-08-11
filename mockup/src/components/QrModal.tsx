@@ -130,6 +130,31 @@ export function QrPlaceholder({ value }: { value: string }) {
   )
 }
 
+/**
+ * Generic QR-code glyph (finder rings + a small data cluster) — the wallet
+ * module's compact receive/zoom icon. The dense QrPlaceholder is reserved for
+ * the enlarged dialog, where a scannable-looking code belongs.
+ */
+export function QrIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path
+        fillRule="evenodd"
+        d="M3 3h8v8H3V3zM5 5v4h4V5z
+           M13 3h8v8h-8V3zM15 5v4h4V5z
+           M3 13h8v8H3v-8zM5 15v4h4V15z"
+      />
+      <rect x="6.5" y="6.5" width="2" height="2" rx="0.5" />
+      <rect x="16.5" y="6.5" width="2" height="2" rx="0.5" />
+      <rect x="6.5" y="16.5" width="2" height="2" rx="0.5" />
+      <rect x="13.5" y="13.5" width="2.5" height="2.5" rx="0.5" />
+      <rect x="17" y="13.5" width="2.5" height="2.5" rx="0.5" />
+      <rect x="13.5" y="17" width="2.5" height="2.5" rx="0.5" />
+      <rect x="17" y="17" width="2.5" height="2.5" rx="0.5" />
+    </svg>
+  )
+}
+
 export function QrZoomIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden>

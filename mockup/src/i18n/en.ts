@@ -192,6 +192,8 @@ export const en: Messages = {
   txSend: 'Sent',
   txChannelOpen: 'Channel opened',
   txChannelClose: 'Channel closed',
+  txFilterLabel: 'Transaction type filter',
+  txFilterEmpty: 'No matching transactions',
 
   capacity: 'Capacity',
   local: 'Local',
@@ -228,6 +230,8 @@ export const en: Messages = {
   nodeChannelCount: 'channels',
   viewAllLogs: 'View full logs',
   logConsoleTitle: 'opticrum-node · tail -f',
+  logFilterLabel: 'Log level filter',
+  logFilterEmpty: 'No matching logs',
 
   nodeNewChannel: 'New channel',
   nodeNewConnection: 'New connection',

@@ -1,8 +1,12 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useLocale } from '../i18n/LocaleContext'
 import { logs } from '../mock/node'
+import { BottomDrawer } from './BottomDrawer'
 import { LogViewer } from './LogViewer'
+
+type LogLevel = (typeof logs)[number]['level']
+
+const LOG_LEVELS: LogLevel[] = ['INFO', 'WARN', 'ERROR']
 
 function ConsoleIcon() {
   return (
@@ -68,15 +72,27 @@ function ExpandIcon() {
 
 /**
  * Collapsible node running-log console, shown below the node control panel.
- * Collapsed: an overview bar with per-level counts and a link to the full
- * log viewer. Expanded: the latest 5 entries as a terminal console.
+ * Collapsed: an overview bar with per-level counts and a button that opens
+ * the full log viewer in a bottom-up drawer. Expanded: the latest 5 entries
+ * as a terminal console.
  */
 export function NodeLogsConsole() {
   const { t } = useLocale()
   const [expanded, setExpanded] = useState(false)
+  const [logsOpen, setLogsOpen] = useState(false)
+  const [activeLevels, setActiveLevels] = useState<Record<LogLevel, boolean>>({
+    INFO: true,
+    WARN: true,
+    ERROR: true,
+  })
 
   const stats = { INFO: 0, WARN: 0, ERROR: 0 }
   for (const line of logs) stats[line.level] += 1
+
+  const visibleLogs = logs.filter((line) => activeLevels[line.level])
+
+  const toggleLevel = (level: LogLevel) =>
+    setActiveLevels((prev) => ({ ...prev, [level]: !prev[level] }))
 
   return (
     <section className="panel node-logs-console">
@@ -97,14 +113,15 @@ export function NodeLogsConsole() {
           <ChevronIcon />
         </button>
 
-        <Link
-          to="/node/logs"
+        <button
+          type="button"
           className="nlc-full-btn"
           aria-label={t.viewAllLogs}
           title={t.viewAllLogs}
+          onClick={() => setLogsOpen(true)}
         >
           <ExpandIcon />
-        </Link>
+        </button>
       </div>
 
       {expanded && (
@@ -112,6 +129,36 @@ export function NodeLogsConsole() {
           <LogViewer lines={logs.slice(0, 5)} scrollable />
         </div>
       )}
+
+      <BottomDrawer
+        open={logsOpen}
+        onClose={() => setLogsOpen(false)}
+        ariaLabel={t.recentLogs}
+      >
+        <div className="drawer-filter" role="group" aria-label={t.logFilterLabel}>
+          {LOG_LEVELS.map((level) => {
+            const active = activeLevels[level]
+            return (
+              <button
+                key={level}
+                type="button"
+                className={`filter-chip${active ? ` active-${level.toLowerCase()}` : ''}`}
+                aria-pressed={active}
+                disabled={stats[level] === 0}
+                onClick={() => toggleLevel(level)}
+              >
+                {level}
+                <span className="filter-chip-count">{stats[level]}</span>
+              </button>
+            )
+          })}
+        </div>
+        {visibleLogs.length > 0 ? (
+          <LogViewer lines={visibleLogs} />
+        ) : (
+          <div className="filter-empty">{t.logFilterEmpty}</div>
+        )}
+      </BottomDrawer>
     </section>
   )
 }

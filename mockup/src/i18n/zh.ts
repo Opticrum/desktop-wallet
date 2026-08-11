@@ -192,6 +192,8 @@ export const zh: Messages = {
   txSend: '付款',
   txChannelOpen: '开通通道',
   txChannelClose: '关闭通道',
+  txFilterLabel: '交易类型筛选',
+  txFilterEmpty: '无匹配交易',
 
   capacity: '容量',
   local: '本地',
@@ -228,6 +230,8 @@ export const zh: Messages = {
   nodeChannelCount: '条通道',
   viewAllLogs: '查看完整日志',
   logConsoleTitle: 'opticrum-node · tail -f',
+  logFilterLabel: '日志级别筛选',
+  logFilterEmpty: '无匹配日志',
 
   nodeNewChannel: '新建通道',
   nodeNewConnection: '新建连接',

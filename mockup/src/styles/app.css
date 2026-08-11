@@ -3068,6 +3068,157 @@
   transform: translateY(-1px);
 }
 
+/* ── Bottom drawer ("big picture" sheet) ─────────────────────────────── */
+
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: var(--modal-backdrop);
+  backdrop-filter: blur(2px);
+  animation: backdrop-in 160ms ease-out;
+}
+
+.bottom-drawer {
+  display: flex;
+  flex-direction: column;
+  width: min(720px, calc(100vw - 48px));
+  max-height: min(80vh, 720px);
+  background: var(--surface);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
+  animation: drawer-in 0.34s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes drawer-in {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+/* Grab-handle affordance pinned above the scrollable body */
+.drawer-handle {
+  flex-shrink: 0;
+  width: 44px;
+  height: 5px;
+  margin: 12px auto 6px;
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+}
+
+.drawer-inner {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 28px 36px;
+}
+
+.drawer-content {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Filter chips above drawer content — log levels & tx types.
+   Sticky so the controls stay reachable while a long list scrolls. */
+.drawer-filter {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 2px 0 16px;
+  background: var(--surface);
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--ink-4);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.filter-chip:hover:not(:disabled) {
+  color: var(--ink-2);
+  border-color: var(--line-strong);
+}
+
+.filter-chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.filter-chip-count {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Active (selected) — tinted with the entry's color */
+.filter-chip.active-info {
+  color: var(--log-info);
+  border-color: color-mix(in srgb, var(--log-info) 35%, transparent);
+  background: color-mix(in srgb, var(--log-info) 12%, transparent);
+}
+
+.filter-chip.active-warn {
+  color: var(--log-warn);
+  border-color: color-mix(in srgb, var(--log-warn) 35%, transparent);
+  background: color-mix(in srgb, var(--log-warn) 12%, transparent);
+}
+
+.filter-chip.active-error {
+  color: var(--log-error);
+  border-color: color-mix(in srgb, var(--log-error) 35%, transparent);
+  background: color-mix(in srgb, var(--log-error) 12%, transparent);
+}
+
+/* Tx-type active states — match the activity-dot palette */
+.filter-chip.active-receive {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 35%, transparent);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+}
+
+.filter-chip.active-send {
+  color: var(--orange);
+  border-color: color-mix(in srgb, var(--orange) 35%, transparent);
+  background: color-mix(in srgb, var(--orange) 12%, transparent);
+}
+
+.filter-chip.active-channel-open {
+  color: var(--violet);
+  border-color: color-mix(in srgb, var(--violet) 35%, transparent);
+  background: color-mix(in srgb, var(--violet) 12%, transparent);
+}
+
+.filter-chip.active-channel-close {
+  color: var(--cyan);
+  border-color: color-mix(in srgb, var(--cyan) 35%, transparent);
+  background: color-mix(in srgb, var(--cyan) 12%, transparent);
+}
+
+.filter-empty {
+  padding: 28px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-4);
+}
+
 /* ── Toast (mock success) ─────────────────────────────────────────────── */
 
 .toast {
@@ -4124,7 +4275,8 @@
   gap: 12px;
 }
 
-/* Balance is the send trigger — hover reveals the hint, click opens send */
+/* Balance is the send trigger — hover reveals the hint, click opens send.
+   Default state carries a faint accent wash (same hue as hover, much weaker). */
 .wallet-module .wallet-figure-btn {
   display: flex;
   flex-direction: column;
@@ -4134,7 +4286,7 @@
   padding: 8px 10px;
   border: none;
   border-radius: var(--radius);
-  background: transparent;
+  background: color-mix(in srgb, var(--accent-muted) 40%, transparent);
   cursor: pointer;
   font-family: inherit;
   text-align: left;
@@ -4193,19 +4345,20 @@
   stroke-linejoin: round;
 }
 
-/* QR thumbnail — pinned to the module's top-right corner; click to enlarge.
-   Absolutely positioned so it doesn't push the transaction list down. */
+/* QR icon thumbnail — pinned to the module's top-right corner; click to
+   enlarge. Compact generic-icon tile; absolutely positioned so it doesn't
+   push the transaction list down. */
 .wallet-qr-thumb {
   position: absolute;
   top: 14px;
   right: 14px;
-  width: 44px;
-  height: 44px;
-  padding: 6px;
-  border-radius: 10px;
+  width: 32px;
+  height: 32px;
+  padding: 5px;
+  border-radius: 8px;
   background: var(--surface-2);
   border: 1px solid var(--line);
-  color: var(--ink);
+  color: var(--ink-2);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4227,9 +4380,10 @@
 .wallet-more-txs {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
+  width: fit-content;
   margin-top: 10px;
+  margin-left: auto;
   padding: 9px 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -4383,6 +4537,9 @@
   align-items: center;
   justify-content: center;
   width: 40px;
+  border: none;
+  background: none;
+  padding: 0;
   border-radius: var(--radius-sm);
   color: var(--ink-3);
   text-decoration: none;

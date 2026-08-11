@@ -8,8 +8,6 @@ import { AppDetail } from './pages/AppDetail'
 import { NewsPage } from './pages/NewsPage'
 import { ChangelogPage } from './pages/ChangelogPage'
 import { NodeDetail } from './pages/NodeDetail'
-import { NodeLogsPage } from './pages/NodeLogsPage'
-import { ActivityDetail } from './pages/ActivityDetail'
 import { LiquidityMarket } from './pages/LiquidityMarket'
 
 export default function App() {
@@ -26,8 +24,6 @@ export default function App() {
                 <Route path="changelog" element={<ChangelogPage />} />
 
                 <Route path="node" element={<NodeDetail />} />
-                <Route path="node/logs" element={<NodeLogsPage />} />
-                <Route path="node/wallet/activity" element={<ActivityDetail />} />
 
                 <Route path="liquidity" element={<LiquidityMarket />} />
 

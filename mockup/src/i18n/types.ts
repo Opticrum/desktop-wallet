@@ -196,6 +196,8 @@ export type Messages = {
   txSend: string
   txChannelOpen: string
   txChannelClose: string
+  txFilterLabel: string
+  txFilterEmpty: string
 
   // Peer / channel table headers
   capacity: string
@@ -235,6 +237,8 @@ export type Messages = {
   nodeChannelCount: string
   viewAllLogs: string
   logConsoleTitle: string
+  logFilterLabel: string
+  logFilterEmpty: string
 
   // Node page — create + delete actions
   nodeNewChannel: string

@@ -1,10 +1,14 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useLocale } from '../i18n/LocaleContext'
-import { wallet } from '../mock/wallet'
-import { QrModal, QrPlaceholder } from './QrModal'
+import { wallet, type Tx } from '../mock/wallet'
+import { BottomDrawer } from './BottomDrawer'
+import { QrIcon, QrModal } from './QrModal'
 import { SendDetail } from '../pages/SendDetail'
-import { TransactionTable } from './TransactionTable'
+import { TransactionTable, txLabel } from './TransactionTable'
+
+type TxType = Tx['type']
+
+const TX_TYPES: TxType[] = ['receive', 'send', 'channel_open', 'channel_close']
 
 function IconArrowUpRight() {
   return (
@@ -24,9 +28,26 @@ export function WalletModule() {
   const { t } = useLocale()
   const [sendOpen, setSendOpen] = useState(false)
   const [qrOpen, setQrOpen] = useState(false)
+  const [activityOpen, setActivityOpen] = useState(false)
+
+  const [activeTypes, setActiveTypes] = useState<Record<TxType, boolean>>({
+    receive: true,
+    send: true,
+    channel_open: true,
+    channel_close: true,
+  })
 
   const [whole, frac] = wallet.availableCkb.toFixed(2).split('.')
   const fiatUsd = (wallet.availableCkb / wallet.totalCkb) * wallet.fiatUsd
+
+  const typeCounts = wallet.txs.reduce<Record<TxType, number>>(
+    (acc, tx) => ({ ...acc, [tx.type]: acc[tx.type] + 1 }),
+    { receive: 0, send: 0, channel_open: 0, channel_close: 0 },
+  )
+  const visibleTxs = wallet.txs.filter((tx) => activeTypes[tx.type])
+
+  const toggleType = (type: TxType) =>
+    setActiveTypes((prev) => ({ ...prev, [type]: !prev[type] }))
 
   return (
     <section className="panel wallet-module">
@@ -39,7 +60,7 @@ export function WalletModule() {
           aria-label={t.zoomQr}
           title={t.zoomQr}
         >
-          <QrPlaceholder value={wallet.address} />
+          <QrIcon />
         </button>
       </div>
 
@@ -69,14 +90,48 @@ export function WalletModule() {
       <div className="wallet-recent">
         <TransactionTable transactions={wallet.txs.slice(0, 4)} compact />
         {wallet.txs.length > 4 && (
-          <Link to="/node/wallet/activity" className="wallet-more-txs">
+          <button
+            type="button"
+            className="wallet-more-txs"
+            onClick={() => setActivityOpen(true)}
+          >
             <span className="wallet-more-txs-remaining">
               {t.txMoreRemaining.replace('{n}', String(wallet.txs.length - 4))}
             </span>
             <span className="wallet-more-txs-action">{t.viewAll} →</span>
-          </Link>
+          </button>
         )}
       </div>
+
+      <BottomDrawer
+        open={activityOpen}
+        onClose={() => setActivityOpen(false)}
+        ariaLabel={t.txHistory}
+      >
+        <div className="drawer-filter" role="group" aria-label={t.txFilterLabel}>
+          {TX_TYPES.map((type) => {
+            const active = activeTypes[type]
+            return (
+              <button
+                key={type}
+                type="button"
+                className={`filter-chip${active ? ` active-${type.replace('_', '-')}` : ''}`}
+                aria-pressed={active}
+                disabled={typeCounts[type] === 0}
+                onClick={() => toggleType(type)}
+              >
+                {txLabel(type, t)}
+                <span className="filter-chip-count">{typeCounts[type]}</span>
+              </button>
+            )
+          })}
+        </div>
+        {visibleTxs.length > 0 ? (
+          <TransactionTable transactions={visibleTxs} fullHash />
+        ) : (
+          <div className="filter-empty">{t.txFilterEmpty}</div>
+        )}
+      </BottomDrawer>
 
       <SendDetail open={sendOpen} onClose={() => setSendOpen(false)} />
       <QrModal open={qrOpen} onClose={() => setQrOpen(false)} address={wallet.address} />

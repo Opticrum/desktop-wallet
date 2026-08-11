@@ -15,7 +15,7 @@ function truncatedHash(hash: string) {
   return `${hash.slice(0, 12)}…${hash.slice(-12)}`
 }
 
-function txLabel(type: Tx['type'], t: ReturnType<typeof useLocale>['t']) {
+export function txLabel(type: Tx['type'], t: ReturnType<typeof useLocale>['t']) {
   switch (type) {
     case 'receive':
       return t.txReceive
