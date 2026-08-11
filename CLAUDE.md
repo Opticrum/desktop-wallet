@@ -4,39 +4,60 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Overview
 
-**Opticrum Desktop** — a **static UI mockup** of the Fiber desktop wallet + app marketplace. Sits alongside the three Rust siblings (`opticrum/`, `opticrum-sdk/`, `rust-server/`) in the parent Fiber monorepo but is **fully independent**: no Rust toolchain, no chain/signing/backend, just a Vite + React + TypeScript SPA driven by predefined fake data.
+**Opticrum Desktop** — the Fiber desktop wallet + app marketplace, now a **Tauri 2 desktop application**. It sits alongside the three Rust siblings (`opticrum/`, `opticrum-sdk/`, `rust-server/`) in the parent Fiber monorepo.
+
+The app is **local-first**: the Tauri shell (`src-tauri/`) hosts the frontend in the OS WebView, and Rust IPC commands are the bridge to wallet/chain logic. **No backend server is planned for wallet/channels/node/liquidity** — Rust is embedded in the host process as a library. The **app marketplace is the only networked part** (plain `fetch` to a remote catalog).
 
 ```
 opticrum-wallet/
-├── mockup/                       # Vite + React + TS SPA (the only runnable code)
-├── DESIGN.md                     # High-fidelity visual spec — required for all UI work
-├── docs/superpowers/specs/       # Design spec (approved)
-├── docs/superpowers/plans/       # Implementation plans
-├── AGENTS.md                     # Learned user preferences + workspace facts
-└── .cursor/hooks/state/          # Cursor continual-learning state
+├── mockup/          # FROZEN visual reference — independent, never modified
+├── app/             # Live desktop frontend (ported from mockup; Vite + React + TS)
+├── src-tauri/       # Tauri 2 Rust shell (thin IPC commands; will embed core crate)
+├── DESIGN.md        # High-fidelity visual spec — required for all UI work
+├── docs/superpowers/ (specs/ + plans/)
+├── AGENTS.md        # Learned user preferences + workspace facts
+└── CLAUDE.md
 ```
 
-The parent monorepo's Rust projects are *not* built or referenced from here — this mockup exists to nail the visual layout and copy before a real Electron/Tauri shell wraps the Rust backend.
+### The three parts
+
+- **`mockup/`** — the original static SPA that nails the visual layout and copy. It is a **frozen reference**: do not modify it. Run it standalone in a browser to compare against the desktop app. All design/spec docs refer to this project's structure.
+- **`app/`** — the desktop app's frontend (byte-for-byte port of `mockup/`: same components, styles, i18n). This is the **live** frontend: all future UI work happens here. It consumes data through the `app/src/api/` IPC layer (`client.ts` → `transport.ts` → Rust or the browser fallback); pure formulas live in `app/src/lib/`.
+- **`src-tauri/`** — the Tauri 2.x Rust host. **Thin commands only** — validate args, call the core, serialize. Business logic belongs in a testable crate (a `opticrum-wallet-core` crate that embeds `opticrum-sdk` and reuses `rust-server`'s wallet code is planned), not in command bodies.
 
 ## Build & Run
 
-All commands run from `mockup/`:
+Root `package.json` holds the Tauri CLI + orchestration scripts:
 
 ```bash
-cd mockup
-npm install
-npm run dev        # http://127.0.0.1:5173 — use viewport ≥1100px (left/center/right layout)
-npm run build      # tsc -b && vite build  →  mockup/dist/
-npm run preview    # serve the built bundle
+npm install                        # root: installs @tauri-apps/cli
+
+# Desktop app — main dev loop (vite on :5174 + native window)
+npm run tauri:dev
+
+# Build the desktop bundle (builds app/ first, then bundles)
+npm run tauri:build
+
+# Live frontend in a plain browser (:5174) — for UI work without the shell
+cd app && npm install && npm run dev
+
+# Frozen reference mockup standalone (:5173) — visual comparison only
+npm run mockup:dev
+
+# Rust shell static check
+cd src-tauri && cargo check
 ```
 
-There are no Rust tools, no test suite, no linter configured. TypeScript's own `tsc -b` (run as part of `npm run build`) is the only static check.
+- `npm run tauri:dev` auto-starts `app/`'s vite dev server (`beforeDevCommand`) and opens the native window at `http://localhost:5174`.
+- `npm run tauri:build` runs `beforeBuildCommand` (build `app/`) then produces the OS bundle from `app/dist`.
+- **Ports: mockup = 5173, app = 5174 — keep them distinct.** The WebView in dev loads `:5174`; in production it loads `../app/dist` over the tauri custom protocol.
+- Window config lives in `src-tauri/tauri.conf.json` (identifier `com.opticrum.wallet`, min 1100×700, default 1440×900).
+- No test suite exists. `tsc -b` (part of `app/`'s `npm run build`) and `cargo check` are the only static checks.
 
 ## High-Level Architecture
 
-The mockup is intentionally **thin scaffolding + rich pages**. The architecture is a small, opinionated React tree — no router library beyond `react-router-dom`, no state manager, no UI kit.
+Thin scaffolding + rich pages. React tree, no router beyond `react-router-dom`, no state manager, no UI kit. `app/`'s provider stack (ported unchanged from mockup):
 
-**Provider stack** (`src/main.tsx` → `src/App.tsx`):
 ```
 StrictMode
 └── ThemeProvider                # data-theme="dark|light" on <html> + localStorage
@@ -50,40 +71,34 @@ StrictMode
 
 **Routes:** `/`, `/balance`, `/channels`, `/node`, `/apps/:id` (any unknown path → `/`).
 
-**Layout principle (from design spec):** no top bar. The center `<Outlet />` swaps detail content; `LeftSidebar` and `RightSidebar` stay mounted so wallet/node/network context is always visible. The `BackLink` component lives at the top of each center detail page.
+**Shell ↔ frontend boundary:**
+- Dev: OS WebView loads `http://localhost:5174` (vite). Production: WebView loads `../app/dist` over the tauri protocol.
+- Frontend talks to Rust only through `@tauri-apps/api` `invoke()` (IPC commands). The 30-command surface from `docs/ipc/ipc-api.md` is implemented in `src-tauri/src/commands.rs` (wire types in `wire.rs`, mock datasets in `mock_data.rs`, shared store in `state.rs`); the frontend transport lives in `app/src/api/` (`transport.ts` maps the docs' `<domain>.<verb>` names to Tauri's underscore fn names).
+- The app marketplace is the only part that should `fetch` a remote catalog; wallet/channels/node/liquidity stay local (invoke → Rust).
 
-**Styling:** plain CSS files in `src/styles/`:
-- `tokens.css` — CSS variables for both `[data-theme='light']` and `[data-theme='dark']` (slate gray + teal accent, default dark). All components consume these tokens; never hardcode colors.
-- `app.css` — single CSS file for the entire app (no CSS modules / no Tailwind).
+**Styling:** plain CSS in `app/src/styles/` — `tokens.css` (CSS variables for both `[data-theme='light']` and `[data-theme='dark']`, slate gray + teal accent, default dark) and `app.css` (single stylesheet). Never hardcode colors.
 
-**i18n:** homegrown dictionary swap, not `react-i18next`. `src/i18n/types.ts` defines the strict `Messages` shape; `zh.ts` and `en.ts` are parallel dictionaries; `LocaleContext.tsx` provides `t` (the current `Messages`) plus `toggleLocale`. Default locale is `zh`; falls back to `zh` when `localStorage` is empty.
+**i18n:** homegrown dictionary swap. `app/src/i18n/types.ts` = strict `Messages` shape; `zh.ts` + `en.ts` parallel; `LocaleContext.tsx` provides `t`. Default `zh`.
 
-**Theme:** `src/theme/ThemeContext.tsx` toggles `data-theme` on `document.documentElement` and persists to `localStorage['opticrum-theme']`. Default is `dark`.
-
-**Mock data:** `src/mock/` holds every realistic-looking fake dataset (wallet balances, channels, node runtime, network overview, news, changelogs, marketplace apps + banners). Pages and sidebars import directly from these modules — there is no fetch layer.
-
-**Marketplace components:**
-- `Banner` — auto-rotating carousel (4s interval, pauses on hover) over slides in `mock/apps.ts`.
-- `AppGrid` — search input + category chips (`payments` / `defi` / `tools` / `games`) filtering `apps`. Card click → `/apps/:id`.
+**Mock data:** wallet/channels/node/liquidity datasets live in `src-tauri/src/mock_data.rs` (served over IPC) with a DEV-ONLY wire-shaped mirror in `app/src/api/browserMock.ts` for the standalone browser workflow; marketplace content (apps/banners/news/changelogs) stays in `app/src/content/` (HTTP content domain). Pages consume everything through `app/src/api/client.ts`; pure formulas live in `app/src/lib/`.
 
 ## Conventions & Constraints
 
-These come from `DESIGN.md`, the approved design spec (`docs/superpowers/specs/2026-07-29-opticrum-desktop-mockup-design.md`), and the learned-preferences file (`AGENTS.md`):
-
-- **All UI changes must actively reference `DESIGN.md`.** Before modifying components, pages, or styles in `mockup/`, read the applicable sections of `DESIGN.md` (layout, tokens, spacing, typography, component specs). Treat it as the visual source of truth for implementation details; cite or cross-check it when proposing or applying UI diffs.
+- **All UI changes must actively reference `DESIGN.md`.** Read the applicable sections (layout, tokens, spacing, typography, component specs) before editing components, pages, or styles in `app/` (or reading `mockup/` as reference). Treat it as the visual source of truth.
 - **Pages and copy first, scaffolding last.** Do not introduce abstractions, component libraries, state managers, chart libs, CSS-in-JS, or i18n frameworks.
-- **Desktop-only.** Layout collapses below 1100px; mobile responsive is explicitly out of scope.
-- **Locale parity:** every new visible string must be added to **all three** of `i18n/types.ts`, `i18n/zh.ts`, `i18n/en.ts`. The `Messages` type is the contract.
-- **Theme parity:** light and dark themes must look finished. Add tokens to both blocks in `styles/tokens.css`; never inline a color that should be a token.
+- **Desktop-only.** Layout collapses below 1100px (window enforces `minWidth: 1100`); mobile is explicitly out of scope.
+- **Locale parity:** every new visible string must be added to **all three** of `app/src/i18n/types.ts`, `zh.ts`, `en.ts`. The `Messages` type is the contract.
+- **Theme parity:** light and dark themes must look finished. Add tokens to both blocks in `tokens.css`; never inline a color that should be a token.
 - **No top bar.** Logo, theme, and language toggles live where the design says — left sidebar brand + footer toggles.
-- **Visual language:** slate neutrals + teal accent. Avoid purple gradients, generic glassmorphism, Inter-as-only-font defaults. Use the system font stack already declared in `tokens.css`.
-- **Mock data realism:** fake but plausible — real-shaped txids, pubkey prefixes, CKB amounts, timestamps. New datasets go in `src/mock/`.
+- **Visual language:** slate neutrals + teal accent. Avoid purple gradients, generic glassmorphism, Inter-as-only-font defaults. System font stack already declared in `tokens.css`.
+- **Mock data realism:** fake but plausible — real-shaped txids, pubkey prefixes, CKB amounts, timestamps. New datasets go in `app/src/mock/`.
+- **Rust shell discipline:** keep `src-tauri/` commands thin; put logic in a testable crate following the sibling repos' patterns (generic over traits, in-memory fakes for tests).
 
 ## Reference Files
 
-When changing behavior, consult these in order:
-
-1. **`DESIGN.md`** — **required for all UI changes.** High-fidelity visual spec (layout, density, colors, typography, shadows, component anatomy). Read relevant sections before editing anything under `mockup/src/` or `mockup/src/styles/`.
-2. `docs/superpowers/specs/2026-07-29-opticrum-desktop-mockup-design.md` — scope, shell architecture, theming/locale rules, and what's in/out of scope.
-3. `AGENTS.md` — accumulated user preferences and workspace facts; updated by the user as decisions get made.
-4. `mockup/README.md` — quick-start commands for running the dev server.
+1. **`DESIGN.md`** — **required for all UI changes.** High-fidelity visual spec (layout, density, colors, typography, shadows, component anatomy).
+2. `docs/superpowers/specs/2026-07-29-opticrum-desktop-mockup-design.md` — scope, shell architecture, theming/locale rules, in/out of scope.
+3. `AGENTS.md` — accumulated user preferences and workspace facts; updated as decisions get made.
+4. `mockup/` — the frozen reference; diff `app/` work against it visually before shipping UI changes.
+5. `src-tauri/tauri.conf.json` — window + build configuration.
+6. `docs/ipc/` — IPC 契约文档：`ipc-api.md`（30 个命令的完整命令面 + wire type + 约定）、`sdk-coverage-gap.md`（以 wallet 渲染数据为基线的 SDK 覆盖缺口矩阵）。
