@@ -1,4 +1,6 @@
 .design-check
+.superpowers
 node_modules/
+target/
 src-tauri/target/
 src-tauri/gen/

@@ -1,5 +1,6 @@
 import { useEffect, useRef, type CSSProperties } from 'react'
 import { useLocale } from '../i18n/LocaleContext'
+import { CopyableText } from './CopyableText'
 import { MatchHealthBadge } from './MatchHealthBadge'
 import {
   daysLeft,
@@ -120,9 +121,12 @@ export function LiquiditySheet({
         <div className="lm-drawer-details">
           <div className="ms-detail">
             <span className="ms-detail-label">{t.mgOrderTx}</span>
-            <span className="ms-detail-value mono lm-drawer-tx" title={order.outpoint}>
-              {truncateOutpointNoIndex(order.outpoint)}
-            </span>
+            <CopyableText
+              value={order.outpoint}
+              display={truncateOutpointNoIndex(order.outpoint)}
+              className="ms-detail-value mono lm-drawer-tx"
+              iconPosition="leading"
+            />
           </div>
           <div className="ms-detail">
             <span className="ms-detail-label">{t.lmDwellSince}</span>
@@ -185,15 +189,21 @@ export function LiquiditySheet({
       <div className="lm-drawer-details">
         <div className="ms-detail">
           <span className="ms-detail-label">{t.mgChannelTx}</span>
-          <span className="ms-detail-value mono lm-drawer-tx" title={match.channelOutpoint}>
-            {truncateOutpointNoIndex(match.channelOutpoint)}
-          </span>
+          <CopyableText
+            value={match.channelOutpoint}
+            display={truncateOutpointNoIndex(match.channelOutpoint)}
+            className="ms-detail-value mono lm-drawer-tx"
+            iconPosition="leading"
+          />
         </div>
         <div className="ms-detail">
           <span className="ms-detail-label">{t.mgMatchTx}</span>
-          <span className="ms-detail-value mono lm-drawer-tx" title={match.outpoint}>
-            {truncateOutpointNoIndex(match.outpoint)}
-          </span>
+          <CopyableText
+            value={match.outpoint}
+            display={truncateOutpointNoIndex(match.outpoint)}
+            className="ms-detail-value mono lm-drawer-tx"
+            iconPosition="leading"
+          />
         </div>
         <div className="ms-detail">
           <span className="ms-detail-label">{t.matchRate}</span>

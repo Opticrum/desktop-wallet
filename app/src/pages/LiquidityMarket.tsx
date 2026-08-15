@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocale } from '../i18n/LocaleContext'
+import { useNode } from '../node/NodeContext'
 import { liquidity } from '../api/client'
+import { CkbTxModal, useCkbTx } from '../components/CkbTxModal'
 import {
   computeInboundSummary,
+  costAndDaysToRateShPerBlock,
   dwellHours,
   matchLife,
   shannonsPerBlockToApyBps,
@@ -35,6 +38,7 @@ type PublishValues = {
   capacityCkb: number
   shannonsPerBlock: number
   depositCkb: number
+  rentalDays: number
   fiberAddress: string
 }
 
@@ -44,28 +48,41 @@ type BuyOrderModalProps = {
   onPublish: (values: PublishValues) => void
 }
 
+/**
+ * Buy-order form — asks for what the user wants (liquidity, total cost,
+ * duration); the per-block rate and APY are derived from those and shown as
+ * hints, so the user never has to reason about `sh/block` directly.
+ */
 function BuyOrderModal({ open, onClose, onPublish }: BuyOrderModalProps) {
   const { t } = useLocale()
   const [capacity, setCapacity] = useState('25,000')
-  const [rate, setRate] = useState('60,000')
-  const [deposit, setDeposit] = useState('250')
+  const [cost, setCost] = useState('250')
+  const [days, setDays] = useState('30')
   const [fiberAddress, setFiberAddress] = useState('')
 
   if (!open) return null
 
   const capacityNum = Number(capacity.replace(/,/g, '')) || 0
-  const rateNum = Number(rate.replace(/,/g, '')) || 0
-  const depositNum = Number(deposit.replace(/,/g, '')) || 0
-  const valid = capacityNum > 0 && rateNum > 0 && depositNum > 0
-  const apyBps = shannonsPerBlockToApyBps(rateNum, capacityNum)
+  const costNum = Number(cost.replace(/,/g, '')) || 0
+  const daysNum = Math.round(Number(days.replace(/,/g, '')) || 0)
+  const valid = capacityNum > 0 && costNum > 0 && daysNum > 0
+  // Total cost spread evenly across the requested duration.
+  const shannonsPerBlock = costAndDaysToRateShPerBlock(costNum, daysNum)
+  const apyBps = shannonsPerBlockToApyBps(shannonsPerBlock, capacityNum)
 
   const handlePublish = () => {
     if (!valid) return
-    onPublish({ capacityCkb: capacityNum, shannonsPerBlock: rateNum, depositCkb: depositNum, fiberAddress })
+    onPublish({
+      capacityCkb: capacityNum,
+      shannonsPerBlock,
+      depositCkb: costNum,
+      rentalDays: daysNum,
+      fiberAddress,
+    })
     // Reset so the next "New buy order" opens with the defaults.
     setCapacity('25,000')
-    setRate('60,000')
-    setDeposit('250')
+    setCost('250')
+    setDays('30')
     setFiberAddress('')
   }
 
@@ -75,21 +92,30 @@ function BuyOrderModal({ open, onClose, onPublish }: BuyOrderModalProps) {
         <div className="modal-title">{t.lmNewOrder}</div>
         <div className="modal-body">
           <div className="lm-form-field">
-            <label>{t.lmChannelCapacity}</label>
+            <label>{t.lmLiquidity}</label>
             <input className="search-input" type="text" inputMode="decimal" value={capacity} onChange={(e) => setCapacity(e.target.value)} spellCheck={false} />
           </div>
           <div className="lm-form-field">
-            <label>{t.lmRateShPerBlock}</label>
-            <input className="search-input" type="text" inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} spellCheck={false} />
-            <div className="lm-form-hint">
-              {t.lmEstimatedApy}{' '}
-              <strong>{formatBpsValue(apyBps)}</strong>
-            </div>
+            <label>{t.lmCost}</label>
+            <input className="search-input" type="text" inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} spellCheck={false} />
           </div>
           <div className="lm-form-field">
-            <label>{t.lmDeposit}</label>
-            <input className="search-input" type="text" inputMode="decimal" value={deposit} onChange={(e) => setDeposit(e.target.value)} spellCheck={false} />
+            <label>{t.lmDays}</label>
+            <input className="search-input" type="text" inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value)} spellCheck={false} />
           </div>
+
+          {valid && (
+            <div className="lm-derive">
+              <span className="lm-derive-item">
+                {t.lmRateShPerBlock} ≈ <strong>{shannonsPerBlock.toLocaleString()}</strong>
+              </span>
+              <span className="lm-derive-sep" aria-hidden="true" />
+              <span className="lm-derive-item">
+                {t.lmEstimatedApy} ≈ <strong>{formatBpsValue(apyBps)}</strong>
+              </span>
+            </div>
+          )}
+
           <div className="lm-form-field">
             <label>{t.lmFiberAddressOptional}</label>
             <input className="search-input mono" type="text" value={fiberAddress} onChange={(e) => setFiberAddress(e.target.value)} placeholder="/ip4/…/tcp/8228" spellCheck={false} />
@@ -162,6 +188,7 @@ function AdjustDepositModal({ open, mode, match, onClose, onConfirm }: AdjustDep
 
 export function LiquidityMarket() {
   const { t } = useLocale()
+  const { chain } = useNode()
 
   const [orders, setOrders] = useState<LiquidityOrder[]>([])
   const [matches, setMatches] = useState<LiquidityMatch[]>([])
@@ -227,58 +254,68 @@ export function LiquidityMarket() {
   const splitPct =
     orderDemandTotal + matchCapTotal > 0 ? orderDemandTotal / (orderDemandTotal + matchCapTotal) : 0.5
 
+  // Every CKB tx write resolves only once confirmed on-chain; the modal walks
+  // the user through the wait, prints the tx hash, and reloads when it lands.
+  const { ckbTxState, runCkbTx, closeCkbTx } = useCkbTx(reload)
+
   const handlePublish = async (v: PublishValues) => {
     setBuyOpen(false)
-    try {
-      await liquidity.publishOrder({
+    await runCkbTx(t.lmPublishOrder, async () => {
+      const res = await liquidity.publishOrder({
         capacityShannons: Math.round(v.capacityCkb * 1e8),
         shannonsPerBlock: v.shannonsPerBlock,
         rentCapacityShannons: Math.round(v.depositCkb * 1e8),
-        rentalDays: 30,
+        rentalDays: v.rentalDays,
         fiberAddress: v.fiberAddress || undefined,
       })
-      await reload()
-    } catch {
-      /* mock — best-effort */
-    }
-    setToast(t.lmOrderPublished)
+      setToast(t.lmOrderPublished)
+      return res
+    })
   }
 
   const handleAdjust = async (match: LiquidityMatch, mode: AdjustMode, amount: number) => {
     setAdjust(null)
     const shannons = Math.round(amount * 1e8)
-    try {
-      if (mode === 'inject') await liquidity.injectDeposit(match.outpoint, shannons)
-      else await liquidity.withdrawDeposit(match.outpoint, shannons)
-    } catch {
-      /* mock — best-effort */
-    }
-    setMatches((prev) =>
-      prev.map((m) => {
-        if (m.outpoint !== match.outpoint) return m
-        const delta = mode === 'inject' ? amount : -amount
-        return {
-          ...m,
-          depositCkb: Math.max(0, m.depositCkb + delta),
-          withdrawableCkb: Math.max(0, m.withdrawableCkb + delta),
-        }
-      }),
-    )
-    setToast(t.lmDepositAdjusted)
+    await runCkbTx(t.lmAdjustTitle, async () => {
+      const res =
+        mode === 'inject'
+          ? await liquidity.injectDeposit(match.outpoint, shannons)
+          : await liquidity.withdrawDeposit(match.outpoint, shannons)
+      // Optimistically apply the delta after confirmation.
+      setMatches((prev) =>
+        prev.map((m) => {
+          if (m.outpoint !== match.outpoint) return m
+          const delta = mode === 'inject' ? amount : -amount
+          return {
+            ...m,
+            depositCkb: Math.max(0, m.depositCkb + delta),
+            withdrawableCkb: Math.max(0, m.withdrawableCkb + delta),
+          }
+        }),
+      )
+      setToast(t.lmDepositAdjusted)
+      return res
+    })
   }
 
   const handleCancelOrder = async () => {
     if (!cancelTarget) return
+    const outpoint = cancelTarget.outpoint
     try {
-      await liquidity.cancelOrder(cancelTarget.outpoint)
-    } catch {
-      /* mock — best-effort */
+      await runCkbTx(t.lmCancelOrderTitle, async () => {
+        const res = await liquidity.cancelOrder(outpoint)
+        setOrders((prev) =>
+          prev.map((o) => (o.outpoint === outpoint ? { ...o, status: 'cancelled' as const } : o)),
+        )
+        setToast(t.lmOrderCancelled)
+        return res
+      })
+    } finally {
+      // Release the selection so the cell is de-highlighted, its persistent
+      // tooltip closes, and every other cell becomes clickable again.
+      setCancelTarget(null)
+      setActive(null)
     }
-    setOrders((prev) =>
-      prev.map((o) => (o.outpoint === cancelTarget.outpoint ? { ...o, status: 'cancelled' as const } : o)),
-    )
-    setCancelTarget(null)
-    setToast(t.lmOrderCancelled)
   }
 
   const handleExtract = async () => {
@@ -286,15 +323,14 @@ export function LiquidityMarket() {
     const outpoint = extractTarget.outpoint
     let returned = extractTarget.depositCkb
     setExtractTarget(null)
-    try {
+    await runCkbTx(t.lmExtractDeleteTitle, async () => {
       const res = await liquidity.extractSpentMatch(outpoint)
       returned = res.returnedCkb
-    } catch {
-      /* mock — best-effort */
-    }
-    setMatches((prev) => prev.filter((m) => m.outpoint !== outpoint))
-    setActive((prev) => (prev?.kind === 'match' && prev.item.outpoint === outpoint ? null : prev))
-    setToast(t.lmExtractDeleted.replace('{amount}', formatCkb(returned)))
+      setMatches((prev) => prev.filter((m) => m.outpoint !== outpoint))
+      setActive((prev) => (prev?.kind === 'match' && prev.item.outpoint === outpoint ? null : prev))
+      setToast(t.lmExtractDeleted.replace('{amount}', formatCkb(returned)))
+      return res
+    })
   }
 
   return (
@@ -413,7 +449,9 @@ export function LiquidityMarket() {
           <section className="panel lm-dash">
             <div className="section-head">
               <h2 className="lm-title">{t.lmMarketOverview}</h2>
-              <span className="lm-net-badge net-mainnet">{t.networkMainnet}</span>
+              <span className={`lm-net-badge net-${chain}`}>
+                {chain === 'mainnet' ? t.networkMainnet : t.networkTestnet}
+              </span>
             </div>
             <div className="lm-dash-figure">
               <span className="stat-label">{t.lmInboundLiquidity}</span>
@@ -497,6 +535,7 @@ export function LiquidityMarket() {
         onConfirm={handleExtract}
       />
       <Toast message={toast} onDismiss={() => setToast(null)} />
+      <CkbTxModal state={ckbTxState} onClose={closeCkbTx} />
     </div>
   )
 }

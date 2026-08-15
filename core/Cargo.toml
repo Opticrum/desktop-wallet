@@ -1,0 +1,47 @@
+[package]
+name = "opticrum-wallet-core"
+version = "0.1.0"
+edition = "2021"
+description = "Opticrum Desktop — local-first wallet core library (keys, chain, liquidity)"
+license = "MIT"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+reqwest = { workspace = true }
+bip39 = { workspace = true }
+secp256k1 = { workspace = true }
+aes-gcm = { workspace = true }
+rand = { workspace = true }
+hex = { workspace = true }
+bech32 = { workspace = true }
+sha2 = { workspace = true }
+hmac = { workspace = true }
+blake2b_simd = { workspace = true }
+diesel = { workspace = true }
+diesel_migrations = { workspace = true }
+libsqlite3-sys = { workspace = true }
+ckb-cinnabar-calculator = { workspace = true }
+opticrum-calculator = { workspace = true }
+opticrum-protocol = { workspace = true }
+opticrum-sdk = { workspace = true }
+fiber-json-types = { workspace = true }
+molecule = { workspace = true }
+serde_yaml = { workspace = true }
+fnn = { workspace = true }
+ractor = { workspace = true }
+tokio-util = { workspace = true }
+clap-serde-derive = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+jsonrpsee = { workspace = true }
+ckb-chain-spec = { workspace = true }
+ckb-resource = { workspace = true }
+ckb-types = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

@@ -30,11 +30,24 @@ export type SheetTarget =
 /** ~12s block interval, 2,629,800 blocks per year (calculator config). */
 export const BLOCKS_PER_YEAR = 2_629_800
 
+/** CKB blocks per day (~12s interval, mirrors `BLOCKS_PER_YEAR`). */
+export const BLOCKS_PER_DAY = Math.round(BLOCKS_PER_YEAR / 365.25)
+
 /** Annual yield in basis points for a given per-block rent on a capacity. */
 export function shannonsPerBlockToApyBps(shannonsPerBlock: number, capacityCkb: number): number {
   if (!capacityCkb) return 0
   const annualYield = (shannonsPerBlock * BLOCKS_PER_YEAR) / (capacityCkb * 1e8)
   return Math.round(annualYield * 10_000)
+}
+
+/**
+ * Per-block rent (shannons) that spends `costCkb` evenly over `days` days:
+ * `rate × days × BLOCKS_PER_DAY = cost`. The buy-order form derives the rate
+ * from the user's desired liquidity, total cost and duration.
+ */
+export function costAndDaysToRateShPerBlock(costCkb: number, days: number): number {
+  if (!costCkb || !days) return 0
+  return Math.round((costCkb * 1e8) / (days * BLOCKS_PER_DAY))
 }
 
 // ── derived state: match life + rental/dwell ────────────────────────────────

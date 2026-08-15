@@ -1,29 +1,111 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocale } from '../i18n/LocaleContext'
-import { channels } from '../api/client'
+import { channels, node } from '../api/client'
 import type { ChannelList } from '../api/types'
+import { FiberSendModal } from './FiberSendModal'
+import { FiberInvoiceModal } from './FiberInvoiceModal'
+
+function IconArrowUpRight() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path d="M7 17 17 7" />
+      <path d="M8 7h9v9" />
+    </svg>
+  )
+}
+
+function IconReceive() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path d="M12 3v10" />
+      <path d="m7 9 5 5 5-5" />
+      <path d="M4 19h16" />
+    </svg>
+  )
+}
 
 /**
  * Node connection KPIs — a compact 2×2 grid shown above the wallet module
  * in the node sidebar (outbound/inbound balance + node/channel counts).
  * Data comes from `channels.list`; the sums are frontend formulas.
+ *
+ * 出金/入金 are action cards like the wallet balance: clicking opens a
+ * send-Fiber-transfer / generate-invoice dialog, each capped at its own
+ * capacity (outbound = local balances, inbound = remote balances).
  */
-export function NodeKpiGrid() {
+export function NodeKpiGrid({
+  refreshKey = 0,
+  onToast = () => {},
+}: {
+  refreshKey?: number
+  onToast?: (msg: string) => void
+}) {
   const { t } = useLocale()
   const [data, setData] = useState<ChannelList | null>(null)
+  const [sendOpen, setSendOpen] = useState(false)
+  const [invoiceOpen, setInvoiceOpen] = useState(false)
 
-  useEffect(() => {
-    let alive = true
-    channels
-      .list()
-      .then((c) => {
-        if (alive) setData(c)
-      })
-      .catch(() => {})
-    return () => {
-      alive = false
+  // Stable callbacks — the dialogs reset their state when `open` flips and
+  // key their reset effect on `onClose`; a fresh arrow on every parent render
+  // (e.g. after a toast) would wipe the generated invoice mid-flow.
+  const closeSend = useCallback(() => setSendOpen(false), [])
+  const closeInvoice = useCallback(() => setInvoiceOpen(false), [])
+
+  const load = useCallback(async () => {
+    try {
+      const c = await channels.list()
+      setData(c)
+    } catch {
+      /* mock — best-effort */
     }
   }, [])
+
+  // Initial + manual toolbar refresh.
+  useEffect(() => {
+    load()
+  }, [load, refreshKey])
+
+  // The Fiber node starts/restarts independently of this component — poll the
+  // runtime and re-fetch the overview on the stopped→running transition so the
+  // node/channel KPIs catch up to the reconnected peers (mirrors the peers list).
+  const [running, setRunning] = useState(true)
+  const wasRunning = useRef(running)
+  const runningRef = useRef(running)
+  const restartRetries = useRef<number[]>([])
+  useEffect(() => {
+    let alive = true
+    const poll = () =>
+      node
+        .getRuntime()
+        .then((r) => {
+          if (alive) setRunning(r.running)
+        })
+        .catch(() => {})
+    poll()
+    const id = window.setInterval(poll, 5000)
+    return () => {
+      alive = false
+      window.clearInterval(id)
+    }
+  }, [])
+  useEffect(() => {
+    const prev = wasRunning.current
+    wasRunning.current = running
+    runningRef.current = running
+    if (!running || prev) return
+    load()
+    restartRetries.current.forEach((id) => window.clearTimeout(id))
+    restartRetries.current = [2000, 5000, 10000].map((ms) =>
+      window.setTimeout(() => {
+        if (!runningRef.current) return // node stopped again — skip
+        load()
+      }, ms),
+    )
+  }, [running, load])
+  useEffect(
+    () => () => restartRetries.current.forEach((id) => window.clearTimeout(id)),
+    [],
+  )
 
   const nodes = data?.nodes ?? []
   const all = nodes.flatMap((n) => n.channels)
@@ -36,18 +118,36 @@ export function NodeKpiGrid() {
         <h2 className="node-section-title">{t.nodeOverview}</h2>
       </div>
       <div className="kpi-grid conn-kpis">
-        <div className="kpi">
+        <button
+          type="button"
+          className="kpi kpi-btn kpi-outbound"
+          onClick={() => setSendOpen(true)}
+          title={t.clickToSend}
+        >
           <div className="kpi-label">
             {t.nodeOutboundBalance} <span className="kpi-label-unit">CKB</span>
           </div>
           <div className="kpi-value">{outboundCkb.toLocaleString()}</div>
-        </div>
-        <div className="kpi">
+          <span className="kpi-hint">
+            <IconArrowUpRight />
+            {t.clickToSend}
+          </span>
+        </button>
+        <button
+          type="button"
+          className="kpi kpi-btn kpi-inbound"
+          onClick={() => setInvoiceOpen(true)}
+          title={t.fiberInvoiceHint}
+        >
           <div className="kpi-label">
             {t.nodeInboundBalance} <span className="kpi-label-unit">CKB</span>
           </div>
           <div className="kpi-value">{inboundCkb.toLocaleString()}</div>
-        </div>
+          <span className="kpi-hint">
+            <IconReceive />
+            {t.fiberInvoiceHint}
+          </span>
+        </button>
         <div className="kpi">
           <div className="kpi-label">{t.nodeKpiNodes}</div>
           <div className="kpi-value">{nodes.length}</div>
@@ -57,6 +157,19 @@ export function NodeKpiGrid() {
           <div className="kpi-value">{all.length}</div>
         </div>
       </div>
+
+      <FiberSendModal
+        open={sendOpen}
+        onClose={closeSend}
+        capCkb={outboundCkb}
+        onToast={onToast}
+      />
+      <FiberInvoiceModal
+        open={invoiceOpen}
+        onClose={closeInvoice}
+        capCkb={inboundCkb}
+        onToast={onToast}
+      />
     </section>
   )
 }

@@ -1,22 +1,62 @@
 mod commands;
-mod mock_data;
-mod state;
-mod wire;
 
-use state::AppState;
+use std::sync::Arc;
 
-/// Current wall-clock in ms — used to stamp locally-created sidecar entries.
-fn now_ms() -> u64 {
-  std::time::SystemTime::now()
-    .duration_since(std::time::UNIX_EPOCH)
-    .map(|d| d.as_millis() as u64)
-    .unwrap_or(0)
+use opticrum_wallet_core::backend::{BackendBundle, BackendConfig, BackendMode};
+use opticrum_wallet_core::wire::Chain;
+use tauri::Manager;
+
+/// Tauri-managed shared state — the backend bundle the commands dispatch to.
+pub struct AppState(pub Arc<BackendBundle>);
+
+impl AppState {
+  async fn new(cfg: BackendConfig) -> Self {
+    // Real backend by default — the app serves live on-chain/fiber data.
+    // Set `OPTICRUM_BACKEND=mock` to force the in-memory mock (dev/reference).
+    let mode = match std::env::var("OPTICRUM_BACKEND").as_deref() {
+      Ok("mock") => BackendMode::Mock,
+      _ => BackendMode::Real,
+    };
+    let bundle = BackendBundle::for_mode(mode, cfg)
+      .await
+      .unwrap_or_else(|e| panic!("backend init failed: {e}"));
+    AppState(Arc::new(bundle))
+  }
+}
+
+fn env_or(key: &str, default: &str) -> String {
+  std::env::var(key).unwrap_or_else(|_| default.to_string())
+}
+
+/// Resolve the backend config: data files live under the OS app-data dir,
+/// chain endpoints come from env vars (with testnet defaults).
+fn backend_config(app: &tauri::App) -> BackendConfig {
+  let data_dir = app
+    .path()
+    .app_data_dir()
+    .expect("app data dir must resolve");
+  std::fs::create_dir_all(&data_dir).ok();
+
+  let network = if env_or("OPTICRUM_NETWORK", "testnet") == "mainnet" {
+    Chain::Mainnet
+  } else {
+    Chain::Testnet
+  };
+
+  BackendConfig {
+    database_url: data_dir.join("opticrum.db").display().to_string(),
+    keystore_path: data_dir.join("keystore.json").display().to_string(),
+    node_config_path: data_dir.join("node-config.json").display().to_string(),
+    ckb_rpc_url: env_or("OPTICRUM_CKB_RPC", "https://testnet.ckbapp.dev"),
+    ckb_indexer_url: env_or("OPTICRUM_CKB_INDEXER", "https://testnet.ckb.dev/indexer"),
+    fee_rate: 1000,
+    network,
+  }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
-    .manage(AppState::new())
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -25,6 +65,9 @@ pub fn run() {
             .build(),
         )?;
       }
+      app.manage(tauri::async_runtime::block_on(AppState::new(
+        backend_config(app),
+      )));
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![

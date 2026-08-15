@@ -1,16 +1,11 @@
-import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useLocale } from '../i18n/LocaleContext'
 import { useTheme } from '../theme/ThemeContext'
-import { content } from '../api/content'
-import { channels, liquidity } from '../api/client'
-import { stateToBucket } from '../lib/node'
 
 type NavItem = {
   to: string
   glyph: string
   labelKey: 'marketplace' | 'nodeLabel' | 'liquidityMarket'
-  metric: string
   isActive: (pathname: string) => boolean
   disabled?: boolean
 }
@@ -20,35 +15,9 @@ export function TopBar() {
   const { theme, setTheme } = useTheme()
   const { pathname } = useLocation()
 
-  // Nav metrics come from three domains: content (apps count), channels
-  // (active channel count), liquidity dashboard (total matches).
-  const [appCount, setAppCount] = useState<string | null>(null)
-  const [activeCount, setActiveCount] = useState<number | null>(null)
-  const [totalMatches, setTotalMatches] = useState<number | null>(null)
-
-  useEffect(() => {
-    let alive = true
-    content
-      .getApps()
-      .then((a) => alive && setAppCount(String(a.length)))
-      .catch(() => {})
-    channels
-      .list()
-      .then((c) => {
-        const active = c.nodes
-          .flatMap((n) => n.channels)
-          .filter((ch) => stateToBucket(ch.state) === 'active').length
-        if (alive) setActiveCount(active)
-      })
-      .catch(() => {})
-    liquidity
-      .getDashboard()
-      .then((d) => alive && setTotalMatches(d.total_matches))
-      .catch(() => {})
-    return () => {
-      alive = false
-    }
-  }, [])
+  // Brand lockup suffix ("Desktop" from "Opticrum Desktop") — the wordmark's
+  // two-tone split (Optic|rum) is a visual-design constant, not content.
+  const brandSuffix = t.brand.split(' ').slice(1).join(' ')
 
   const navItems: NavItem[] = [
     {
@@ -56,7 +25,6 @@ export function TopBar() {
       glyph: 'M',
       labelKey: 'marketplace',
       disabled: true,
-      metric: appCount ?? '—',
       isActive: (p) =>
         p === '/' || p.startsWith('/apps/') || p === '/news' || p === '/changelog',
     },
@@ -64,14 +32,12 @@ export function TopBar() {
       to: '/node',
       glyph: 'N',
       labelKey: 'nodeLabel',
-      metric: activeCount != null ? `${activeCount}` : '—',
       isActive: (p) => p === '/node' || p.startsWith('/node/'),
     },
     {
       to: '/liquidity',
       glyph: 'L',
       labelKey: 'liquidityMarket',
-      metric: totalMatches != null ? `${totalMatches}` : '—',
       isActive: (p) => p === '/liquidity' || p.startsWith('/liquidity'),
     },
   ]
@@ -81,25 +47,52 @@ export function TopBar() {
       <header className="top-bar">
         <div className="top-bar-inner">
           <div className="top-bar-brand">
-            <div className="top-bar-brand-mark" />
-            <span className="top-bar-brand-text">{t.brand}</span>
+            {/* Optic-fiber ring mark — a light pulse riding a teal→cyan ring
+                around a core node (optics + fiber, the product's two roots). */}
+            <svg className="top-bar-brand-mark" viewBox="0 0 24 24" aria-hidden="true">
+              <defs>
+                <linearGradient id="opticrum-mark-grad" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stopColor="var(--me-accent)" />
+                  <stop offset="1" stopColor="var(--cyan)" />
+                </linearGradient>
+              </defs>
+              <circle
+                cx="12"
+                cy="12"
+                r="8"
+                fill="none"
+                stroke="url(#opticrum-mark-grad)"
+                strokeWidth="2"
+              />
+              <circle
+                cx="12"
+                cy="12"
+                r="8"
+                fill="none"
+                stroke="var(--brand-pulse)"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeDasharray="3.4 47"
+                transform="rotate(40 12 12)"
+              />
+              <circle cx="12" cy="12" r="2.3" fill="url(#opticrum-mark-grad)" />
+            </svg>
+            <span className="top-bar-brand-text">
+              <span className="brand-word">
+                Optic<span className="brand-accent">rum</span>
+              </span>
+              {brandSuffix && <span className="brand-suffix">{brandSuffix}</span>}
+            </span>
           </div>
 
           <nav className="top-bar-nav" aria-label="Main navigation">
             {navItems.map((item) => {
               const active = item.isActive(pathname)
-              const displayMetric =
-                item.labelKey === 'marketplace'
-                  ? `${item.metric} ${t.appCountSuffix}`
-                  : item.metric
               const className = `top-bar-nav-item${active ? ' active' : ''}${item.disabled ? ' disabled' : ''}`
               const content = (
                 <>
                   <span className="top-bar-nav-glyph">{item.glyph}</span>
                   <span className="top-bar-nav-label">{t[item.labelKey]}</span>
-                  {displayMetric ? (
-                    <span className="top-bar-nav-metric">{displayMetric}</span>
-                  ) : null}
                   {item.disabled ? <LockIcon /> : null}
                 </>
               )

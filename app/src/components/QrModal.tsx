@@ -1,6 +1,5 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocale } from '../i18n/LocaleContext'
-import { CopyableText } from './CopyableText'
 
 /**
  * Deterministic, dependency-free QR-style placeholder rendered from the
@@ -174,6 +173,50 @@ function IconClose() {
   )
 }
 
+/** Receive arrow — the "scan to receive" kicker glyph. */
+function IconReceive() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path d="M12 3v10" />
+      <path d="m7 9 5 5 5-5" />
+      <path d="M4 19h16" />
+    </svg>
+  )
+}
+
+function IconCopy() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+    </svg>
+  )
+}
+
+function IconCheck() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path d="M5 12.5 10 17 19 7" />
+    </svg>
+  )
+}
+
+/** Clipboard write with a legacy textarea fallback (insecure contexts). */
+async function copyText(value: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value)
+    return
+  }
+  const ta = document.createElement('textarea')
+  ta.value = value
+  ta.style.position = 'fixed'
+  ta.style.opacity = '0'
+  document.body.appendChild(ta)
+  ta.select()
+  document.execCommand('copy')
+  document.body.removeChild(ta)
+}
+
 /** Enlarged receive QR dialog — click the QR tile to open it. */
 export function QrModal({
   open,
@@ -185,9 +228,11 @@ export function QrModal({
   address: string
 }) {
   const { t } = useLocale()
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     if (!open) return
+    setCopied(false)
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
@@ -196,6 +241,19 @@ export function QrModal({
   }, [open, onClose])
 
   if (!open) return null
+
+  const handleCopy = async () => {
+    await copyText(address)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1400)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      handleCopy()
+    }
+  }
 
   return (
     <div className="modal-backdrop" onClick={onClose} role="presentation">
@@ -207,7 +265,12 @@ export function QrModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="qr-modal-head">
-          <div className="qr-modal-kicker">{t.scanToReceive}</div>
+          <div className="qr-modal-kicker">
+            <span className="qr-modal-kicker-icon" aria-hidden="true">
+              <IconReceive />
+            </span>
+            {t.scanToReceive}
+          </div>
           <button
             type="button"
             className="qr-modal-close"
@@ -217,12 +280,38 @@ export function QrModal({
             <IconClose />
           </button>
         </div>
+
         <div className="qr-modal-qr">
           <QrPlaceholder value={address} />
+          <span className="qr-frame" aria-hidden="true" />
         </div>
-        <div className="qr-modal-address">
-          <CopyableText value={address} />
+
+        <div
+          className={`qr-address${copied ? ' copied' : ''}`}
+          role="button"
+          tabIndex={0}
+          onClick={handleCopy}
+          onKeyDown={handleKeyDown}
+          aria-label={`${t.copy}: ${address}`}
+        >
+          <div className="qr-address-label">
+            <span className="qr-address-caption">{t.address}</span>
+            {copied ? <IconCheck /> : <IconCopy />}
+          </div>
+          <div className="qr-address-string">
+            <span className="qr-address-prefix">{address.slice(0, 4)}</span>
+            {address.slice(4)}
+          </div>
         </div>
+
+        <button
+          type="button"
+          className={`qr-copy-btn${copied ? ' copied' : ''}`}
+          onClick={handleCopy}
+        >
+          {copied ? <IconCheck /> : <IconCopy />}
+          {copied ? t.copied : t.copy}
+        </button>
       </div>
     </div>
   )

@@ -55,7 +55,7 @@ export function SendDetail({
       >
         <div className="send-modal-head">
           <div>
-            <div className="send-modal-kicker">{t.wallet}</div>
+            <div className="send-modal-kicker">{t.walletCkb}</div>
             <h2 className="send-modal-title">{t.send}</h2>
           </div>
           <button

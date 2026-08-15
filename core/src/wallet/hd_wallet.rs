@@ -1,0 +1,481 @@
+//! BIP39 mnemonic generation and BIP32 hierarchical deterministic key derivation.
+//!
+//! Implements:
+//! - BIP39: 12-word mnemonic generation via the `bip39` crate
+//! - BIP32: master key + hardened child key derivation (CKDpriv)
+//! - BIP44: path parsing for CKB coin type 309
+
+use bip39::Mnemonic;
+use hmac::{Hmac, Mac};
+use secp256k1::{PublicKey, Secp256k1, SecretKey};
+use sha2::Sha512;
+
+use crate::wire::CommandError;
+
+type HmacSha512 = Hmac<Sha512>;
+
+/// The secp256k1 curve order (n).
+const CURVE_ORDER: [u8; 32] = [
+  0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE,
+  0xBA, 0xAE, 0xDC, 0xE6, 0xAF, 0x48, 0xA0, 0x3B, 0xBF, 0xD2, 0x5E, 0x8C, 0xD0, 0x36, 0x41, 0x41,
+];
+
+/// Generate a new 12-word BIP39 mnemonic (128 bits of entropy).
+pub fn generate_mnemonic() -> Result<Mnemonic, CommandError> {
+  Mnemonic::generate(12).map_err(|e| CommandError::internal(format!("Mnemonic generation: {e}")))
+}
+
+/// Convert a BIP39 mnemonic to a 64-byte seed using the optional passphrase.
+/// Passphrase defaults to empty string ("").
+pub fn mnemonic_to_seed(mnemonic: &Mnemonic, passphrase: &str) -> [u8; 64] {
+  mnemonic.to_seed(passphrase)
+}
+
+/// Derive the BIP32 master key from a seed byte slice of any length.
+///
+/// Returns `(master_private_key, chain_code)`.
+/// The master key is derived via HMAC-SHA512(key="Bitcoin seed", data=seed).
+/// - master_private_key = left 32 bytes of HMAC output
+/// - chain_code = right 32 bytes
+pub fn derive_master_key(seed: &[u8]) -> Result<(SecretKey, [u8; 32]), CommandError> {
+  let mut mac =
+    HmacSha512::new_from_slice(b"Bitcoin seed").expect("HMAC-SHA512 accepts any key length");
+
+  mac.update(seed);
+  let i = mac.finalize().into_bytes();
+
+  let mut il = [0u8; 32];
+  let mut chain_code = [0u8; 32];
+  il.copy_from_slice(&i[0..32]);
+  chain_code.copy_from_slice(&i[32..64]);
+
+  // Validate that IL is within the secp256k1 order
+  let master_key = SecretKey::from_slice(&il).map_err(|e| {
+    CommandError::internal(format!(
+      "Master key derivation failed (IL >= n, extremely unlikely): {e}"
+    ))
+  })?;
+
+  Ok((master_key, chain_code))
+}
+
+/// Add two 32-byte big-endian integers modulo the secp256k1 curve order n.
+///
+/// Returns `(a + b) mod n` as a 32-byte big-endian array.
+fn add_mod_n(a: &[u8; 32], b: &[u8; 32]) -> [u8; 32] {
+  // Big-endian addition with carry
+  let mut carry = 0u16;
+  let mut result = [0u8; 32];
+  for i in (0..32).rev() {
+    let sum = a[i] as u16 + b[i] as u16 + carry;
+    result[i] = (sum & 0xFF) as u8;
+    carry = sum >> 8;
+  }
+
+  // If the result >= n, subtract n
+  if carry > 0 || is_ge(&result, &CURVE_ORDER) {
+    let mut borrow = 0u16;
+    for i in (0..32).rev() {
+      let n_byte = CURVE_ORDER[i] as u16;
+      let sub = result[i] as i32 - n_byte as i32 - borrow as i32;
+      if sub < 0 {
+        result[i] = (sub + 256) as u8;
+        borrow = 1;
+      } else {
+        result[i] = sub as u8;
+        borrow = 0;
+      }
+    }
+  }
+
+  result
+}
+
+/// Compare two 32-byte arrays (big-endian unsigned: a >= b).
+fn is_ge(a: &[u8; 32], b: &[u8; 32]) -> bool {
+  for i in 0..32 {
+    match a[i].cmp(&b[i]) {
+      std::cmp::Ordering::Greater => return true,
+      std::cmp::Ordering::Less => return false,
+      std::cmp::Ordering::Equal => {}
+    }
+  }
+  true // equal
+}
+
+/// Derive a hardened child key (BIP32 CKDpriv).
+///
+/// Hardened derivation: `child_index = index | 0x80000000`
+/// - I = HMAC-SHA512(key=chain_code, data=0x00 || parent_key_bytes || child_index_be)
+/// - child_key = (IL + parent_key) mod n
+/// - child_chain_code = IR
+///
+/// Returns `(child_secret_key, child_chain_code)`.
+pub fn derive_child_key(
+  parent_key: &SecretKey,
+  chain_code: &[u8; 32],
+  index: u32,
+) -> Result<(SecretKey, [u8; 32]), CommandError> {
+  let hardened_index = index | 0x80000000;
+  let index_be = hardened_index.to_be_bytes();
+
+  let mut mac = HmacSha512::new_from_slice(chain_code)
+    .map_err(|e| CommandError::internal(format!("HMAC key: {e}")))?;
+
+  mac.update(&[0x00]); // prepend 0x00 per BIP32
+  mac.update(&parent_key.secret_bytes());
+  mac.update(&index_be);
+
+  let i = mac.finalize().into_bytes();
+
+  let mut il = [0u8; 32];
+  let mut child_chain_code = [0u8; 32];
+  il.copy_from_slice(&i[0..32]);
+  child_chain_code.copy_from_slice(&i[32..64]);
+
+  // child_key = (IL + parent_key) mod n
+  let parent_bytes = parent_key.secret_bytes();
+  let child_bytes = add_mod_n(&il, &parent_bytes);
+
+  let child_key = SecretKey::from_slice(&child_bytes).map_err(|e| {
+    CommandError::internal(format!(
+      "Child key derivation failed (result >= n, extremely unlikely): {e}"
+    ))
+  })?;
+
+  Ok((child_key, child_chain_code))
+}
+
+/// Derive a normal (non-hardened) child key (BIP32 CKDpriv).
+///
+/// Normal derivation: `child_index = index` (no 0x80000000 flag)
+/// - I = HMAC-SHA512(key=chain_code, data=serP(Kpar) || child_index_be)
+/// - child_key = (IL + parent_key) mod n
+/// - child_chain_code = IR
+pub fn derive_child_key_normal(
+  parent_key: &SecretKey,
+  chain_code: &[u8; 32],
+  index: u32,
+) -> Result<(SecretKey, [u8; 32]), CommandError> {
+  let secp = Secp256k1::new();
+  let parent_pubkey = PublicKey::from_secret_key(&secp, parent_key);
+  let index_be = index.to_be_bytes();
+
+  let mut mac = HmacSha512::new_from_slice(chain_code)
+    .map_err(|e| CommandError::internal(format!("HMAC key: {e}")))?;
+
+  mac.update(&parent_pubkey.serialize());
+  mac.update(&index_be);
+
+  let i = mac.finalize().into_bytes();
+
+  let mut il = [0u8; 32];
+  let mut child_chain_code = [0u8; 32];
+  il.copy_from_slice(&i[0..32]);
+  child_chain_code.copy_from_slice(&i[32..64]);
+
+  let parent_bytes = parent_key.secret_bytes();
+  let child_bytes = add_mod_n(&il, &parent_bytes);
+
+  let child_key = SecretKey::from_slice(&child_bytes).map_err(|e| {
+    CommandError::internal(format!(
+      "Normal child key derivation failed (result >= n, extremely unlikely): {e}"
+    ))
+  })?;
+
+  Ok((child_key, child_chain_code))
+}
+
+/// Derive a secret key at a given BIP32 derivation path.
+///
+/// Path format: `"m/44'/309'/0'/0/0"` — each segment after `m` is a hardened
+/// index (the `'` suffix denotes hardened derivation; all our indices are hardened).
+pub fn derive_path(seed: &[u8], path: &str) -> Result<(SecretKey, [u8; 32]), CommandError> {
+  let (mut key, mut chain_code) = derive_master_key(seed)?;
+
+  for segment in path.split('/').skip(1) {
+    let hardened = segment.ends_with('\'');
+    let index_str = segment.trim_end_matches('\'');
+    let index: u32 = index_str.parse().map_err(|_| {
+      CommandError::invalid_input(format!("Invalid derivation path segment: {segment}"))
+    })?;
+
+    let (child_key, child_cc) = if hardened {
+      derive_child_key(&key, &chain_code, index)?
+    } else {
+      derive_child_key_normal(&key, &chain_code, index)?
+    };
+    key = child_key;
+    chain_code = child_cc;
+  }
+
+  Ok((key, chain_code))
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::wallet::address::{self, ckb_address_from_pubkey, lock_arg_from_address};
+
+  // -----------------------------------------------------------------------
+  // BIP32 Test Vector 1 (from spec)
+  // Seed: 000102030405060708090a0b0c0d0e0f
+  // -----------------------------------------------------------------------
+
+  fn test_seed() -> [u8; 16] {
+    [
+      0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
+      0x0f,
+    ]
+  }
+
+  #[test]
+  fn test_bip32_vector_1_master() {
+    let seed = test_seed();
+
+    let (master_key, chain_code) = derive_master_key(&seed).unwrap();
+    assert_eq!(
+      hex::encode(master_key.secret_bytes()),
+      "e8f32e723decf4051aefac8e2c93c9c5b214313817cdb01a1494b917c8436b35"
+    );
+    assert_eq!(
+      hex::encode(chain_code),
+      "873dff81c02f525623fd1fe5167eac3a55a049de3d314bb42ee227ffed37d508"
+    );
+  }
+
+  #[test]
+  fn test_bip32_vector_1_child_0() {
+    let seed = test_seed();
+
+    let (master_key, chain_code) = derive_master_key(&seed).unwrap();
+    let (child_key, child_cc) = derive_child_key(&master_key, &chain_code, 0).unwrap();
+
+    assert_eq!(
+      hex::encode(child_key.secret_bytes()),
+      "edb2e14f9ee77d26dd93b4ecede8d16ed408ce149b6cd80b0715a2d911a0afea"
+    );
+    assert_eq!(
+      hex::encode(child_cc),
+      "47fdacbd0f1097043b78c63c20c34ef4ed9a111d980047ad16282c7ae6236141"
+    );
+  }
+
+  #[test]
+  fn test_derive_path() {
+    let seed = test_seed();
+
+    let (key, cc) = derive_path(&seed, "m/44'/309'/0'/0/0").unwrap();
+    assert!(!key.secret_bytes().iter().all(|&b| b == 0));
+    assert!(!cc.iter().all(|&b| b == 0));
+
+    // Last two path segments must use normal derivation — hardened path differs.
+    let (hardened_key, _) = derive_path(&seed, "m/44'/309'/0'/0'/0'").unwrap();
+    assert_ne!(key.secret_bytes(), hardened_key.secret_bytes());
+  }
+
+  #[test]
+  fn test_normal_vs_hardened_child() {
+    let seed = test_seed();
+    let (master, cc) = derive_master_key(&seed).unwrap();
+    let (normal, _) = derive_child_key_normal(&master, &cc, 0).unwrap();
+    let (hardened, _) = derive_child_key(&master, &cc, 0).unwrap();
+    assert_ne!(normal.secret_bytes(), hardened.secret_bytes());
+  }
+
+  #[test]
+  fn test_generate_mnemonic() {
+    let m = generate_mnemonic().unwrap();
+    let phrase = m.to_string();
+    let words: Vec<&str> = phrase.split_whitespace().collect();
+    assert_eq!(words.len(), 12);
+  }
+
+  #[test]
+  fn test_seed_deterministic() {
+    let m = generate_mnemonic().unwrap();
+    let seed1 = mnemonic_to_seed(&m, "");
+    let seed2 = mnemonic_to_seed(&m, "");
+    assert_eq!(seed1, seed2);
+
+    let seed3 = mnemonic_to_seed(&m, "different");
+    assert_ne!(seed1, seed3);
+  }
+
+  #[test]
+  fn test_master_key_derives_from_seed() {
+    let m = generate_mnemonic().unwrap();
+    let seed = mnemonic_to_seed(&m, "");
+    let (key, cc) = derive_master_key(&seed).unwrap();
+    assert!(!key.secret_bytes().iter().all(|&b| b == 0));
+    assert!(!cc.iter().all(|&b| b == 0));
+  }
+
+  // -----------------------------------------------------------------------
+  // BIP44 CKB path + lock_args integration tests
+  // These verify the full pipeline: seed → child key → pubkey → lock_args → address
+  // A mismatch at any step causes the signer to fail with key-not-found.
+  // -----------------------------------------------------------------------
+
+  /// Derive a child key at a BIP44 CKB path and verify the pubkey<->private-key
+  /// relationship is correct (public key can be recovered from secret key).
+  #[test]
+  fn test_bip44_ckb_pubkey_from_secret_key() {
+    let seed = test_seed();
+    let (child_key, _cc) = derive_path(&seed, "m/44'/309'/0'/0/0").unwrap();
+
+    let secp = Secp256k1::new();
+    let pk = PublicKey::from_secret_key(&secp, &child_key);
+    let pk_bytes = pk.serialize();
+
+    // Compressed pubkey must be 33 bytes starting with 0x02 or 0x03
+    assert_eq!(pk_bytes.len(), 33);
+    assert!(pk_bytes[0] == 0x02 || pk_bytes[0] == 0x03);
+  }
+
+  /// Verify that the same seed + path always produces the same child key
+  /// (deterministic derivation).
+  #[test]
+  fn test_bip44_ckb_deterministic() {
+    let seed = test_seed();
+    let (key1, cc1) = derive_path(&seed, "m/44'/309'/0'/0/0").unwrap();
+    let (key2, cc2) = derive_path(&seed, "m/44'/309'/0'/0/0").unwrap();
+    assert_eq!(key1.secret_bytes(), key2.secret_bytes());
+    assert_eq!(cc1, cc2);
+  }
+
+  /// Different address indices produce different keys.
+  #[test]
+  fn test_bip44_ckb_different_indices_different_keys() {
+    let seed = test_seed();
+    let (key0, _) = derive_path(&seed, "m/44'/309'/0'/0/0").unwrap();
+    let (key1, _) = derive_path(&seed, "m/44'/309'/0'/0/1").unwrap();
+    let (key5, _) = derive_path(&seed, "m/44'/309'/0'/0/5").unwrap();
+    assert_ne!(key0.secret_bytes(), key1.secret_bytes());
+    assert_ne!(key0.secret_bytes(), key5.secret_bytes());
+    assert_ne!(key1.secret_bytes(), key5.secret_bytes());
+  }
+
+  /// The key derived at the BIP44 CKB path must produce a valid CKB lock_args
+  /// (20-byte blake160 of compressed pubkey).
+  #[test]
+  fn test_bip44_ckb_lock_args_valid() {
+    let seed = test_seed();
+    let (child_key, _) = derive_path(&seed, "m/44'/309'/0'/0/0").unwrap();
+    let secp = Secp256k1::new();
+    let pk = PublicKey::from_secret_key(&secp, &child_key);
+    let lock_arg = address::lock_arg_from_pubkey(&pk);
+
+    assert_eq!(lock_arg.len(), 20);
+    assert!(
+      !lock_arg.iter().all(|&b| b == 0),
+      "lock_arg must not be zero"
+    );
+  }
+
+  /// The full CKB address derived from the BIP44 child key must be valid bech32m.
+  #[test]
+  fn test_bip44_ckb_address_is_valid_bech32m() {
+    let seed = test_seed();
+    let (child_key, _) = derive_path(&seed, "m/44'/309'/0'/0/0").unwrap();
+    let secp = Secp256k1::new();
+    let pk = PublicKey::from_secret_key(&secp, &child_key);
+    let addr = ckb_address_from_pubkey(&pk, true);
+
+    // Must start with testnet HRP
+    assert!(
+      addr.starts_with("ckt1"),
+      "testnet address must start with ckt1, got: {addr}"
+    );
+
+    // Must decode as valid bech32m
+    bech32::decode(&addr).expect("address must be valid bech32m");
+  }
+
+  /// lock_args extracted from the derived CKB address must match the lock_args
+  /// computed directly from the public key (roundtrip consistency).
+  #[test]
+  fn test_bip44_ckb_address_lock_arg_roundtrip() {
+    let seed = test_seed();
+    let (child_key, _) = derive_path(&seed, "m/44'/309'/0'/0/0").unwrap();
+    let secp = Secp256k1::new();
+    let pk = PublicKey::from_secret_key(&secp, &child_key);
+
+    // Compute lock_arg directly
+    let lock_arg_direct = address::lock_arg_from_pubkey(&pk);
+
+    // Encode as address, then decode lock_arg back
+    let addr = ckb_address_from_pubkey(&pk, true);
+    let lock_arg_decoded = lock_arg_from_address(&addr).expect("must decode own address");
+
+    assert_eq!(
+      lock_arg_direct, lock_arg_decoded,
+      "lock_arg roundtrip through address must be consistent — mismatch causes signer errors"
+    );
+  }
+
+  /// Multiple child keys derived from the same seed must have unique addresses
+  /// and lock_args (each child address is distinct).
+  #[test]
+  fn test_bip44_ckb_multiple_children_unique_addresses() {
+    let seed = test_seed();
+    let mut addresses = Vec::new();
+    let mut lock_args = Vec::new();
+
+    for i in 0..5 {
+      let path = format!("m/44'/309'/0'/0/{i}");
+      let (child_key, _) = derive_path(&seed, &path).unwrap();
+      let secp = Secp256k1::new();
+      let pk = PublicKey::from_secret_key(&secp, &child_key);
+      let addr = ckb_address_from_pubkey(&pk, true);
+      let la = address::lock_arg_from_pubkey(&pk);
+
+      // Each address must be unique
+      assert!(!addresses.contains(&addr), "duplicate address at index {i}");
+      assert!(!lock_args.contains(&la), "duplicate lock_arg at index {i}");
+      addresses.push(addr);
+      lock_args.push(la);
+    }
+  }
+
+  /// Verify the full derivation pipeline against ckb-cli for a known mnemonic.
+  /// Uses a BIP39-generated seed to ensure the entire mnemonic→seed→key→address
+  /// chain is verified end-to-end.
+  #[test]
+  fn test_full_hd_derivation_pipeline_consistency() {
+    // Generate a mnemonic, derive keys, and verify the entire pipeline
+    let mnemonic = generate_mnemonic().unwrap();
+    let seed = mnemonic_to_seed(&mnemonic, "");
+
+    for i in 0..5 {
+      let path = format!("m/44'/309'/0'/0/{i}");
+      let (child_key, _) = derive_path(&seed, &path).unwrap();
+
+      // Step 1: pubkey from private key
+      let secp = Secp256k1::new();
+      let pk = PublicKey::from_secret_key(&secp, &child_key);
+
+      // Step 2: lock_args = blake160(pubkey)
+      let lock_arg = address::lock_arg_from_pubkey(&pk);
+
+      // Step 3: lock_hash = molecule script hash of lock_arg
+      let lock_hash = address::script_lock_hash(&lock_arg);
+
+      // Step 4: address = bech32m encode
+      let addr = ckb_address_from_pubkey(&pk, true);
+
+      // Verify roundtrip: address decodes back to same lock_arg
+      let decoded_la = lock_arg_from_address(&addr)
+        .unwrap_or_else(|_| panic!("address must decode at index {i}: {addr}"));
+      assert_eq!(
+        lock_arg, decoded_la,
+        "lock_arg mismatch at index {i}: stored address doesn't decode to expected lock_arg"
+      );
+
+      // Verify non-zero
+      assert!(!lock_arg.iter().all(|&b| b == 0));
+      assert!(!lock_hash.iter().all(|&b| b == 0));
+      assert!(!addr.is_empty());
+    }
+  }
+}

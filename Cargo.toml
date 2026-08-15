@@ -1,0 +1,62 @@
+[workspace]
+resolver = "2"
+members = ["core", "src-tauri"]
+
+[workspace.dependencies]
+# --- IPC / std ---
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+log = "0.4"
+async-trait = "0.1"
+tokio = { version = "1", features = ["rt", "macros", "time"] }
+anyhow = "1.0"
+reqwest = { version = "0.12", features = ["json"] }
+
+# --- wallet crypto / HD (ported from rust-server) ---
+bip39 = { version = "2", features = ["rand", "all-languages"] }
+# 0.30 — unified with ckb-cinnabar + fiber-lib so `SecretKey` is a single type
+# (feature set matches fiber-lib's; `rand` powers keygen, `global-context` the
+# process-wide SECP256K1 used by fiber-lib).
+secp256k1 = { version = "0.30", features = ["recovery", "rand", "serde", "global-context"] }
+aes-gcm = "0.10"
+rand = "0.8"
+hex = "0.4"
+bech32 = "0.9"
+sha2 = "0.10"
+hmac = "0.12"
+blake2b_simd = "1"
+
+# --- persistence ---
+diesel = { version = "2", features = ["sqlite", "returning_clauses_for_sqlite_3_35"] }
+diesel_migrations = { version = "2", features = ["sqlite"] }
+# `bundled` must be applied on libsqlite3-sys directly (diesel 2 has no sqlite-bundled feature)
+libsqlite3-sys = { version = "0.30", features = ["bundled"] }
+
+# --- chain access / skeleton signing (local path per decision) ---
+ckb-cinnabar-calculator = { path = "../../ckb-cinnabar/cinnabar/calculate" }
+
+# --- opticrum protocol / SDK (local path — unified with opticrum + opticrum-sdk) ---
+opticrum-calculator = { path = "../opticrum/calculator/opticrum" }
+opticrum-protocol = { path = "../opticrum/opticrum-protocol" }
+opticrum-sdk = { path = "../opticrum-sdk" }
+
+# --- fiber JSON-RPC types (local fiber checkout; single source of truth) ---
+fiber-json-types = { path = "/Users/vimchain/Cryptape/fiber/lightning-network/fiber/crates/fiber-json-types" }
+# molecule Entity trait — for reading fiber packed OutPoint bytes
+molecule = "0.9"
+# fiber node config.yml serialization
+serde_yaml = "0.9"
+
+# --- embedded fiber node (fnn as a library, in-process) ---
+# rocksdb backend: the `sqlite` feature clashes with diesel's bundled
+# libsqlite3-sys (`links="sqlite3"`), so fiber-store uses bundled RocksDB.
+fnn = { path = "/Users/vimchain/Cryptape/fiber/lightning-network/fiber/crates/fiber-lib", default-features = false, features = ["rocksdb", "watchtower"] }
+ractor = "0.15"
+tokio-util = { version = "0.7", features = ["rt"] }
+clap-serde-derive = "0.2.1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "registry"] }
+jsonrpsee = { version = "0.25.1", features = ["server"] }
+ckb-chain-spec = "1"
+ckb-resource = "1"
+ckb-types = "1"

@@ -199,10 +199,12 @@ function OrderTooltipContent({ order, sharePct }: { order: LiquidityOrder; share
             {formatCkb(order.depositCkb)} {t.unitCkb}
           </strong>
         </div>
-        <div className="lm-tooltip-row">
-          <span>{t.lmRentalTerm}</span>
-          <strong>{t.lmRentalDays.replace('{days}', String(order.rentalDays ?? '—'))}</strong>
-        </div>
+        {order.rentalDays != null && (
+          <div className="lm-tooltip-row">
+            <span>{t.lmRentalTerm}</span>
+            <strong>{t.lmRentalDays.replace('{days}', String(order.rentalDays))}</strong>
+          </div>
+        )}
         <div className="lm-tooltip-row">
           <span>{t.lmDwellSince}</span>
           <strong>{t.lmDwellHoursFull.replace('{hours}', String(Math.round(dwellHours(order.createdAtMs ?? 0))))}</strong>
@@ -381,7 +383,8 @@ export type LiquidityCellFieldProps = {
   mode: 'orders' | 'matches'
   /** Key of the clicked cell whose detail drawer is open — it stays highlighted. */
   selected?: string | null
-  onSelect: (t: SheetTarget) => void
+  /** `null` clears the selection (the clicked cell is selected again). */
+  onSelect: (t: SheetTarget | null) => void
 }
 
 export function LiquidityCellField({ orders, matches, mode, selected, onSelect }: LiquidityCellFieldProps) {
@@ -613,7 +616,10 @@ export function LiquidityCellField({ orders, matches, mode, selected, onSelect }
                 className={`cell cell-${c.kind} ${c.life?.isExhausted ? 'is-exhausted' : ''} ${frozen ? 'is-frozen' : ''} ${selected === c.key ? 'is-selected' : ''} ${dimmed ? 'is-dimmed' : ''}`}
                 style={style}
                 onClick={() => {
-                  if (!selected || selected === c.key) onSelect(c.target)
+                  // Clicking the open cell again closes the tooltip + detail
+                  // drawer; clicking a fresh cell selects it.
+                  if (selected === c.key) onSelect(null)
+                  else if (!selected) onSelect(c.target)
                 }}
                 onMouseEnter={() => {
                   const el = cellEls.current.get(c.key)

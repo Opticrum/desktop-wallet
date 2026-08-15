@@ -1,6 +1,7 @@
 import { useLocale } from '../i18n/LocaleContext'
 import type { WalletTx, WalletTxKind } from '../api/types'
 import { formatSignedCkb, shortHash, truncatedHash } from '../lib/wallet'
+import { CopyableText } from './CopyableText'
 
 export function txLabel(type: WalletTxKind, t: ReturnType<typeof useLocale>['t']) {
   switch (type) {
@@ -26,6 +27,10 @@ export function TransactionTable({
   compact?: boolean
 }) {
   const { t, locale } = useLocale()
+
+  if (transactions.length === 0) {
+    return <div className="activity-empty">{t.txEmpty}</div>
+  }
 
   if (compact) {
     return (
@@ -72,11 +77,13 @@ export function TransactionTable({
                 })}
                 {' · '}
                 {fullHash ? (
-                  <span className="mono activity-sub-hash" title={tx.txHash}>
-                    {truncatedHash(tx.txHash)}
-                  </span>
+                  <CopyableText
+                    value={tx.txHash}
+                    display={truncatedHash(tx.txHash)}
+                    className="mono activity-sub-hash"
+                  />
                 ) : (
-                  <span className="mono">{shortHash(tx.txHash)}</span>
+                  <CopyableText value={tx.txHash} display={shortHash(tx.txHash)} className="mono" />
                 )}
               </div>
             </div>

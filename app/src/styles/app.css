@@ -41,23 +41,66 @@
 .top-bar-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   flex-shrink: 0;
 }
 
+/* Optic-fiber ring mark — teal→cyan gradient ring, light pulse riding it,
+   core node at the centre (see the inline SVG in TopBar). */
 .top-bar-brand-mark {
-  width: 24px;
-  height: 24px;
-  border-radius: 5px;
-  background: var(--accent);
+  width: 26px;
+  height: 26px;
   flex-shrink: 0;
+  filter: drop-shadow(0 2px 5px color-mix(in srgb, var(--me-accent) 30%, transparent));
 }
 
 .top-bar-brand-text {
-  font-weight: 600;
-  font-size: 13px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: -0.02em;
   color: var(--text);
-  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+/* Wordmark — the "Optic" root stays ink; the coined "rum" tail picks up the
+   brand's teal→cyan gradient, tying it to the ring mark. */
+.brand-word {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.brand-accent {
+  background: linear-gradient(120deg, var(--me-accent), var(--cyan));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Micro-label suffix ("Desktop"), with a teal divider dot. */
+.brand-suffix {
+  position: relative;
+  padding-left: 9px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.brand-suffix::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--me-accent);
+  transform: translateY(-50%);
 }
 
 /* ── Nav ───────────────────────────────────────────────────────────────── */
@@ -111,10 +154,6 @@
   color: #fff;
 }
 
-.top-bar-nav-item.disabled:hover .top-bar-nav-metric {
-  color: var(--danger);
-}
-
 /* Lock badge — slides in on hover to signal the entry is pinned */
 .top-bar-lock {
   display: inline-flex;
@@ -150,12 +189,6 @@
 .top-bar-nav-item.active .top-bar-nav-glyph {
   background: var(--accent);
   color: #fff;
-}
-
-.top-bar-nav-metric {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  margin-left: 2px;
 }
 
 /* ── Top bar right section ─────────────────────────────────────────────── */
@@ -199,6 +232,9 @@
 .center-panel {
   flex: 1;
   overflow: auto;
+  /* This is the app's real scroll container — reserve a stable gutter so the
+     centered content never shifts sideways when its scrollbar appears. */
+  scrollbar-gutter: stable;
   background: var(--shell-bg);
   padding: 28px 32px 48px;
 }
@@ -897,6 +933,7 @@
 .send-form-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
   margin-top: 8px;
 }
 
@@ -905,6 +942,258 @@
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
+}
+
+/* ── Fiber transfer & invoice dialogs (node overview 出金/入金) ─────────── */
+
+/* Hairline accent along the top edge — same language as the QR modal. */
+.fiber-modal {
+  position: relative;
+  overflow: hidden;
+}
+
+.fiber-modal::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 28px;
+  right: 28px;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.85;
+}
+
+/* One-liner under the modal title. */
+.fiber-desc {
+  margin: -6px 0 2px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
+/* Target-invoice textarea (mono, wraps). */
+.fiber-invoice-input {
+  width: 100%;
+  min-height: 78px;
+  resize: none;
+  background: var(--surface-2);
+  border: 1.5px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.fiber-invoice-input::placeholder {
+  color: var(--ink-4);
+}
+
+.fiber-invoice-input:focus {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+/* Max-fill button inside the amount row. */
+.fiber-max-btn {
+  flex-shrink: 0;
+  min-height: 40px;
+  padding: 0 13px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--accent-muted);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.fiber-max-btn:hover {
+  background: color-mix(in srgb, var(--accent-muted) 60%, var(--accent));
+  color: var(--accent-ink);
+}
+
+/* Capacity hint row under the amount field. */
+.fiber-cap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+.fiber-cap svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--ink-4);
+}
+
+.fiber-cap strong {
+  font-weight: 700;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Invoice-ready step: QR + summary + copy plate. */
+.fiber-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fiber-sheet-top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.fiber-sheet-qr {
+  flex-shrink: 0;
+  width: 96px;
+  height: 96px;
+  padding: 10px;
+  border-radius: var(--radius);
+  background:
+    radial-gradient(120% 90% at 50% 0%, var(--accent-muted), transparent 62%),
+    var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+
+.fiber-sheet-qr svg {
+  width: 100%;
+  height: 100%;
+}
+
+.fiber-sheet-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.fiber-sheet-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ok);
+}
+
+.fiber-sheet-kicker svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.fiber-sheet-amount {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.fiber-sheet-amount .unit {
+  font-size: 0.5em;
+  font-weight: 700;
+  color: var(--ink-3);
+  margin-left: 6px;
+}
+
+.fiber-sheet-msg {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+
+/* Invoice copy plate — mono text that wraps; click anywhere to copy. */
+.fiber-invoice-plate {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.fiber-invoice-plate:hover,
+.fiber-invoice-plate:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.fiber-invoice-plate:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  outline-offset: 2px;
+}
+
+.fiber-invoice-plate-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+.fiber-plate-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--accent);
+}
+
+.fiber-plate-copy svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.fiber-invoice-plate-string {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  word-break: break-all;
+  max-height: 96px;
+  overflow: auto;
+}
+
+.fiber-invoice-plate.copied .fiber-invoice-plate-string {
+  color: var(--ok);
 }
 
 /* ── Action tiles ──────────────────────────────────────────────────────── */
@@ -1200,6 +1489,13 @@
 .copyable:focus-visible .copyable-icon,
 .copyable.copied .copyable-icon {
   opacity: 0.7;
+}
+
+/* Leading icon — for right-aligned values, so the hash doesn't shift left
+   away from the right edge when the icon appears. */
+.copyable.icon-leading .copyable-icon {
+  margin-left: 0;
+  margin-right: 6px;
 }
 
 .copyable-text {
@@ -2143,6 +2439,72 @@
   align-self: center;
 }
 
+.form-label-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Field help — small "?" button with a hover tooltip for detailed explanation */
+.field-help {
+  position: relative;
+  display: inline-flex;
+}
+.field-help-btn {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.field-help-btn:hover,
+.field-help-btn:focus-visible {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+.field-help-tip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  width: 240px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+  text-align: left;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 140ms ease, transform 140ms ease, visibility 140ms;
+  pointer-events: none;
+  z-index: 120;
+}
+.field-help:hover .field-help-tip,
+.field-help:focus-within .field-help-tip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
 .form-input {
   height: 38px;
   padding: 0 12px;
@@ -2229,7 +2591,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  /* Above the cell tooltip (120) and help tips (130) so confirm/adjust dialogs
+     always top any floating layer; drawer (300) and send-modal (200) stay above. */
+  z-index: 150;
   padding: 24px;
   animation: backdrop-in 140ms ease-out;
 }
@@ -2274,29 +2638,253 @@
   gap: 8px;
 }
 
+/* ── CKB transaction confirmation modal (waiting → confirmed / failed) ──── */
+
+.ckb-tx-backdrop {
+  /* Above the confirm modal (150) and send/fiber modals (200) so it always
+     tops in-flight dialogs; below the bottom drawer (300). */
+  z-index: 250;
+}
+
+.ckb-tx-modal {
+  position: relative;
+  max-width: 400px;
+  text-align: center;
+  padding: 28px 28px 24px;
+}
+
+.ckb-tx-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.ckb-tx-close:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.ckb-tx-close svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ckb-tx-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.ckb-tx-icon svg {
+  width: 22px;
+  height: 22px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ckb-tx-icon.is-waiting {
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+.ckb-tx-icon.is-confirmed {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.ckb-tx-icon.is-rejected {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.ckb-tx-spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2.5px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border-top-color: var(--accent);
+  animation: btn-spin 0.7s linear infinite;
+}
+
+.ckb-tx-title {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.ckb-tx-label {
+  margin-top: 3px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+
+.ckb-tx-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-4);
+}
+
+.ckb-tx-error {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--danger);
+  word-break: break-word;
+}
+
+/* Copyable tx hash plate */
+.ckb-tx-hash {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ckb-tx-hash:hover,
+.ckb-tx-hash:focus-visible {
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--ok) 14%, transparent);
+}
+
+.ckb-tx-hash-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+.ckb-tx-hash-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ok);
+}
+
+.ckb-tx-hash-copy svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ckb-tx-hash-value {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  word-break: break-all;
+  text-align: left;
+}
+
+.ckb-tx-done {
+  margin-top: 18px;
+  width: 100%;
+  justify-content: center;
+}
+
 /* Enlarged receive QR dialog (click the QR on the wallet page) */
 .qr-modal {
+  position: relative;
   background: var(--surface);
   border-radius: var(--radius-lg);
   padding: 24px;
   width: 100%;
-  max-width: 340px;
+  max-width: 372px;
   box-shadow: var(--shadow-panel);
   animation: modal-in 180ms ease-out;
+  overflow: hidden;
+}
+
+/* Hairline accent along the top edge of the sheet. */
+.qr-modal::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 24px;
+  right: 24px;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.9;
 }
 
 .qr-modal-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .qr-modal-kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 15px;
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--ink);
+}
+
+.qr-modal-kicker-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+.qr-modal-kicker-icon svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .qr-modal-close {
@@ -2328,26 +2916,171 @@
   stroke-linejoin: round;
 }
 
+/* Code plate — tinted gradient field framed by scan brackets. */
 .qr-modal-qr {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
-  background: var(--surface);
-  border: 1px solid var(--line);
+  padding: 22px;
   border-radius: var(--radius);
+  background:
+    radial-gradient(120% 90% at 50% 0%, var(--accent-muted), transparent 62%),
+    var(--surface-2);
+  border: 1px solid var(--line);
+  overflow: hidden;
 }
 
 .qr-modal-qr svg {
-  width: 220px;
-  height: 220px;
+  width: 216px;
+  height: 216px;
   color: var(--ink);
 }
 
-.qr-modal-address {
+/* Four L-shaped corner brackets — a scan/capture frame around the code. */
+.qr-frame {
+  position: absolute;
+  inset: 10px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--accent), var(--accent)) top left / 18px 2.5px,
+    linear-gradient(var(--accent), var(--accent)) top left / 2.5px 18px,
+    linear-gradient(var(--accent), var(--accent)) top right / 18px 2.5px,
+    linear-gradient(var(--accent), var(--accent)) top right / 2.5px 18px,
+    linear-gradient(var(--accent), var(--accent)) bottom left / 18px 2.5px,
+    linear-gradient(var(--accent), var(--accent)) bottom left / 2.5px 18px,
+    linear-gradient(var(--accent), var(--accent)) bottom right / 18px 2.5px,
+    linear-gradient(var(--accent), var(--accent)) bottom right / 2.5px 18px;
+  background-repeat: no-repeat;
+  opacity: 0.75;
+}
+
+/* Address plate — segmented 4-char groups, click-to-copy. */
+.qr-address {
   margin-top: 14px;
+  padding: 12px 14px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.qr-address:hover,
+.qr-address:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.qr-address:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.qr-address.copied {
+  border-color: var(--ok);
+}
+
+.qr-address-label {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.qr-address-caption {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.qr-address-label svg {
+  width: 14px;
+  height: 14px;
+  color: var(--ink-4);
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.qr-address.copied .qr-address-caption,
+.qr-address.copied .qr-address-label svg {
+  color: var(--ok);
+}
+
+/* Address readout — the complete address as one continuous mono string. */
+.qr-address-string {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.65;
+  letter-spacing: 0.015em;
+  color: var(--ink-2);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  transition: color 0.15s ease;
+}
+
+/* Bech32 network prefix (ckt1 / ckb1) — a hint of accent, still inline. */
+.qr-address-prefix {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.qr-address.copied .qr-address-string,
+.qr-address.copied .qr-address-prefix {
+  color: var(--ok);
+}
+
+/* Full-width copy CTA */
+.qr-copy-btn {
+  margin-top: 12px;
+  width: 100%;
+  display: flex;
+  align-items: center;
   justify-content: center;
+  gap: 8px;
+  padding: 11px 16px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  box-shadow: var(--shadow-accent);
+  transition: background-color 0.15s ease, box-shadow 0.15s ease, transform 0.05s ease;
+}
+
+.qr-copy-btn svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.qr-copy-btn:hover {
+  background: var(--accent-hover);
+}
+
+.qr-copy-btn:active {
+  transform: translateY(1px);
+}
+
+.qr-copy-btn.copied {
+  background: var(--ok-soft);
+  color: var(--ok);
+  box-shadow: none;
 }
 
 /* Large node config modal — YAML view/edit */
@@ -3219,6 +3952,14 @@
   color: var(--ink-4);
 }
 
+/* Empty transaction history — shown when the wallet has no records */
+.activity-empty {
+  padding: 30px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-4);
+}
+
 /* ── Toast (mock success) ─────────────────────────────────────────────── */
 
 .toast {
@@ -3611,6 +4352,19 @@
   background: var(--danger-soft);
 }
 
+.ncp-status-badge.starting {
+  color: var(--accent);
+  background: var(--accent-muted);
+}
+
+.pulse-dot.starting {
+  background: var(--accent);
+}
+
+.pulse-dot.starting::after {
+  border-color: var(--accent);
+}
+
 /* Network tag — prominent, right side of the status bar before the actions */
 .ncp-status-right {
   display: flex;
@@ -3684,6 +4438,51 @@
   flex-shrink: 0;
 }
 
+/* Node start — disabled until the wallet is unlocked (tooltip on hover) */
+.ncp-start {
+  position: relative;
+  display: inline-flex;
+}
+.ncp-start-tip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  padding: 8px 12px;
+  white-space: nowrap;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+  font-size: 12px;
+  color: var(--text-secondary);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 140ms ease, transform 140ms ease, visibility 140ms;
+  pointer-events: none;
+  z-index: 120;
+}
+.ncp-start:hover .ncp-start-tip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Loading spinner — shown in the start button while the node boots */
+.btn-spin {
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: btn-spin 0.7s linear infinite;
+}
+@keyframes btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* Pubkey / detail rows */
 .ncp-detail-rows {
   padding: 4px 0;
@@ -3707,7 +4506,7 @@
 }
 
 .ncp-value {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--ink);
   min-width: 0;
@@ -3961,6 +4760,69 @@
   border-radius: var(--radius-pill);
 }
 
+/* ── Frozen state — the node is stopped, peer/channel actions are inert ── */
+
+.conn-section.is-frozen .node-tabbar-action,
+.conn-section.is-frozen .node-refresh-btn,
+.conn-section.is-frozen .row-action-btn,
+.conn-section.is-frozen .conn-new-channel,
+.conn-section.is-frozen .btn-primary,
+.conn-section.is-frozen .btn-secondary {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.conn-section.is-frozen .node-refresh-btn:hover {
+  color: var(--ink-3);
+  border-color: var(--line);
+}
+
+.conn-section.is-frozen .row-action-btn:hover {
+  background: var(--surface-2);
+  color: var(--ink-3);
+  border-color: transparent;
+}
+
+/* Node-stopped notice */
+.conn-frozen {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--line-strong));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--warn-soft) 65%, var(--surface));
+  color: var(--ink-2);
+}
+
+.conn-frozen > svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--warn);
+}
+
+.conn-frozen-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.conn-frozen-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.conn-frozen-hint {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
 .conn-list {
   display: flex;
   flex-direction: column;
@@ -4032,6 +4894,19 @@
   white-space: nowrap;
 }
 
+/* Peer fiber software version tag on the node card */
+.conn-version {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  padding: 1px 7px;
+  background: var(--surface-2);
+  white-space: nowrap;
+}
+
 .conn-actions {
   display: inline-flex;
   align-items: center;
@@ -4050,9 +4925,49 @@
   color: var(--ink-4);
 }
 
+/* Pubkey + address column — shown in full; long pubkeys wrap to stay visible */
+.conn-panel-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.conn-panel-pubkey,
+.conn-panel-addr {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.conn-panel-pubkey {
+  font-family: var(--font-mono);
+  color: var(--ink-2);
+  align-items: flex-start;
+}
 .conn-panel-addr {
   font-family: var(--font-mono);
   color: var(--ink-3);
+  white-space: nowrap;
+}
+.conn-panel-label {
+  flex-shrink: 0;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-4);
+  padding-top: 2px;
+}
+
+/* New-channel action — centered full-width button below the channel list */
+.conn-panel-actions {
+  display: flex;
+  justify-content: center;
+  padding-top: 12px;
+}
+.conn-panel-actions .conn-new-channel {
+  width: 100%;
+  justify-content: center;
 }
 
 .conn-panel {
@@ -4067,11 +4982,6 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
-.conn-empty {
-  padding: 10px 4px 2px;
-  font-size: 13px;
-  color: var(--ink-4);
-}
 
 /* Nested channel table is denser than the standard .data-table-sm */
 .conn-ch-table.data-table-sm th,
@@ -4245,11 +5155,127 @@
   padding: 10px 12px;
 }
 
+/* Clickable KPI cards — 出金/入金 open the Fiber dialogs (like the wallet
+   balance, hover reveals an action hint; the hint row is reserved space so
+   nothing shifts on hover). */
+.node-kpi-grid .kpi-btn {
+  border: none;
+  text-align: left;
+  background: var(--surface);
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+  transition: background-color 0.15s ease;
+}
+
+.node-kpi-grid .kpi-btn:hover,
+.node-kpi-grid .kpi-btn:focus-visible {
+  background: color-mix(in srgb, var(--accent-muted) 55%, var(--surface));
+}
+
+.node-kpi-grid .kpi-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  outline-offset: 2px;
+}
+
+.node-kpi-grid .kpi-btn:hover .kpi-label,
+.node-kpi-grid .kpi-btn:focus-visible .kpi-label {
+  color: var(--accent);
+}
+
+.node-kpi-grid .kpi-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  opacity: 0;
+  transform: translateY(3px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  pointer-events: none;
+}
+
+.node-kpi-grid .kpi-btn:hover .kpi-hint,
+.node-kpi-grid .kpi-btn:focus-visible .kpi-hint {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.node-kpi-grid .kpi-hint svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Role-tinted action cards — 出金 (send, amber) / 入金 (receive, green).
+   Default is a soft tint; hover deepens it. Label + hint carry the role
+   color so the two actions read as distinct at a glance. */
+.node-kpi-grid .kpi-btn.kpi-outbound {
+  background: var(--warn-soft);
+}
+
+.node-kpi-grid .kpi-btn.kpi-outbound:hover,
+.node-kpi-grid .kpi-btn.kpi-outbound:focus-visible {
+  background: color-mix(in srgb, var(--warn) 22%, var(--warn-soft));
+}
+
+.node-kpi-grid .kpi-btn.kpi-outbound:focus-visible {
+  outline-color: color-mix(in srgb, var(--warn) 45%, transparent);
+}
+
+.node-kpi-grid .kpi-btn.kpi-outbound .kpi-label,
+.node-kpi-grid .kpi-btn.kpi-outbound .kpi-hint {
+  color: var(--warn);
+}
+
+.node-kpi-grid .kpi-btn.kpi-inbound {
+  background: var(--ok-soft);
+}
+
+.node-kpi-grid .kpi-btn.kpi-inbound:hover,
+.node-kpi-grid .kpi-btn.kpi-inbound:focus-visible {
+  background: color-mix(in srgb, var(--ok) 22%, var(--ok-soft));
+}
+
+.node-kpi-grid .kpi-btn.kpi-inbound:focus-visible {
+  outline-color: color-mix(in srgb, var(--ok) 45%, transparent);
+}
+
+.node-kpi-grid .kpi-btn.kpi-inbound .kpi-label,
+.node-kpi-grid .kpi-btn.kpi-inbound .kpi-hint {
+  color: var(--ok);
+}
+
 .wallet-module {
   position: relative;
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* Refreshing veil — soft overlay while the wallet re-fetches; content stays put */
+.wallet-refreshing {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--surface);
+  opacity: 0.72;
+  border-radius: inherit;
+  z-index: 5;
+  pointer-events: none;
+}
+.wallet-refreshing-label {
+  font-size: 12px;
+  color: var(--ink-3);
 }
 
 .wallet-module .wallet-figure {
@@ -5112,7 +6138,7 @@
   align-items: center;
   gap: 28px;
   min-width: 0;
-  animation: lm-kpi-in 0.28s ease-out;
+  animation: lm-kpi-in 0.14s ease-out;
 }
 
 @keyframes lm-kpi-in {
@@ -5391,7 +6417,7 @@
   color: inherit;
   cursor: pointer;
   will-change: transform;
-  animation: cell-in 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  animation: cell-in 0.2s ease-out;
   transition: box-shadow 0.18s ease, border-color 0.18s ease, opacity 0.22s ease, filter 0.22s ease;
 }
 
@@ -5412,11 +6438,9 @@
 @keyframes cell-in {
   from {
     opacity: 0;
-    scale: 0.55;
   }
   to {
     opacity: 1;
-    scale: 1;
   }
 }
 
@@ -5798,6 +6822,42 @@
   color: var(--ink-2);
 }
 
+/* Derived hints panel in the buy-order form — the rate + APY inferred from
+   the user's liquidity / cost / duration inputs. */
+.lm-derive {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--ink-4);
+}
+
+.lm-derive-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.lm-derive-item strong {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--me-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.lm-derive-sep {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--line-strong);
+  flex-shrink: 0;
+}
+
 /* ── Order / match tags (sheet headers) ────────────────────────────────── */
 
 .mg-tag {
@@ -6084,4 +7144,204 @@
   background: var(--surface-2);
   color: var(--ink-4);
   border: 1px solid var(--line-strong);
+}
+
+/* ── Wallet gate — create / unlock / import onboarding ─────────────── */
+.wallet-gate {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 16px 16px;
+}
+.wallet-gate-tabs {
+  display: flex;
+  gap: 8px;
+}
+.wallet-gate-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Wallet setup dialog — title row + help tooltip */
+/* Wider than the default `.modal` (440px) so the 3-column mnemonic grid fits.
+   `overflow: hidden` clips the rounded corners so no cell ever pokes out. */
+.modal.wallet-setup-modal {
+  max-width: 520px;
+  overflow: hidden;
+}
+.wallet-setup-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.wallet-setup-head .modal-title {
+  margin-bottom: 0;
+}
+.wallet-help {
+  position: relative;
+  display: inline-flex;
+}
+.wallet-help-btn {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.wallet-help-btn:hover,
+.wallet-help-btn:focus-visible {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+.wallet-help-tip {
+  position: absolute;
+  top: calc(100% + 9px);
+  right: 0;
+  width: 264px;
+  padding: 11px 13px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 140ms ease, transform 140ms ease, visibility 140ms;
+  pointer-events: none;
+  z-index: 130;
+}
+.wallet-help-tip::after {
+  content: '';
+  position: absolute;
+  top: -5px;
+  right: 6px;
+  width: 9px;
+  height: 9px;
+  background: var(--surface);
+  border-left: 1px solid var(--line-strong);
+  border-top: 1px solid var(--line-strong);
+  transform: rotate(45deg);
+}
+.wallet-help:hover .wallet-help-tip,
+.wallet-help:focus-within .wallet-help-tip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+/* Wallet module — no-wallet state */
+.wallet-none {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 260px;
+  padding: 28px 16px;
+}
+.wallet-none-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 104px;
+  height: 104px;
+  background: var(--accent-muted);
+  color: var(--accent);
+  border-radius: var(--radius);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+/* Mnemonic import — 12-word grid */
+.mnemonic-grid {
+  display: grid;
+  /* `minmax(0, 1fr)` lets tracks shrink below their auto minimum, so the
+     grid never overflows the dialog (plain `1fr` forces each column to its
+     min-content width, which can exceed the container). */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+.mnemonic-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: text;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.mnemonic-cell:focus-within {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+.mnemonic-index {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  min-width: 12px;
+  text-align: right;
+  user-select: none;
+}
+.mnemonic-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  padding: 0;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+/* Mnemonic display — word chips shown once after create */
+.mnemonic-chips {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+.mnemonic-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 7px 9px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.mnemonic-chip-word {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.text-error {
+  color: var(--danger);
+  font-size: 12px;
 }

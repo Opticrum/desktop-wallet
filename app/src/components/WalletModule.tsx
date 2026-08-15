@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocale } from '../i18n/LocaleContext'
 import { wallet } from '../api/client'
 import type { WalletSummary, WalletTx, WalletTxKind } from '../api/types'
+import { toCommandError } from '../api/types'
 import { addressShort, typeCounts, TX_TYPE_ORDER } from '../lib/wallet'
 import { BottomDrawer } from './BottomDrawer'
 import { QrIcon, QrModal } from './QrModal'
@@ -28,7 +29,7 @@ function IconArrowUpRight() {
  *
  * Data comes from `wallet.get_summary` + `wallet.get_transactions` over IPC.
  */
-export function WalletModule() {
+export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
   const { t } = useLocale()
   const [sendOpen, setSendOpen] = useState(false)
   const [qrOpen, setQrOpen] = useState(false)
@@ -36,20 +37,53 @@ export function WalletModule() {
 
   const [summary, setSummary] = useState<WalletSummary | null>(null)
   const [txs, setTxs] = useState<WalletTx[]>([])
+  // wallet-unlock state (wallet exists but locked)
+  const [unlockPw, setUnlockPw] = useState('')
+  const [unlockBusy, setUnlockBusy] = useState(false)
+  const [unlockError, setUnlockError] = useState<string | null>(null)
+  // Refreshing veil — shown only when a refresh actually takes a moment
+  // (never unmount/clear the module on refresh).
+  const [refreshing, setRefreshing] = useState(false)
+  const refreshTimer = useRef<number | null>(null)
 
-  useEffect(() => {
-    let alive = true
+  const refresh = useCallback(() => {
+    if (refreshTimer.current) window.clearTimeout(refreshTimer.current)
+    // Only show the refreshing veil once a refresh actually stalls (no response
+    // within 3s) — fast refreshes shouldn't flash anything.
+    refreshTimer.current = window.setTimeout(() => setRefreshing(true), 3000)
     Promise.all([wallet.getSummary(), wallet.getTransactions()])
       .then(([s, t]) => {
-        if (!alive) return
         setSummary(s)
         setTxs(t)
       })
       .catch(() => {})
-    return () => {
-      alive = false
-    }
+      .finally(() => {
+        if (refreshTimer.current) window.clearTimeout(refreshTimer.current)
+        setRefreshing(false)
+      })
   }, [])
+
+  useEffect(() => {
+    refresh()
+    const id = window.setInterval(refresh, 15_000)
+    return () => window.clearInterval(id)
+  }, [refresh, refreshKey])
+
+  const unlockWallet = async () => {
+    if (!unlockPw) {
+      setUnlockError(t.walletPasswordRequired)
+      return
+    }
+    setUnlockBusy(true)
+    setUnlockError(null)
+    try {
+      await wallet.unlock(unlockPw)
+      refresh()
+    } catch (e) {
+      setUnlockError(toCommandError(e).message)
+    }
+    setUnlockBusy(false)
+  }
 
   const [activeTypes, setActiveTypes] = useState<Record<TxType, boolean>>({
     receive: true,
@@ -57,6 +91,59 @@ export function WalletModule() {
     channel_open: true,
     channel_close: true,
   })
+
+  // ── wallet gate: no wallet yet → create/import onboarding ─────────────
+  if (!summary) {
+    return (
+      <section className="panel wallet-module">
+        <div className="section-head">
+          <h2 className="node-section-title">{t.walletCkb}</h2>
+        </div>
+        <p className="text-secondary" style={{ padding: '16px' }}>
+          …
+        </p>
+      </section>
+    )
+  }
+  if (!summary.hasWallet) {
+    return (
+      <section className="panel wallet-module">
+        <div className="section-head">
+          <h2 className="node-section-title">{t.walletCkb}</h2>
+        </div>
+        <div className="wallet-none">
+          <div className="wallet-none-badge">{t.walletNone}</div>
+          <p className="text-secondary">{t.walletNoneHint}</p>
+        </div>
+      </section>
+    )
+  }
+  if (!summary.unlocked) {
+    return (
+      <section className="panel wallet-module">
+        <div className="section-head">
+          <h2 className="node-section-title">{t.walletCkb}</h2>
+        </div>
+        <div className="wallet-gate">
+          <div className="wallet-gate-field">
+            <label className="send-form-label">{t.walletPassword}</label>
+            <input
+              className="search-input"
+              type="password"
+              value={unlockPw}
+              onChange={(e) => setUnlockPw(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && unlockWallet()}
+              placeholder="••••••••"
+            />
+          </div>
+          {unlockError && <p className="text-error">{unlockError}</p>}
+          <button type="button" className="btn-primary" disabled={unlockBusy} onClick={unlockWallet}>
+            {t.walletUnlockAction}
+          </button>
+        </div>
+      </section>
+    )
+  }
 
   const availableCkb = summary?.availableCkb ?? 0
   const [whole, frac] = availableCkb.toFixed(2).split('.')
@@ -74,7 +161,7 @@ export function WalletModule() {
   return (
     <section className="panel wallet-module">
       <div className="section-head">
-        <h2 className="node-section-title">{t.wallet}</h2>
+        <h2 className="node-section-title">{t.walletCkb}</h2>
         <button
           type="button"
           className="wallet-qr-thumb"
@@ -156,7 +243,9 @@ export function WalletModule() {
             )
           })}
         </div>
-        {visibleTxs.length > 0 ? (
+        {txs.length === 0 ? (
+          <TransactionTable transactions={[]} fullHash />
+        ) : visibleTxs.length > 0 ? (
           <TransactionTable transactions={visibleTxs} fullHash />
         ) : (
           <div className="filter-empty">{t.txFilterEmpty}</div>
@@ -169,6 +258,12 @@ export function WalletModule() {
         addressShort={addressShort(summary?.address ?? '')}
       />
       <QrModal open={qrOpen} onClose={() => setQrOpen(false)} address={summary?.address ?? ''} />
+      {refreshing && (
+        <div className="wallet-refreshing" role="status">
+          <span className="btn-spin" aria-hidden />
+          <span className="wallet-refreshing-label">{t.walletRefreshing}</span>
+        </div>
+      )}
     </section>
   )
 }

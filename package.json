@@ -8,7 +8,7 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "app:dev": "npm --prefix app run dev",
-    "mockup:dev": "npm --prefix mockup run dev"
+    "clippy": "cargo clippy --workspace --all-targets -- -D warnings"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"

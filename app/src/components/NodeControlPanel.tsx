@@ -4,11 +4,14 @@ import { CopyableText } from './CopyableText'
 import { NodeConfigModal } from './config/NodeConfigModal'
 import { useLocale } from '../i18n/LocaleContext'
 import { useNode } from '../node/NodeContext'
-import { node } from '../api/client'
+import { node, wallet } from '../api/client'
+import { toCommandError } from '../api/types'
 import type { NodeRuntime, WatchtowerConfig } from '../api/types'
 
 type Props = {
   onToast: (msg: string) => void
+  /** Bumped by the page's refresh control to re-fetch the runtime. */
+  refreshKey?: number
 }
 
 function IconPlay() {
@@ -51,34 +54,69 @@ function watchtowerLabel(mode: WatchtowerConfig['mode'], t: ReturnType<typeof us
   return t.wtDisabled
 }
 
-export function NodeControlPanel({ onToast }: Props) {
+export function NodeControlPanel({ onToast, refreshKey = 0 }: Props) {
   const { t, locale } = useLocale()
   const { chain } = useNode()
   const [runtime, setRuntime] = useState<NodeRuntime | null>(null)
   const [stopOpen, setStopOpen] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
   const [watchtower, setWatchtower] = useState<WatchtowerConfig>({ mode: 'builtin', endpoint: null })
+  // Embedded node cold start takes a while — show a clear starting state.
+  const [startRequested, setStartRequested] = useState(false)
+  // Node start requires the wallet unlocked (Fiber links a single CKB wallet).
+  // Conservative default: locked until the summary confirms otherwise.
+  const [walletGate, setWalletGate] = useState<{ hasWallet: boolean; unlocked: boolean }>({
+    hasWallet: true,
+    unlocked: false,
+  })
 
   useEffect(() => {
     let alive = true
-    node
-      .getRuntime()
-      .then((r) => {
-        if (!alive) return
-        setRuntime(r)
-        setWatchtower(r.watchtower)
-      })
-      .catch(() => {})
+    const poll = () =>
+      node
+        .getRuntime()
+        .then((r) => {
+          if (!alive) return
+          setRuntime(r)
+          setWatchtower(r.watchtower)
+        })
+        .catch(() => {})
+    poll()
+    // Poll so the pubkey/address reflect the running node once it's up, and
+    // re-fetch immediately when the page's refresh control bumps `refreshKey`.
+    const id = window.setInterval(poll, 5000)
     return () => {
       alive = false
+      window.clearInterval(id)
+    }
+  }, [refreshKey])
+
+  useEffect(() => {
+    let alive = true
+    const check = () =>
+      wallet
+        .getSummary()
+        .then((s) => {
+          if (alive) setWalletGate({ hasWallet: s.hasWallet, unlocked: s.unlocked })
+        })
+        .catch(() => {})
+    check()
+    const id = window.setInterval(check, 5000)
+    return () => {
+      alive = false
+      window.clearInterval(id)
     }
   }, [])
 
   const running = runtime?.running ?? false
+  // "Starting" survives page switches: the backend reports it on the runtime,
+  // and the local `startRequested` covers the window while the IPC call flies.
+  const starting = startRequested || (runtime?.starting ?? false)
   const alias = runtime?.alias ?? '—'
   const uptimeHours = runtime?.uptimeHours ?? 0
-  const fiberPubkey = runtime?.fiberPubkey ?? '—'
-  const fiberAddr = runtime?.fiberAddr ?? '—'
+  const fiberPubkey = runtime?.fiberPubkey || '—'
+  const fiberAddr = runtime?.fiberAddr || '—'
+  const startDisabled = !walletGate.hasWallet || !walletGate.unlocked
 
   const handleStop = async () => {
     setStopOpen(false)
@@ -92,14 +130,17 @@ export function NodeControlPanel({ onToast }: Props) {
   }
 
   const handleStart = async () => {
+    setStartRequested(true)
     try {
       const r = await node.start()
       setRuntime(r)
       setWatchtower(r.watchtower)
-    } catch {
-      /* mock — best-effort */
+      onToast(t.nodeStartedToast)
+    } catch (e) {
+      onToast(`${t.nodeStartFailed}${toCommandError(e).message}`)
+    } finally {
+      setStartRequested(false)
     }
-    onToast(t.nodeStartedToast)
   }
 
   return (
@@ -107,13 +148,9 @@ export function NodeControlPanel({ onToast }: Props) {
       {/* ── Status header row ─────────────────────────────────────────── */}
       <div className="ncp-status-bar">
         <div className="ncp-status-left">
-          {running ? (
-            <span className="pulse-dot" />
-          ) : (
-            <span className="dot-static" />
-          )}
-          <span className={`ncp-status-badge${running ? '' : ' stopped'}`}>
-            {running ? t.nodeRunning : t.nodeStopped}
+          <span className={starting ? 'pulse-dot starting' : running ? 'pulse-dot' : 'dot-static'} />
+          <span className={`ncp-status-badge${running ? '' : starting ? ' starting' : ' stopped'}`}>
+            {starting ? t.nodePreparing : running ? t.nodeRunning : t.nodeStopped}
           </span>
           <span className="ncp-meta-line">
             {alias}
@@ -132,10 +169,22 @@ export function NodeControlPanel({ onToast }: Props) {
                 <span>{t.nodeStop}</span>
               </button>
             ) : (
-              <button type="button" className="btn-primary btn-icon" onClick={handleStart}>
-                <IconPlay />
-                <span>{t.nodeStart}</span>
-              </button>
+              <span className="ncp-start">
+                <button
+                  type="button"
+                  className="btn-primary btn-icon"
+                  disabled={startDisabled || starting}
+                  onClick={handleStart}
+                >
+                  {starting ? <span className="btn-spin" aria-hidden /> : <IconPlay />}
+                  <span>{starting ? t.nodeStarting : t.nodeStart}</span>
+                </button>
+                {startDisabled && !starting && (
+                  <span className="ncp-start-tip" role="tooltip">
+                    {!walletGate.hasWallet ? t.nodeStartNoWallet : t.nodeStartLocked}
+                  </span>
+                )}
+              </span>
             )}
             <button
               type="button"
@@ -162,6 +211,10 @@ export function NodeControlPanel({ onToast }: Props) {
           <span className="ncp-value mono">
             <CopyableText value={fiberAddr} />
           </span>
+        </div>
+        <div className="ncp-detail-row">
+          <span className="ncp-label">{t.fiberVersion}</span>
+          <span className="ncp-value mono">{runtime?.version || '—'}</span>
         </div>
       </div>
 

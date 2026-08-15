@@ -42,6 +42,9 @@
   --me-glow: rgba(15, 118, 110, 0.28);
   --me-glow-strong: rgba(15, 118, 110, 0.42);
 
+  /* Brand wordmark — the light pulse riding the optic ring */
+  --brand-pulse: #ffffff;
+
   /* Match theme (royal blue) — the executing side of the market */
   --lm-glow-blue: rgba(63, 97, 255, 0.20);
 
@@ -135,6 +138,9 @@
   --me-glow: rgba(45, 212, 191, 0.30);
   --me-glow-strong: rgba(45, 212, 191, 0.45);
 
+  /* Brand wordmark — the light pulse riding the optic ring */
+  --brand-pulse: #d9fff5;
+
   /* Match theme (royal blue) — the executing side of the market */
   --lm-glow-blue: rgba(91, 122, 255, 0.26);
 
@@ -180,6 +186,12 @@
 *::before,
 *::after {
   box-sizing: border-box;
+}
+
+html {
+  /* Reserve a stable scrollbar gutter so page content never shifts sideways
+     when the document scrollbar appears/disappears. */
+  scrollbar-gutter: stable;
 }
 
 html,

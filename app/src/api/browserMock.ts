@@ -10,6 +10,7 @@
 
 import type {
   ChannelList,
+  ChannelNode,
   DashboardData,
   LiquidityMatch,
   LiquidityOrder,
@@ -51,11 +52,12 @@ const TXS: WalletTx[] = [
 
 const RUNTIME: NodeRuntime = {
   running: true,
+  starting: false,
   alias: 'ckb-bot-sg',
   uptimeHours: 186,
   fiberPubkey: '02ab91f4c5d27b8e6a1f4d3c9a72e881f0c5b7d4e3a9f8b6c1d2e5f4a3b7c9d1',
-  fiberAddr: '/ip4/18.142.44.12/tcp/8115',
-  addresses: ['/ip4/18.142.44.12/tcp/8115'],
+  fiberAddr: '/ip4/18.142.44.12/tcp/8115/p2p/QmQQjPLhizrXjgcmX7mDqrrCzC5FeHwPxgJP1qRGBsZJJr',
+  addresses: ['/ip4/18.142.44.12/tcp/8115/p2p/QmQQjPLhizrXjgcmX7mDqrrCzC5FeHwPxgJP1qRGBsZJJr'],
   chain: 'testnet',
   version: '0.1.0',
   commitHash: '3c25bcf1',
@@ -152,33 +154,33 @@ const CONFIG: NodeConfig = {
 const CHANNELS: ChannelList = {
   nodes: [
     {
-      peer: { id: 'n-fiber-seed-1', alias: 'fiber-seed-1', addr: '/ip4/104.21.88.201/tcp/8115' },
+      peer: { id: 'n-fiber-seed-1', alias: 'fiber-seed-1', addr: '/ip4/104.21.88.201/tcp/8115', version: '0.9.0-rc7' },
       channels: [
         { channelId: 'ch-01', txHash: '0x8f3a…1c40', outputIndex: 0, capacityCkb: 2000, capacityShannons: 200000000000, localBalanceCkb: 1250.4, localBalanceShannons: 125040000000, remoteBalanceCkb: 749.6, remoteBalanceShannons: 74960000000, state: 'ChannelReady', isPublic: true, enabled: true, createdAtMs: 1785201240000, closeFlags: null, baseFeeMshannons: 1000, feeRatePpm: 120 },
         { channelId: 'ch-02', txHash: '0x2b91…a7d2', outputIndex: 0, capacityCkb: 1500, capacityShannons: 150000000000, localBalanceCkb: 620, localBalanceShannons: 62000000000, remoteBalanceCkb: 880, remoteBalanceShannons: 88000000000, state: 'ChannelReady', isPublic: true, enabled: true, createdAtMs: 1785201240000, closeFlags: null, baseFeeMshannons: 800, feeRatePpm: 90 },
       ],
     },
     {
-      peer: { id: 'n-merchant-node', alias: 'merchant-node', addr: '/ip4/47.98.210.66/tcp/8115' },
+      peer: { id: 'n-merchant-node', alias: 'merchant-node', addr: '/ip4/47.98.210.66/tcp/8115', version: '0.9.0-rc7' },
       channels: [
         { channelId: 'ch-03', txHash: '0x44f0…9e21', outputIndex: 0, capacityCkb: 800, capacityShannons: 80000000000, localBalanceCkb: 400, localBalanceShannons: 40000000000, remoteBalanceCkb: 400, remoteBalanceShannons: 40000000000, state: 'NegotiatingFunding', isPublic: true, enabled: true, createdAtMs: 1785201240000, closeFlags: null, baseFeeMshannons: 1000, feeRatePpm: 100 },
         { channelId: 'ch-04', txHash: '0xd13c…55f8', outputIndex: 0, capacityCkb: 600, capacityShannons: 60000000000, localBalanceCkb: 510.2, localBalanceShannons: 51020000000, remoteBalanceCkb: 89.8, remoteBalanceShannons: 8980000000, state: 'ChannelReady', isPublic: true, enabled: true, createdAtMs: 1785201240000, closeFlags: null, baseFeeMshannons: 500, feeRatePpm: 75 },
       ],
     },
     {
-      peer: { id: 'n-opticrum-edge', alias: 'opticrum-edge', addr: '/ip4/13.229.101.7/tcp/8115' },
+      peer: { id: 'n-opticrum-edge', alias: 'opticrum-edge', addr: '/ip4/13.229.101.7/tcp/8115', version: '0.9.0-rc7' },
       channels: [{ channelId: 'ch-05', txHash: '0x7be9…2a04', outputIndex: 0, capacityCkb: 420, capacityShannons: 42000000000, localBalanceCkb: 180.5, localBalanceShannons: 18050000000, remoteBalanceCkb: 239.5, remoteBalanceShannons: 23950000000, state: 'ChannelReady', isPublic: true, enabled: true, createdAtMs: 1785201240000, closeFlags: null, baseFeeMshannons: 700, feeRatePpm: 110 }],
     },
     {
-      peer: { id: 'n-relay-eu', alias: 'relay-eu', addr: '/ip4/65.21.103.44/tcp/8115' },
+      peer: { id: 'n-relay-eu', alias: 'relay-eu', addr: '/ip4/65.21.103.44/tcp/8115', version: '0.9.0-rc7' },
       channels: [{ channelId: 'ch-06', txHash: '0xa09c…33d7', outputIndex: 0, capacityCkb: 1000, capacityShannons: 100000000000, localBalanceCkb: 350, localBalanceShannons: 35000000000, remoteBalanceCkb: 650, remoteBalanceShannons: 65000000000, state: 'ChannelReady', isPublic: true, enabled: true, createdAtMs: 1785201240000, closeFlags: null, baseFeeMshannons: 1200, feeRatePpm: 150 }],
     },
     {
-      peer: { id: 'n-lp-foundation', alias: 'lp-foundation', addr: '/ip4/34.96.140.55/tcp/8115' },
+      peer: { id: 'n-lp-foundation', alias: 'lp-foundation', addr: '/ip4/34.96.140.55/tcp/8115', version: '0.9.0-rc7' },
       channels: [{ channelId: 'ch-07', txHash: '0x55d1…8f6a', outputIndex: 0, capacityCkb: 300, capacityShannons: 30000000000, localBalanceCkb: 120, localBalanceShannons: 12000000000, remoteBalanceCkb: 180, remoteBalanceShannons: 18000000000, state: 'ShuttingDown', isPublic: true, enabled: true, createdAtMs: 1785201240000, closeFlags: null, baseFeeMshannons: 1000, feeRatePpm: 100 }],
     },
-    { peer: { id: 'n-merchant-asia', alias: 'merchant-asia', addr: '/ip4/13.213.4.99/tcp/8115' }, channels: [] },
-    { peer: { id: 'n-fiber-jp-relay', alias: 'fiber-jp-relay', addr: '/ip4/13.115.32.211/tcp/8115' }, channels: [] },
+    { peer: { id: 'n-merchant-asia', alias: 'merchant-asia', addr: '/ip4/13.213.4.99/tcp/8115', version: '0.9.0-rc7' }, channels: [] },
+    { peer: { id: 'n-fiber-jp-relay', alias: 'fiber-jp-relay', addr: '/ip4/13.115.32.211/tcp/8115', version: '0.9.0-rc7' }, channels: [] },
   ],
 }
 
@@ -229,6 +231,7 @@ const MATCHES: LiquidityMatch[] = [
 const state: {
   unlocked: boolean
   running: boolean
+  nodes: ChannelNode[]
   orders: LiquidityOrder[]
   matches: LiquidityMatch[]
   config: NodeConfig
@@ -236,6 +239,7 @@ const state: {
 } = {
   unlocked: true,
   running: true,
+  nodes: CHANNELS.nodes,
   orders: ORDERS,
   matches: MATCHES,
   config: CONFIG,
@@ -356,13 +360,14 @@ export async function browserInvoke<T>(cmd: string, args: Record<string, unknown
 
     // channels
     case 'channels.list':
-      return CHANNELS as T
+      return { nodes: state.nodes } as T
     case 'channels.connect_peer': {
       const addr = args.addr as string
       const peerId = (args.pubkey as string | undefined) ?? addr.split('/p2p/')[1] ?? `peer-${state.nextChannel++}`
       return { peer_id: peerId } as T
     }
     case 'channels.disconnect_peer':
+      state.nodes = state.nodes.filter((n) => n.peer.id !== (args.peerId as string))
       return null as T
     case 'channels.open_channel': {
       const n = state.nextChannel++
@@ -382,14 +387,14 @@ export async function browserInvoke<T>(cmd: string, args: Record<string, unknown
       return dashboard().matches_near_exhaustion as T
     case 'liquidity.publish_order': {
       if (!state.unlocked) fail('wallet_locked', 'wallet is locked')
-      const capacity = (args.capacity_shannons as number) / 1e8
-      const deposit = (args.rent_capacity_shannons as number) / 1e8
+      const capacity = (args.capacityShannons as number) / 1e8
+      const deposit = (args.rentCapacityShannons as number) / 1e8
       const outpoint = `${fakeTxHash(`order:${state.orders.length}`)}:0`
       const now = Date.now()
       const order: LiquidityOrder = {
-        outpoint, channelCapacityCkb: capacity, channelCapacityShannons: args.capacity_shannons as number,
-        shannonsPerBlock: args.shannons_per_block as number, annualYieldBps: apyBps(args.shannons_per_block as number, capacity),
-        depositCkb: deposit, rentalDays: args.rental_days as number, fiberAddress: (args.fiber_address as string | undefined) ?? null,
+        outpoint, channelCapacityCkb: capacity, channelCapacityShannons: args.capacityShannons as number,
+        shannonsPerBlock: args.shannonsPerBlock as number, annualYieldBps: apyBps(args.shannonsPerBlock as number, capacity),
+        depositCkb: deposit, rentalDays: args.rentalDays as number, fiberAddress: (args.fiberAddress as string | undefined) ?? null,
         xudtAmount: '0', createdAtMs: now, status: 'open',
       }
       state.orders.unshift(order)
@@ -399,30 +404,30 @@ export async function browserInvoke<T>(cmd: string, args: Record<string, unknown
       state.orders = state.orders.filter((o) => o.outpoint !== args.outpoint)
       return { tx_hash: fakeTxHash(String(args.outpoint)) } as T
     case 'liquidity.inject_deposit': {
-      const m = state.matches.find((x) => x.outpoint === args.match_outpoint)
+      const m = state.matches.find((x) => x.outpoint === args.matchOutpoint)
       if (m) {
-        m.depositCkb += (args.amount_shannons as number) / 1e8
-        m.withdrawableCkb += (args.amount_shannons as number) / 1e8
+        m.depositCkb += (args.amountShannons as number) / 1e8
+        m.withdrawableCkb += (args.amountShannons as number) / 1e8
       }
-      return { tx_hash: fakeTxHash(String(args.match_outpoint)) } as T
+      return { tx_hash: fakeTxHash(String(args.matchOutpoint)) } as T
     }
     case 'liquidity.withdraw_deposit': {
-      const m = state.matches.find((x) => x.outpoint === args.match_outpoint)
+      const m = state.matches.find((x) => x.outpoint === args.matchOutpoint)
       if (m) {
-        const amount = (args.amount_shannons as number) / 1e8
+        const amount = (args.amountShannons as number) / 1e8
         if (amount > m.withdrawableCkb) fail('invalid_input', 'amount exceeds withdrawable balance')
         m.depositCkb = Math.max(0, m.depositCkb - amount)
         m.withdrawableCkb = Math.max(0, m.withdrawableCkb - amount)
       }
-      return { tx_hash: fakeTxHash(String(args.match_outpoint)) } as T
+      return { tx_hash: fakeTxHash(String(args.matchOutpoint)) } as T
     }
     case 'liquidity.extract_spent_match': {
-      const m = state.matches.find((x) => x.outpoint === args.match_outpoint)
+      const m = state.matches.find((x) => x.outpoint === args.matchOutpoint)
       if (!m) return fail('invalid_input', 'match not found')
       if (!m.isExhausted) return fail('not_exhausted', 'match still has remaining capacity')
       const returned = m.depositCkb
-      state.matches = state.matches.filter((x) => x.outpoint !== args.match_outpoint)
-      return { tx_hash: fakeTxHash(String(args.match_outpoint)), returned_ckb: returned } as T
+      state.matches = state.matches.filter((x) => x.outpoint !== args.matchOutpoint)
+      return { tx_hash: fakeTxHash(String(args.matchOutpoint)), returned_ckb: returned } as T
     }
 
     default:

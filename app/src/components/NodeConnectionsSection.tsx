@@ -1,21 +1,44 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ConfirmModal } from './ConfirmModal'
 import { CopyableText } from './CopyableText'
 import { useLocale } from '../i18n/LocaleContext'
-import { channels } from '../api/client'
+import { channels, node } from '../api/client'
+import { toCommandError } from '../api/types'
 import type { ChannelNode } from '../api/types'
 import { stateToBucket } from '../lib/node'
+import { shortHash } from '../lib/wallet'
 
 type Props = {
   onToast: (msg: string) => void
+  /** Also refresh the node overview (control panel runtime) on toolbar refresh. */
+  onRefresh?: () => void
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10
 
-export function NodeConnectionsSection({ onToast }: Props) {
+/** Pause bars — shown on the "operations frozen" notice while the node stops. */
+function IconPause() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <rect x="6" y="5" width="4" height="14" rx="1.3" />
+      <rect x="14" y="5" width="4" height="14" rx="1.3" />
+    </svg>
+  )
+}
+
+/** Truncate a long hex/pubkey in the middle: `02ab91f4c5d…e3a9f8b6c1d2`. */
+const midTruncate = (s: string, max: number) => {
+  if (s.length <= max) return s
+  const head = Math.floor((max - 1) / 2)
+  const tail = max - 1 - head
+  return `${s.slice(0, head)}…${s.slice(-tail)}`
+}
+
+export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
   const { t } = useLocale()
   const [nodes, setNodes] = useState<ChannelNode[]>([])
   const [refreshing, setRefreshing] = useState(false)
+  const [refreshingNode, setRefreshingNode] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [connectOpen, setConnectOpen] = useState(false)
   const [connectAlias, setConnectAlias] = useState('')
@@ -26,6 +49,39 @@ export function NodeConnectionsSection({ onToast }: Props) {
   const [channelFeeRate, setChannelFeeRate] = useState('100')
   const [pendingCloseId, setPendingCloseId] = useState<string | null>(null)
   const [pendingRemoveId, setPendingRemoveId] = useState<string | null>(null)
+
+  // While the Fiber node is stopped, peer/channel operations freeze — track
+  // the runtime the same way the control panel does (5s poll) and gate the
+  // action buttons on `frozen`.
+  const [running, setRunning] = useState(true)
+  useEffect(() => {
+    let alive = true
+    const poll = () =>
+      node
+        .getRuntime()
+        .then((r) => {
+          if (alive) setRunning(r.running)
+        })
+        .catch(() => {})
+    poll()
+    const id = window.setInterval(poll, 5000)
+    return () => {
+      alive = false
+      window.clearInterval(id)
+    }
+  }, [])
+
+  const frozen = !running
+
+  // The instant the node stops, dismiss in-flight forms/confirmations so no
+  // half-open action lingers in the frozen state.
+  useEffect(() => {
+    if (!frozen) return
+    setConnectOpen(false)
+    setChannelFormOpen(null)
+    setPendingCloseId(null)
+    setPendingRemoveId(null)
+  }, [frozen])
 
   const load = useCallback(async () => {
     try {
@@ -47,11 +103,58 @@ export function NodeConnectionsSection({ onToast }: Props) {
     load()
   }, [load])
 
+  // When the node restarts, `channels.list` isn't re-fetched on its own — reload
+  // peers immediately and a few times after, so peers that reconnect a beat
+  // later show up without a manual Refresh click.
+  const wasRunning = useRef(running)
+  const runningRef = useRef(running)
+  const restartRetries = useRef<number[]>([])
+  useEffect(() => {
+    const prev = wasRunning.current
+    wasRunning.current = running
+    runningRef.current = running
+    if (!running || prev) return
+    load()
+    restartRetries.current.forEach((id) => window.clearTimeout(id))
+    restartRetries.current = [2000, 5000, 10000].map((ms) =>
+      window.setTimeout(() => {
+        if (!runningRef.current) return // node stopped again — skip
+        load()
+      }, ms),
+    )
+  }, [running, load])
+  useEffect(
+    () => () => restartRetries.current.forEach((id) => window.clearTimeout(id)),
+    [],
+  )
+
   const handleRefresh = async () => {
     setRefreshing(true)
     await load()
+    onRefresh?.()
     onToast(t.nodeRefreshToast)
     window.setTimeout(() => setRefreshing(false), 600)
+  }
+
+  /** Re-fetch channels and update just this node's card (per-peer refresh). */
+  const refreshNode = async (nodeId: string) => {
+    setRefreshingNode(nodeId)
+    try {
+      const c = await channels.list()
+      const updated = c.nodes.find((n) => n.peer.id === nodeId)
+      if (updated) {
+        setNodes((prev) => prev.map((n) => (n.peer.id === nodeId ? updated : n)))
+      } else {
+        // The node vanished from the list — fall back to a full reload.
+        await load()
+      }
+      onToast(t.nodeRefreshToast)
+    } catch {
+      onToast(t.nodeRefreshFailed)
+    } finally {
+      // Keep the spinner up for the whole RPC round-trip.
+      setRefreshingNode((cur) => (cur === nodeId ? null : cur))
+    }
   }
 
   const handleConnect = async () => {
@@ -120,15 +223,15 @@ export function NodeConnectionsSection({ onToast }: Props) {
     setPendingRemoveId(null)
     try {
       await channels.disconnectPeer(id)
-    } catch {
-      /* mock — best-effort */
+      await load()
+      onToast(t.nodeDeleteToast)
+    } catch (e) {
+      onToast(`${t.nodeDeleteFailed}${toCommandError(e).message}`)
     }
-    await load()
-    onToast(t.nodeDeleteToast)
   }
 
   return (
-    <>
+    <div className={`conn-section${frozen ? ' is-frozen' : ''}`}>
       {/* Toolbar: refresh + new-connection actions */}
       <div className="node-tabbar">
         <button
@@ -136,7 +239,8 @@ export function NodeConnectionsSection({ onToast }: Props) {
           className="node-refresh-btn"
           onClick={handleRefresh}
           aria-label={t.nodeRefresh}
-          title={t.nodeRefresh}
+          title={frozen ? t.connFrozen : t.nodeRefresh}
+          disabled={frozen}
         >
           <svg
             className={refreshing ? 'spin' : ''}
@@ -156,10 +260,23 @@ export function NodeConnectionsSection({ onToast }: Props) {
           className={`node-tabbar-action${connectOpen ? ' btn-secondary' : ' btn-primary'}`}
           aria-expanded={connectOpen}
           onClick={() => setConnectOpen((o) => !o)}
+          disabled={frozen}
+          title={frozen ? t.connFrozen : undefined}
         >
           {connectOpen ? t.nodeFormCancel : `+ ${t.nodeNewConnection}`}
         </button>
       </div>
+
+      {/* Node-stopped notice — peer/channel operations freeze until it runs */}
+      {frozen && (
+        <div className="conn-frozen" role="status">
+          <IconPause />
+          <div className="conn-frozen-text">
+            <span className="conn-frozen-title">{t.connFrozen}</span>
+            <span className="conn-frozen-hint">{t.connFrozenHint}</span>
+          </div>
+        </div>
+      )}
 
       {/* Create node connection form */}
       {connectOpen && (
@@ -187,7 +304,7 @@ export function NodeConnectionsSection({ onToast }: Props) {
             <button className="btn-secondary" onClick={() => setConnectOpen(false)}>
               {t.nodeFormCancel}
             </button>
-            <button className="btn-primary" onClick={handleConnect}>
+            <button className="btn-primary" onClick={handleConnect} disabled={frozen}>
               {t.nodeFormCreate}
             </button>
           </div>
@@ -201,6 +318,7 @@ export function NodeConnectionsSection({ onToast }: Props) {
           const nodeOutboundCkb = node.channels.reduce((sum, c) => sum + c.localBalanceCkb, 0)
           const nodeInboundCkb = node.channels.reduce((sum, c) => sum + c.remoteBalanceCkb, 0)
           const nodeAlias = node.peer.alias ?? node.peer.id
+          const nodeAliasDisplay = midTruncate(nodeAlias, 18)
           return (
             <div key={node.peer.id} className={`conn-card${isOpen ? ' open' : ''}`}>
               <div className="conn-card-head">
@@ -224,7 +342,8 @@ export function NodeConnectionsSection({ onToast }: Props) {
                     </svg>
                   </span>
                   <span className="peer-dot connected" />
-                  <span className="conn-alias">{nodeAlias}</span>
+                  <span className="conn-alias">{nodeAliasDisplay}</span>
+                  {node.peer.version && <span className="conn-version">v{node.peer.version}</span>}
                   <span className="conn-count">
                     {node.channels.length} {t.nodeChannelCount}
                   </span>
@@ -244,9 +363,31 @@ export function NodeConnectionsSection({ onToast }: Props) {
                   <button
                     type="button"
                     className="row-action-btn"
+                    onClick={() => refreshNode(node.peer.id)}
+                    aria-label={t.nodeRefresh}
+                    title={frozen ? t.connFrozen : t.nodeRefresh}
+                    disabled={frozen}
+                  >
+                    <svg
+                      className={refreshingNode === node.peer.id ? 'spin' : ''}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.7"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    className="row-action-btn"
                     onClick={() => setPendingRemoveId(node.peer.id)}
                     aria-label={t.nodeRemovePeer}
-                    title={t.nodeRemovePeer}
+                    title={frozen ? t.connFrozen : t.nodeRemovePeer}
+                    disabled={frozen}
                   >
                     <svg
                       viewBox="0 0 24 24"
@@ -266,67 +407,17 @@ export function NodeConnectionsSection({ onToast }: Props) {
               {isOpen && (
                 <div className="conn-panel">
                   <div className="conn-panel-head">
-                    <span className="conn-panel-addr">
-                      <CopyableText value={node.peer.addr ?? ''} />
-                    </span>
-                    <button
-                      type="button"
-                      className="btn-secondary btn-sm"
-                      onClick={() => openChannelForm(node)}
-                    >
-                      + {t.nodeNewChannel}
-                    </button>
-                  </div>
-
-                  {channelFormOpen === node.peer.id && (
-                    <div className="panel inline-form conn-form">
-                      <div className="form-row">
-                        <label className="form-label">{t.nodeFormCapacity}</label>
-                        <input
-                          className="form-input"
-                          placeholder="1000"
-                          inputMode="decimal"
-                          value={channelCapacity}
-                          onChange={(e) => setChannelCapacity(e.target.value)}
-                        />
+                    <div className="conn-panel-meta">
+                      <div className="conn-panel-pubkey">
+                        <span className="conn-panel-label">{t.nodePeerPubkey}</span>
+                        <CopyableText value={node.peer.id} />
                       </div>
-                      <div className="form-row">
-                        <label className="form-label">{t.nodeFormBaseFee}</label>
-                        <input
-                          className="form-input"
-                          placeholder="1000"
-                          inputMode="numeric"
-                          value={channelBaseFee}
-                          onChange={(e) => setChannelBaseFee(e.target.value)}
-                        />
-                      </div>
-                      <div className="form-row">
-                        <label className="form-label">{t.nodeFormFeeRate}</label>
-                        <input
-                          className="form-input"
-                          placeholder="100"
-                          inputMode="numeric"
-                          value={channelFeeRate}
-                          onChange={(e) => setChannelFeeRate(e.target.value)}
-                        />
-                      </div>
-                      <div className="form-actions">
-                        <button className="btn-secondary" onClick={() => setChannelFormOpen(null)}>
-                          {t.nodeFormCancel}
-                        </button>
-                        <button
-                          className="btn-primary"
-                          onClick={() => handleCreateChannel(node.peer.id)}
-                        >
-                          {t.nodeFormCreate}
-                        </button>
+                      <div className="conn-panel-addr">
+                        <span className="conn-panel-label">{t.nodePeerAddr}</span>
+                        <CopyableText value={node.peer.addr ?? ''} />
                       </div>
                     </div>
-                  )}
-
-                  {node.channels.length === 0 && channelFormOpen !== node.peer.id && (
-                    <div className="conn-empty">{t.nodeNoChannels}</div>
-                  )}
+                  </div>
 
                   {node.channels.length > 0 && (
                     <table className="data-table data-table-sm conn-ch-table">
@@ -351,7 +442,11 @@ export function NodeConnectionsSection({ onToast }: Props) {
                           return (
                             <tr key={ch.channelId}>
                               <td>
-                                <span className="conn-txhash mono">{ch.txHash}</span>
+                                <CopyableText
+                                  value={ch.txHash}
+                                  display={ch.txHash.length > 20 ? shortHash(ch.txHash) : ch.txHash}
+                                  className="conn-txhash mono"
+                                />
                               </td>
                               <td>
                                 <div className="ch-capacity-val">
@@ -380,7 +475,8 @@ export function NodeConnectionsSection({ onToast }: Props) {
                                   className="row-action-btn"
                                   onClick={() => setPendingCloseId(ch.channelId)}
                                   aria-label={t.nodeCloseChannel}
-                                  title={t.nodeCloseChannel}
+                                  title={frozen ? t.connFrozen : t.nodeCloseChannel}
+                                  disabled={frozen}
                                 >
                                   <svg
                                     viewBox="0 0 24 24"
@@ -400,6 +496,85 @@ export function NodeConnectionsSection({ onToast }: Props) {
                         })}
                       </tbody>
                     </table>
+                  )}
+
+                  <div className="conn-panel-actions">
+                    <button
+                      type="button"
+                      className="btn-secondary conn-new-channel"
+                      onClick={() => openChannelForm(node)}
+                      disabled={frozen}
+                      title={frozen ? t.connFrozen : undefined}
+                    >
+                      + {t.nodeNewChannel}
+                    </button>
+                  </div>
+
+                  {channelFormOpen === node.peer.id && (
+                    <div className="panel inline-form conn-form">
+                      <div className="form-row">
+                        <label className="form-label">{t.nodeFormCapacity}</label>
+                        <input
+                          className="form-input"
+                          placeholder="1000"
+                          inputMode="decimal"
+                          value={channelCapacity}
+                          onChange={(e) => setChannelCapacity(e.target.value)}
+                        />
+                      </div>
+                      <div className="form-row">
+                        <div className="form-label-line">
+                          <label className="form-label">{t.nodeFormBaseFee}</label>
+                          <span className="field-help">
+                            <button type="button" className="field-help-btn" aria-label={t.walletHelp}>
+                              ?
+                            </button>
+                            <span className="field-help-tip" role="tooltip">
+                              {t.nodeFormBaseFeeHelp}
+                            </span>
+                          </span>
+                        </div>
+                        <input
+                          className="form-input"
+                          placeholder="1000"
+                          inputMode="numeric"
+                          value={channelBaseFee}
+                          onChange={(e) => setChannelBaseFee(e.target.value)}
+                        />
+                      </div>
+                      <div className="form-row">
+                        <div className="form-label-line">
+                          <label className="form-label">{t.nodeFormFeeRate}</label>
+                          <span className="field-help">
+                            <button type="button" className="field-help-btn" aria-label={t.walletHelp}>
+                              ?
+                            </button>
+                            <span className="field-help-tip" role="tooltip">
+                              {t.nodeFormFeeRateHelp}
+                            </span>
+                          </span>
+                        </div>
+                        <input
+                          className="form-input"
+                          placeholder="100"
+                          inputMode="numeric"
+                          value={channelFeeRate}
+                          onChange={(e) => setChannelFeeRate(e.target.value)}
+                        />
+                      </div>
+                      <div className="form-actions">
+                        <button className="btn-secondary" onClick={() => setChannelFormOpen(null)}>
+                          {t.nodeFormCancel}
+                        </button>
+                        <button
+                          className="btn-primary"
+                          onClick={() => handleCreateChannel(node.peer.id)}
+                          disabled={frozen}
+                        >
+                          {t.nodeFormCreate}
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
@@ -431,6 +606,6 @@ export function NodeConnectionsSection({ onToast }: Props) {
         onCancel={() => setPendingRemoveId(null)}
         onConfirm={() => pendingRemoveId && handleDisconnect(pendingRemoveId)}
       />
-    </>
+    </div>
   )
 }

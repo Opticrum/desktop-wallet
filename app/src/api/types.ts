@@ -49,6 +49,7 @@ export type WalletTx = {
 
 export type NodeRuntime = {
   running: boolean
+  starting: boolean
   alias: string | null
   uptimeHours: number
   fiberPubkey: string
@@ -128,7 +129,7 @@ export type ChannelList = { nodes: ChannelNode[] }
 
 export type ChannelNode = { peer: PeerInfo; channels: Channel[] }
 
-export type PeerInfo = { id: string; alias: string | null; addr: string | null }
+export type PeerInfo = { id: string; alias: string | null; addr: string | null; version: string | null }
 
 export type Channel = {
   channelId: string

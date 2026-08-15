@@ -91,14 +91,18 @@ export function NodeLogsConsole() {
 
   useEffect(() => {
     let alive = true
-    node
-      .getLogs()
-      .then((l) => {
-        if (alive) setLogs(l)
-      })
-      .catch(() => {})
+    const poll = () =>
+      node
+        .getLogs()
+        .then((l) => {
+          if (alive) setLogs(l)
+        })
+        .catch(() => {})
+    poll()
+    const id = window.setInterval(poll, 3000)
     return () => {
       alive = false
+      window.clearInterval(id)
     }
   }, [])
 
@@ -140,7 +144,7 @@ export function NodeLogsConsole() {
 
       {expanded && (
         <div className="nlc-viewer">
-          <LogViewer lines={logs.slice(0, 5)} scrollable />
+          <LogViewer lines={logs.slice(-5)} scrollable />
         </div>
       )}
 

@@ -42,6 +42,36 @@ export type Messages = {
   liquidityMarket: string
   appCountSuffix: string
 
+  // Wallet flow — create / unlock / import (no-wallet onboarding)
+  walletCreate: string
+  walletSetupTitle: string
+  walletHelp: string
+  walletImport: string
+  walletUnlock: string
+  walletPassword: string
+  walletSingleHint: string
+  walletMnemonic: string
+  walletMnemonicHint: string
+  walletRemembered: string
+  walletConfirmTitle: string
+  walletConfirmBody: string
+  walletPrivateKey: string
+  walletCreateAction: string
+  walletUnlockAction: string
+  walletImportMnemonicAction: string
+  walletImportKeyAction: string
+  walletCancel: string
+  copy: string
+  walletCreated: string
+  walletImportFailed: string
+  walletPasswordRequired: string
+  walletNone: string
+  walletNoneHint: string
+  walletRefreshing: string
+
+  // Node page — the embedded CKB wallet module heading
+  walletCkb: string
+
   // Hub nav cards + descriptions
   nodeOverview: string
   channelsDescription: string
@@ -68,6 +98,9 @@ export type Messages = {
 
   // Liquidity — buy order modal
   lmNewOrder: string
+  lmLiquidity: string
+  lmCost: string
+  lmDays: string
   lmChannelCapacity: string
   lmRateShPerBlock: string
   lmDeposit: string
@@ -84,6 +117,7 @@ export type Messages = {
   lmCancelOrderTitle: string
   lmCancelOrderBody: string
   lmOrderCancelled: string
+  lmOrderCancelFailed: string
 
   // Liquidity — my matched liquidity
   lmMyMatches: string
@@ -198,6 +232,7 @@ export type Messages = {
   txChannelClose: string
   txFilterLabel: string
   txFilterEmpty: string
+  txEmpty: string
 
   // Peer / channel table headers
   capacity: string
@@ -217,6 +252,14 @@ export type Messages = {
   zoomQr: string
   close: string
   copied: string
+
+  // CKB transaction confirmation modal (waiting → confirmed / failed)
+  ckbTxWaiting: string
+  ckbTxWaitingHint: string
+  ckbTxConfirmed: string
+  ckbTxConfirmedHint: string
+  ckbTxFailed: string
+  ckbTxHash: string
 
   // Node page — sections + redesigned sidebar
   nodeConnectionsSection: string
@@ -239,17 +282,46 @@ export type Messages = {
   logConsoleTitle: string
   logFilterLabel: string
   logFilterEmpty: string
+  connFrozen: string
+  connFrozenHint: string
+
+  // Node page — Fiber transfer & invoice dialogs (clickable 出金/入金 KPIs)
+  fiberSendKicker: string
+  fiberSendTitle: string
+  fiberSendDesc: string
+  fiberInvoiceKicker: string
+  fiberInvoiceTitle: string
+  fiberInvoiceDesc: string
+  fiberTargetInvoice: string
+  fiberTargetInvoicePh: string
+  fiberInvoiceRequired: string
+  fiberAmount: string
+  fiberMax: string
+  fiberCapOutbound: string
+  fiberCapInbound: string
+  fiberConfirmSend: string
+  fiberGenerate: string
+  fiberInvoiceReady: string
+  fiberInvoiceHint: string
+  fiberAmountRequired: string
+  fiberOverCap: string
+  fiberSentToast: string
+  fiberGeneratedToast: string
+  fiberDone: string
 
   // Node page — create + delete actions
   nodeNewChannel: string
   nodeNewConnection: string
   nodeRefresh: string
   nodeRefreshToast: string
+  nodeRefreshFailed: string
   nodeFormPeerAlias: string
   nodeFormPeerAddr: string
   nodeFormCapacity: string
   nodeFormBaseFee: string
+  nodeFormBaseFeeHelp: string
   nodeFormFeeRate: string
+  nodeFormFeeRateHelp: string
   nodeFormCancel: string
   nodeFormCreate: string
   nodeCreateToast: string
@@ -261,17 +333,26 @@ export type Messages = {
   nodeDeleteConfirm: string
   nodeDeleteCancel: string
   nodeDeleteToast: string
+  nodeDeleteFailed: string
 
   // Node control panel
   nodeAlias: string
   fiberPubkey: string
   fiberAddr: string
+  fiberVersion: string
   chain: string
   nodeRunning: string
   nodeStopped: string
   nodeStart: string
+  nodeStarting: string
+  nodePreparing: string
+  nodeStartFailed: string
+  nodeStartLocked: string
+  nodeStartNoWallet: string
   nodeStop: string
   nodeConfig: string
+  nodePeerPubkey: string
+  nodePeerAddr: string
   stopNodeTitle: string
   stopNodeBody: string
   nodeStoppedToast: string

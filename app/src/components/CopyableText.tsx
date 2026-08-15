@@ -14,11 +14,14 @@ export function CopyableText({
   value,
   display,
   className = '',
+  iconPosition = 'trailing',
 }: {
   value: string
   /** Optional shorter text to render while still copying the full `value`. */
   display?: string
   className?: string
+  /** Where the copy icon sits. `leading` keeps right-aligned text from shifting left. */
+  iconPosition?: 'leading' | 'trailing'
 }) {
   const { t } = useLocale()
   const [copied, setCopied] = useState(false)
@@ -47,31 +50,36 @@ export function CopyableText({
     }
   }
 
+  const copyIcon = (
+    <svg
+      viewBox="0 0 24 24"
+      width="12"
+      height="12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className="copyable-icon"
+    >
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+    </svg>
+  )
+
   return (
     <span
-      className={`copyable${copied ? ' copied' : ''}${className ? ` ${className}` : ''}`}
+      className={`copyable${copied ? ' copied' : ''}${iconPosition === 'leading' ? ' icon-leading' : ''}${className ? ` ${className}` : ''}`}
       onClick={handleCopy}
       role="button"
       tabIndex={0}
       onKeyDown={handleKeyDown}
       aria-label={`${t.copied}: ${value}`}
     >
+      {iconPosition === 'leading' && copyIcon}
       <span className="copyable-text">{display ?? value}</span>
-      <svg
-        viewBox="0 0 24 24"
-        width="12"
-        height="12"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden
-        className="copyable-icon"
-      >
-        <rect x="9" y="9" width="11" height="11" rx="2" />
-        <path d="M5 15V5a2 2 0 0 1 2-2h10" />
-      </svg>
+      {iconPosition === 'trailing' && copyIcon}
       {copied && (
         <span className="copyable-toast" aria-live="polite">
           {t.copied}
