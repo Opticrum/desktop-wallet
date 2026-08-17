@@ -127,6 +127,8 @@ impl BackendBundle {
       provider.clone(),
       wallet.clone(),
       testnet,
+      // Separate connection for the personal-order cache (SQLite is cheap).
+      Some(db::init_db(&cfg.database_url)?),
     ));
 
     // Node + channels: attached fiber node at the default config's RPC address

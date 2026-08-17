@@ -44,15 +44,15 @@ cd app && npm install && npm run dev
 # Frozen reference mockup standalone (:5173) — visual comparison only
 npm run mockup:dev
 
-# Rust shell static check
-cd src-tauri && cargo check
+# Rust shell static check — clippy must pass on every Rust change
+cd src-tauri && cargo check && cargo clippy
 ```
 
 - `npm run tauri:dev` auto-starts `app/`'s vite dev server (`beforeDevCommand`) and opens the native window at `http://localhost:5174`.
 - `npm run tauri:build` runs `beforeBuildCommand` (build `app/`) then produces the OS bundle from `app/dist`.
 - **Ports: mockup = 5173, app = 5174 — keep them distinct.** The WebView in dev loads `:5174`; in production it loads `../app/dist` over the tauri custom protocol.
 - Window config lives in `src-tauri/tauri.conf.json` (identifier `com.opticrum.wallet`, min 1100×700, default 1440×900).
-- No test suite exists. `tsc -b` (part of `app/`'s `npm run build`) and `cargo check` are the only static checks.
+- No test suite exists. `tsc -b` (part of `app/`'s `npm run build`) is the only frontend static check; **every Rust change must pass `cargo clippy`** (and `cargo check`, which clippy also runs) in `src-tauri/` before it is considered done.
 
 ## High-Level Architecture
 
@@ -73,7 +73,7 @@ StrictMode
 
 **Shell ↔ frontend boundary:**
 - Dev: OS WebView loads `http://localhost:5174` (vite). Production: WebView loads `../app/dist` over the tauri protocol.
-- Frontend talks to Rust only through `@tauri-apps/api` `invoke()` (IPC commands). The 30-command surface from `docs/ipc/ipc-api.md` is implemented in `src-tauri/src/commands.rs` (wire types in `wire.rs`, mock datasets in `mock_data.rs`, shared store in `state.rs`); the frontend transport lives in `app/src/api/` (`transport.ts` maps the docs' `<domain>.<verb>` names to Tauri's underscore fn names).
+- Frontend talks to Rust only through `@tauri-apps/api` `invoke()` (IPC commands). The 37-command surface from `docs/ipc/ipc-api.md` is implemented in `src-tauri/src/commands.rs` (wire types in `wire.rs`, mock datasets in `mock_data.rs`, shared store in `state.rs`); the frontend transport lives in `app/src/api/` (`transport.ts` maps the docs' `<domain>.<verb>` names to Tauri's underscore fn names). OS-integration commands (`node.fnn_cli_*`, `node.open_url`) live in `src-tauri/src/fnn_cli.rs`, and the host/tray commands (`app.set_locale`, `app.exit`) live in `src-tauri/src/tray.rs` — neither in the core.
 - The app marketplace is the only part that should `fetch` a remote catalog; wallet/channels/node/liquidity stay local (invoke → Rust).
 
 **Styling:** plain CSS in `app/src/styles/` — `tokens.css` (CSS variables for both `[data-theme='light']` and `[data-theme='dark']`, slate gray + teal accent, default dark) and `app.css` (single stylesheet). Never hardcode colors.
@@ -93,6 +93,7 @@ StrictMode
 - **Visual language:** slate neutrals + teal accent. Avoid purple gradients, generic glassmorphism, Inter-as-only-font defaults. System font stack already declared in `tokens.css`.
 - **Mock data realism:** fake but plausible — real-shaped txids, pubkey prefixes, CKB amounts, timestamps. New datasets go in `app/src/mock/`.
 - **Rust shell discipline:** keep `src-tauri/` commands thin; put logic in a testable crate following the sibling repos' patterns (generic over traits, in-memory fakes for tests).
+- **Clippy gate:** every Rust change (shell `src-tauri/` or the `core/` crate) must end clean under `cargo clippy` — no warnings, not just no errors. Run `cargo clippy` (optionally `cargo fmt --check`) before finishing.
 
 ## Reference Files
 
@@ -101,4 +102,4 @@ StrictMode
 3. `AGENTS.md` — accumulated user preferences and workspace facts; updated as decisions get made.
 4. `mockup/` — the frozen reference; diff `app/` work against it visually before shipping UI changes.
 5. `src-tauri/tauri.conf.json` — window + build configuration.
-6. `docs/ipc/` — IPC 契约文档：`ipc-api.md`（30 个命令的完整命令面 + wire type + 约定）、`sdk-coverage-gap.md`（以 wallet 渲染数据为基线的 SDK 覆盖缺口矩阵）。
+6. `docs/ipc/` — IPC 契约文档：`ipc-api.md`（37 个命令的完整命令面 + wire type + 约定）、`sdk-coverage-gap.md`（以 wallet 渲染数据为基线的 SDK 覆盖缺口矩阵）。

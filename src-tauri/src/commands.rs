@@ -5,15 +5,39 @@
 //! logic lives here — it all lives in `opticrum-wallet-core`.
 
 use opticrum_wallet_core::wire::*;
-use tauri::State;
+use tauri::{AppHandle, State};
 
+use crate::fnn_cli::FnnCliStatus;
 use crate::AppState;
+
+// ── app ───────────────────────────────────────────────────────────────────────
+
+/// Sync the UI locale to the shell so native tray menu text stays bilingual.
+#[tauri::command]
+pub fn app_set_locale(app: AppHandle, locale: String) -> Result<(), CommandError> {
+  crate::tray::set_locale(&app, &locale);
+  Ok(())
+}
+
+/// Actually quit — invoked by the frontend after the tray-exit risk prompt is
+/// confirmed. `AppHandle::exit` terminates the process without emitting a
+/// window `CloseRequested`, so it is not intercepted by the hide-to-tray handler.
+#[tauri::command]
+pub fn app_exit(app: AppHandle) -> Result<(), CommandError> {
+  app.exit(0);
+  Ok(())
+}
 
 // ── wallet ───────────────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn wallet_get_summary(state: State<'_, AppState>) -> Result<WalletSummary, CommandError> {
   state.0.wallet.get_summary().await
+}
+
+#[tauri::command]
+pub async fn wallet_get_status(state: State<'_, AppState>) -> Result<WalletStatus, CommandError> {
+  state.0.wallet.get_status().await
 }
 
 #[tauri::command]
@@ -148,6 +172,24 @@ pub async fn node_save_config(
   state.0.node.save_config(config).await
 }
 
+#[tauri::command]
+pub async fn node_fnn_cli_status() -> Result<FnnCliStatus, CommandError> {
+  Ok(FnnCliStatus {
+    installed: crate::fnn_cli::is_installed(),
+    install_url: crate::fnn_cli::FNN_CLI_INSTALL_URL.to_string(),
+  })
+}
+
+#[tauri::command]
+pub async fn node_fnn_cli_open(url: String) -> Result<(), CommandError> {
+  crate::fnn_cli::open_terminal(&url).map_err(CommandError::io)
+}
+
+#[tauri::command]
+pub async fn node_open_url(url: String) -> Result<(), CommandError> {
+  crate::fnn_cli::open_url(&url).map_err(CommandError::io)
+}
+
 // ── channels ─────────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -212,6 +254,13 @@ pub async fn liquidity_get_orders(
   scope: Option<String>,
 ) -> Result<Vec<LiquidityOrder>, CommandError> {
   state.0.liquidity.get_orders(scope).await
+}
+
+#[tauri::command]
+pub async fn liquidity_refresh_orders(
+  state: State<'_, AppState>,
+) -> Result<Vec<LiquidityOrder>, CommandError> {
+  state.0.liquidity.refresh_orders().await
 }
 
 #[tauri::command]

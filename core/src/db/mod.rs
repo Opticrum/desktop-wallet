@@ -9,9 +9,18 @@ use std::path::Path;
 
 use crate::wire::CommandError;
 
+pub mod orders_cache;
 pub mod schema;
 pub mod txs_cache;
 pub mod wallets;
+
+/// Any Diesel error surfaces as an internal `CommandError` (keeps `Connection::transaction`
+/// closures usable with our error type).
+impl From<diesel::result::Error> for CommandError {
+  fn from(value: diesel::result::Error) -> Self {
+    CommandError::internal(format!("database error: {value}"))
+  }
+}
 
 /// Open the SQLite database and run migrations.
 ///

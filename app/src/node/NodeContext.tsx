@@ -9,6 +9,10 @@ type NodeCtx = {
   /** CKB chain the node is configured for — drives the liquidity market network. */
   chain: Chain
   setChain: (chain: Chain) => void
+  /** Whether the embedded node is up and fully started — gates every action
+   *  that needs the node (出金/入金, liquidity 注入/抽离, publish/cancel). */
+  running: boolean
+  starting: boolean
 }
 
 const NodeContext = createContext<NodeCtx | null>(null)
@@ -17,21 +21,37 @@ export function NodeProvider({ children }: { children: ReactNode }) {
   // Authoritative chain comes from `node.get_runtime` (persisted config);
   // `setChain` is called with the result of `node.save_config`.
   const [chain, setChain] = useState<Chain>('testnet')
+  // Optimistic default — the mock runtime is up; real node resolves on the
+  // first poll. Conservative readers should gate on `running && !starting`.
+  const [running, setRunning] = useState(true)
+  const [starting, setStarting] = useState(false)
 
   useEffect(() => {
     let alive = true
-    node
-      .getRuntime()
-      .then((r) => {
-        if (alive) setChain(r.chain)
-      })
-      .catch(() => {})
+    const poll = () =>
+      node
+        .getRuntime()
+        .then((r) => {
+          if (!alive) return
+          setChain(r.chain)
+          setRunning(r.running)
+          setStarting(r.starting)
+        })
+        .catch(() => {})
+    poll()
+    // Poll so node-dependent actions disable promptly when the node stops and
+    // re-enable once it is back up (mirrors NodeControlPanel's cadence).
+    const id = window.setInterval(poll, 5000)
     return () => {
       alive = false
+      window.clearInterval(id)
     }
   }, [])
 
-  const value = useMemo(() => ({ chain, setChain }), [chain])
+  const value = useMemo(
+    () => ({ chain, setChain, running, starting }),
+    [chain, running, starting],
+  )
 
   return <NodeContext.Provider value={value}>{children}</NodeContext.Provider>
 }

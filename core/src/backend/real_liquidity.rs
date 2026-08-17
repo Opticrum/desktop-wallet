@@ -36,8 +36,11 @@ use opticrum_sdk::{
   },
 };
 
+use diesel::sqlite::SqliteConnection;
+
 use crate::backend::SigningWallet;
 use crate::chain::chain_provider::ChainProvider;
+use crate::db::orders_cache;
 use crate::state::SidecarEntry;
 use crate::wallet::{address, signer};
 use crate::wire::*;
@@ -330,6 +333,10 @@ pub struct RealLiquidityBackend<T: RPC> {
   /// Local metadata for orders this wallet published (`rental_days`/`created`
   /// aren't on-chain). In-memory in P4; DB persistence is a later refinement.
   sidecar: Mutex<HashMap<String, SidecarEntry>>,
+  /// Personal-order cache (`cached_orders`). `Some` in production so `get_orders`
+  /// reads cached cells instead of re-scanning the chain; `None` in tests (always
+  /// scan, no persistence).
+  db: Option<Mutex<SqliteConnection>>,
 }
 
 /// Run a blocking closure that internally awaits non-`Send` futures (the SDK
@@ -350,6 +357,7 @@ impl<T: RPC> RealLiquidityBackend<T> {
     provider: Arc<dyn ChainProvider>,
     wallet: Arc<dyn SigningWallet>,
     testnet: bool,
+    db: Option<SqliteConnection>,
   ) -> Self {
     Self {
       rpc,
@@ -357,6 +365,7 @@ impl<T: RPC> RealLiquidityBackend<T> {
       wallet,
       testnet,
       sidecar: Mutex::new(HashMap::new()),
+      db: db.map(Mutex::new),
     }
   }
 
@@ -405,6 +414,43 @@ impl<T: RPC> RealLiquidityBackend<T> {
         vec![]
       }
     }
+  }
+
+  /// Map scanned orders to their wire shape, merging the local sidecar and
+  /// deriving on-chain creation time where the sidecar has no entry.
+  async fn orders_to_wire(&self, orders: Vec<OrderInfo>) -> Vec<LiquidityOrder> {
+    // Snapshot the sidecar so the async creation-time lookups don't hold the lock.
+    let sidecar = self.sidecar.lock().unwrap().clone();
+    let mut out = Vec::with_capacity(orders.len());
+    for o in &orders {
+      let mut w = order_to_wire(o);
+      if let Some(e) = sidecar.get(&w.outpoint) {
+        w.rental_days = Some(e.rental_days);
+        w.created_at_ms = Some(e.created_at_ms);
+      }
+      // Orders that predate local tracking have no sidecar entry — the deposit
+      // is on-chain (see `order_to_wire`), the creation time is derived from the
+      // order's own tx on-chain, and the rental term is estimated from the rent
+      // fund + rate (the buyer-chosen sidecar term wins when present).
+      if w.created_at_ms.is_none() {
+        w.created_at_ms = self.order_creation_ms(&o.order_outpoint.tx_hash).await;
+      }
+      if w.rental_days.is_none() {
+        w.rental_days = estimate_order_rental_days(o);
+      }
+      out.push(w);
+    }
+    out
+  }
+
+  /// Replace the personal-order cache with `orders` and mark it primed.
+  fn write_orders_cache(&self, orders: &[LiquidityOrder]) -> Result<(), CommandError> {
+    if let Some(db) = &self.db {
+      let mut conn = db.lock().unwrap();
+      orders_cache::replace_all(&mut conn, orders)?;
+      orders_cache::mark_primed(&mut conn)?;
+    }
+    Ok(())
   }
 
   /// Wallet identity + key, erroring when locked.
@@ -530,30 +576,56 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
   }
 
   async fn get_orders(&self, scope: Option<String>) -> Result<Vec<LiquidityOrder>, CommandError> {
-    let orders = self.scan_orders_or_empty().await;
-    let orders = self.own_orders(scope.as_deref(), orders);
-    // Snapshot the sidecar so the async creation-time lookups don't hold the lock.
-    let sidecar = self.sidecar.lock().unwrap().clone();
-    let mut out = Vec::with_capacity(orders.len());
-    for o in &orders {
-      let mut w = order_to_wire(o);
-      if let Some(e) = sidecar.get(&w.outpoint) {
-        w.rental_days = Some(e.rental_days);
-        w.created_at_ms = Some(e.created_at_ms);
+    // Personal orders ('mine', the default) read from the local cache once a
+    // scan has primed it — order outpoints are immutable, so loading skips the
+    // expensive chain scan until the user explicitly refreshes.
+    if scope.is_none_or(|s| s == "mine") {
+      // A locked wallet can't derive its lock script, so it can't determine
+      // which cells are its own — return nothing (and don't leak the cache).
+      if self.wallet_lock_hash().is_none() {
+        return Ok(vec![]);
       }
-      // Orders that predate local tracking have no sidecar entry — the deposit
-      // is on-chain (see `order_to_wire`), the creation time is derived from the
-      // order's own tx on-chain, and the rental term is estimated from the rent
-      // fund + rate (the buyer-chosen sidecar term wins when present).
-      if w.created_at_ms.is_none() {
-        w.created_at_ms = self.order_creation_ms(&o.order_outpoint.tx_hash).await;
+      if let Some(db) = &self.db {
+        let mut conn = db.lock().unwrap();
+        if orders_cache::is_primed(&mut conn)? {
+          return orders_cache::list_orders(&mut conn);
+        }
       }
-      if w.rental_days.is_none() {
-        w.rental_days = estimate_order_rental_days(o);
-      }
-      out.push(w);
+      // First run / cache not primed — scan the chain. On failure return empty
+      // WITHOUT priming, so the next load retries instead of freezing on a bad
+      // cache (an offline first run must not look like "0 orders").
+      let orders = match self.scan_orders().await {
+        Ok(o) => o,
+        Err(e) => {
+          log::warn!("liquidity orders unavailable (node offline?): {e}");
+          return Ok(vec![]);
+        }
+      };
+      let orders = self.own_orders(Some("mine"), orders);
+      let wired = self.orders_to_wire(orders).await;
+      self.write_orders_cache(&wired)?;
+      return Ok(wired);
     }
-    Ok(out)
+    // 'all' — scan, no caching (cache is personal-order scoped).
+    let orders = self.scan_orders_or_empty().await;
+    let orders = self.own_orders(Some("all"), orders);
+    Ok(self.orders_to_wire(orders).await)
+  }
+
+  async fn refresh_orders(&self) -> Result<Vec<LiquidityOrder>, CommandError> {
+    // Re-scan the chain and sync the cache. Failure returns empty without
+    // touching the cache (stale data stays readable offline).
+    let orders = match self.scan_orders().await {
+      Ok(o) => o,
+      Err(e) => {
+        log::warn!("liquidity refresh unavailable (node offline?): {e}");
+        return Ok(vec![]);
+      }
+    };
+    let orders = self.own_orders(Some("mine"), orders);
+    let wired = self.orders_to_wire(orders).await;
+    self.write_orders_cache(&wired)?;
+    Ok(wired)
   }
 
   async fn get_matches(&self, scope: Option<String>) -> Result<Vec<LiquidityMatch>, CommandError> {
@@ -596,6 +668,8 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
         "capacity and rent must be greater than 0",
       ));
     }
+    // The closure below moves `fiber_address` — keep a copy for the cache entry.
+    let fiber_address_cached = fiber_address.clone();
     let (addr, sk) = self.signing_identity()?;
     let buyer = self.wallet_address(&addr)?;
     let secp = Secp256k1::new();
@@ -647,6 +721,28 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
         deposit_ckb: rent_capacity_shannons as f64 / CKB_DECIMAL as f64,
       },
     );
+    // Persist the new order into the personal cache immediately — its outpoint
+    // is immutable, so the next load shows it without a re-scan.
+    let created_at_ms = crate::backend::mock::now_ms();
+    let new_order = LiquidityOrder {
+      outpoint: outpoint.clone(),
+      channel_capacity_ckb: capacity_shannons as f64 / CKB_DECIMAL as f64,
+      channel_capacity_shannons: capacity_shannons,
+      shannons_per_block,
+      annual_yield_bps: rent_per_block_to_annual_yield(shannons_per_block, capacity_shannons)
+        * 10_000.0,
+      deposit_ckb: rent_capacity_shannons as f64 / CKB_DECIMAL as f64,
+      rental_days: Some(rental_days),
+      fiber_address: fiber_address_cached,
+      xudt_amount: "0".to_string(),
+      created_at_ms: Some(created_at_ms),
+      status: OrderStatus::Open,
+    };
+    if let Some(db) = &self.db {
+      let mut conn = db.lock().unwrap();
+      orders_cache::upsert_order(&mut conn, &new_order)?;
+      orders_cache::mark_primed(&mut conn)?;
+    }
     Ok(PublishOrderResult {
       order_outpoint: outpoint,
       tx_hash,
@@ -903,6 +999,7 @@ mod tests {
       Arc::new(MockChainProvider::new()),
       Arc::new(MockSigningWallet(MockSigningWallet::test_key())),
       true,
+      None, // tests: no cache — always scan
     )
   }
 
@@ -970,6 +1067,7 @@ mod tests {
       }),
       Arc::new(MockSigningWallet(MockSigningWallet::test_key())),
       true,
+      None,
     );
     // Creation time = the order tx's block timestamp, derived on-chain.
     assert_eq!(
@@ -1039,6 +1137,7 @@ mod tests {
       Arc::new(MockChainProvider::new()),
       Arc::new(LockedSigningWallet),
       true,
+      None,
     );
     assert_eq!(backend.own_orders(Some("mine"), vec![test_order()]).len(), 0);
     assert_eq!(backend.own_matches(Some("mine"), vec![test_match(false)]).len(), 0);
@@ -1168,7 +1267,7 @@ mod tests {
     fake.insert_fake_cell(fake_outpoint(), user_cell, Some(fake_header_view(1, 1, 1)));
 
     let provider = Arc::new(MockChainProvider::new());
-    let backend = RealLiquidityBackend::new(fake, provider.clone(), Arc::new(wallet), true);
+    let backend = RealLiquidityBackend::new(fake, provider.clone(), Arc::new(wallet), true, None);
 
     let result = backend
       .publish_order(

@@ -37,6 +37,12 @@ export type Messages = {
   tipHeight: string
   notFound: string
 
+  // System tray — exit risk prompt
+  trayExitTitle: string
+  trayExitBody: string
+  trayQuit: string
+  trayCancel: string
+
   // Sidebar intent blocks
   wallet: string
   liquidityMarket: string
@@ -65,6 +71,7 @@ export type Messages = {
   walletCreated: string
   walletImportFailed: string
   walletPasswordRequired: string
+  walletPasswordWrong: string
   walletNone: string
   walletNoneHint: string
   walletRefreshing: string
@@ -190,6 +197,8 @@ export type Messages = {
   lmRevokeOrder: string
   lmDaysUnit: string
   lmBack: string
+  /** Pool notice shown while the wallet is locked (cells frozen). */
+  lmWalletLockedHint: string
   lmDwell: string
   lmRemaining: string
   lmRemainingRent: string
@@ -329,6 +338,8 @@ export type Messages = {
   nodeRemovePeer: string
   nodeConfirmDeleteTitle: string
   nodeConfirmDeleteChannelBody: string
+  nodeForceCloseTitle: string
+  nodeForceCloseBody: string
   nodeConfirmDeletePeerBody: string
   nodeDeleteConfirm: string
   nodeDeleteCancel: string
@@ -340,6 +351,12 @@ export type Messages = {
   fiberPubkey: string
   fiberAddr: string
   fiberVersion: string
+  fiberPort: string
+  fnnCliOpen: string
+  fnnCliNotInstalledTitle: string
+  fnnCliNotInstalledBody: string
+  fnnCliInstall: string
+  fnnCliOpenFailed: string
   chain: string
   nodeRunning: string
   nodeStopped: string
@@ -349,6 +366,8 @@ export type Messages = {
   nodeStartFailed: string
   nodeStartLocked: string
   nodeStartNoWallet: string
+  /** Tooltip on node-dependent actions while the node is down. */
+  nodeNotRunning: string
   nodeStop: string
   nodeConfig: string
   nodePeerPubkey: string

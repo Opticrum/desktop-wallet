@@ -61,3 +61,18 @@ diesel::table! {
         updated_at -> Text,
     }
 }
+
+diesel::table! {
+    cached_orders (outpoint) {
+        outpoint -> Text,
+        data -> Text,
+        synced_at -> Text,
+    }
+}
+
+diesel::table! {
+    orders_cache_meta (id) {
+        id -> Integer,
+        primed_at -> Text,
+    }
+}

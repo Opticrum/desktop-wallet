@@ -1,10 +1,12 @@
 mod commands;
+mod fnn_cli;
+mod tray;
 
 use std::sync::Arc;
 
 use opticrum_wallet_core::backend::{BackendBundle, BackendConfig, BackendMode};
 use opticrum_wallet_core::wire::Chain;
-use tauri::Manager;
+use tauri::{Manager, WindowEvent};
 
 /// Tauri-managed shared state — the backend bundle the commands dispatch to.
 pub struct AppState(pub Arc<BackendBundle>);
@@ -68,11 +70,29 @@ pub fn run() {
       app.manage(tauri::async_runtime::block_on(AppState::new(
         backend_config(app),
       )));
+      // System tray — created after the backend state so the status poller can
+      // read the live node/watchtower runtime.
+      tray::setup(app)?;
       Ok(())
     })
+    // Closing the window hides it to the tray instead of quitting — the fiber
+    // node keeps running in the background. Quitting goes through the tray's
+    // 退出 item (risk prompt) → `app.exit`, which bypasses this handler.
+    .on_window_event(|window, event| {
+      if let WindowEvent::CloseRequested { api, .. } = event {
+        if window.label() == "main" {
+          api.prevent_close();
+          let _ = window.hide();
+        }
+      }
+    })
     .invoke_handler(tauri::generate_handler![
+      // app
+      commands::app_set_locale,
+      commands::app_exit,
       // wallet
       commands::wallet_get_summary,
+      commands::wallet_get_status,
       commands::wallet_get_addresses,
       commands::wallet_get_transactions,
       commands::wallet_unlock,
@@ -89,6 +109,9 @@ pub fn run() {
       commands::node_get_logs,
       commands::node_get_config,
       commands::node_save_config,
+      commands::node_fnn_cli_status,
+      commands::node_fnn_cli_open,
+      commands::node_open_url,
       // channels
       commands::channels_list,
       commands::channels_connect_peer,
@@ -98,6 +121,7 @@ pub fn run() {
       // liquidity
       commands::liquidity_get_dashboard,
       commands::liquidity_get_orders,
+      commands::liquidity_refresh_orders,
       commands::liquidity_get_matches,
       commands::liquidity_get_matches_near_exhaustion,
       commands::liquidity_publish_order,

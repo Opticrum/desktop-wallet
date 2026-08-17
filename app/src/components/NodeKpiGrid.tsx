@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocale } from '../i18n/LocaleContext'
-import { channels, node } from '../api/client'
+import { useNode } from '../node/NodeContext'
+import { channels } from '../api/client'
 import type { ChannelList } from '../api/types'
 import { FiberSendModal } from './FiberSendModal'
 import { FiberInvoiceModal } from './FiberInvoiceModal'
@@ -41,6 +42,7 @@ export function NodeKpiGrid({
   onToast?: (msg: string) => void
 }) {
   const { t } = useLocale()
+  const { running } = useNode()
   const [data, setData] = useState<ChannelList | null>(null)
   const [sendOpen, setSendOpen] = useState(false)
   const [invoiceOpen, setInvoiceOpen] = useState(false)
@@ -65,29 +67,13 @@ export function NodeKpiGrid({
     load()
   }, [load, refreshKey])
 
-  // The Fiber node starts/restarts independently of this component — poll the
-  // runtime and re-fetch the overview on the stopped→running transition so the
-  // node/channel KPIs catch up to the reconnected peers (mirrors the peers list).
-  const [running, setRunning] = useState(true)
+  // The Fiber node starts/restarts independently of this component — watch the
+  // runtime from NodeContext and re-fetch the overview on the stopped→running
+  // transition so the node/channel KPIs catch up to the reconnected peers
+  // (mirrors the peers list). `running` also disables 出金/入金 while down.
   const wasRunning = useRef(running)
   const runningRef = useRef(running)
   const restartRetries = useRef<number[]>([])
-  useEffect(() => {
-    let alive = true
-    const poll = () =>
-      node
-        .getRuntime()
-        .then((r) => {
-          if (alive) setRunning(r.running)
-        })
-        .catch(() => {})
-    poll()
-    const id = window.setInterval(poll, 5000)
-    return () => {
-      alive = false
-      window.clearInterval(id)
-    }
-  }, [])
   useEffect(() => {
     const prev = wasRunning.current
     wasRunning.current = running
@@ -122,30 +108,44 @@ export function NodeKpiGrid({
           type="button"
           className="kpi kpi-btn kpi-outbound"
           onClick={() => setSendOpen(true)}
-          title={t.clickToSend}
+          disabled={!running}
+          title={running ? t.clickToSend : t.nodeNotRunning}
         >
           <div className="kpi-label">
             {t.nodeOutboundBalance} <span className="kpi-label-unit">CKB</span>
           </div>
           <div className="kpi-value">{outboundCkb.toLocaleString()}</div>
           <span className="kpi-hint">
-            <IconArrowUpRight />
-            {t.clickToSend}
+            {running ? (
+              <>
+                <IconArrowUpRight />
+                {t.clickToSend}
+              </>
+            ) : (
+              t.nodeNotRunning
+            )}
           </span>
         </button>
         <button
           type="button"
           className="kpi kpi-btn kpi-inbound"
           onClick={() => setInvoiceOpen(true)}
-          title={t.fiberInvoiceHint}
+          disabled={!running}
+          title={running ? t.fiberInvoiceHint : t.nodeNotRunning}
         >
           <div className="kpi-label">
             {t.nodeInboundBalance} <span className="kpi-label-unit">CKB</span>
           </div>
           <div className="kpi-value">{inboundCkb.toLocaleString()}</div>
           <span className="kpi-hint">
-            <IconReceive />
-            {t.fiberInvoiceHint}
+            {running ? (
+              <>
+                <IconReceive />
+                {t.fiberInvoiceHint}
+              </>
+            ) : (
+              t.nodeNotRunning
+            )}
           </span>
         </button>
         <div className="kpi">

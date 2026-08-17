@@ -246,6 +246,33 @@ const state: {
   nextChannel: 8,
 }
 
+// A ShuttingDown channel leaves the list shortly after it starts closing
+// (mirrors the on-chain close confirming) — regardless of whether it was closed
+// by the user or seeded that way. `closingSince` records when each channel began
+// closing so `channels.list` can settle them.
+const CHANNEL_SETTLE_MS = 6000
+const closingSince = new Map<string, number>()
+
+function settleChannels() {
+  const now = Date.now()
+  for (const n of state.nodes) {
+    n.channels = n.channels.filter((c) => {
+      const closing = c.state === 'ShuttingDown' || c.state === 'Closed'
+      if (!closing) return true
+      let since = closingSince.get(c.channelId)
+      if (since === undefined) {
+        since = now
+        closingSince.set(c.channelId, now)
+      }
+      if (now - since >= CHANNEL_SETTLE_MS) {
+        closingSince.delete(c.channelId)
+        return false
+      }
+      return true
+    })
+  }
+}
+
 function fakeTxHash(seed: string): string {
   let h = 0xcbf29ce484222325
   for (let i = 0; i < seed.length; i++) {
@@ -315,9 +342,17 @@ function fail(code: string, message: string): never {
 
 export async function browserInvoke<T>(cmd: string, args: Record<string, unknown> = {}): Promise<T> {
   switch (cmd) {
+    // app (host/tray) — no-op in the browser; the desktop shell owns these
+    case 'app.set_locale':
+      return null as T
+    case 'app.exit':
+      return null as T
+
     // wallet
     case 'wallet.get_summary':
       return { ...WALLET, unlocked: state.unlocked, chain: state.config.fiber.chain } as T
+    case 'wallet.get_status':
+      return { hasWallet: WALLET.hasWallet, unlocked: state.unlocked, address: WALLET.address } as T
     case 'wallet.get_addresses':
       return [{ address: WALLET.address, lockHash: '0x8e55773c1c3f5b2f1f2f6e9a8d0c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c' }] as T
     case 'wallet.get_transactions':
@@ -357,10 +392,24 @@ export async function browserInvoke<T>(cmd: string, args: Record<string, unknown
     case 'node.save_config':
       state.config = args.config as NodeConfig
       return { chain: state.config.fiber.chain, watchtower: watchtowerFromConfig(state.config) } as T
+    case 'node.fnn_cli_status':
+      return { installed: true, installUrl: 'https://github.com/nervosnetwork/fiber/tree/develop/crates/fiber-cli' } as T
+    case 'node.fnn_cli_open':
+      // No terminal in the browser — the desktop shell opens one.
+      return null as T
+    case 'node.open_url':
+      window.open(args.url as string, '_blank')
+      return null as T
 
     // channels
     case 'channels.list':
-      return { nodes: state.nodes } as T
+      // Settle any channel that has been closing past the window.
+      settleChannels()
+      // Return FRESH node/channel references so React re-renders even when the
+      // underlying state was mutated in place (settlement / close / connect) —
+      // a same-reference array would make `setNodes` bail out and the UI would
+      // keep showing stale channels.
+      return { nodes: state.nodes.map((n) => ({ ...n, channels: [...n.channels] })) } as T
     case 'channels.connect_peer': {
       const addr = args.addr as string
       const peerId = (args.pubkey as string | undefined) ?? addr.split('/p2p/')[1] ?? `peer-${state.nextChannel++}`
@@ -373,16 +422,44 @@ export async function browserInvoke<T>(cmd: string, args: Record<string, unknown
       const n = state.nextChannel++
       return { temp_id: `temp-${n}`, channel_id: `ch-${String(n).padStart(2, '0')}` } as T
     }
-    case 'channels.close_channel':
+    case 'channels.close_channel': {
+      const channelId = args.channelId as string
+      const force = args.force as boolean
+      let found = false
+      for (const n of state.nodes) {
+        const idx = n.channels.findIndex((c) => c.channelId === channelId)
+        if (idx === -1) continue
+        found = true
+        const ch = n.channels[idx]
+        if (force || ch.state === 'ShuttingDown' || ch.state === 'Closed') {
+          // Force close (or re-close of an already-shutting-down channel) completes
+          // the close — the channel leaves the list.
+          n.channels.splice(idx, 1)
+          closingSince.delete(channelId)
+        } else {
+          // Cooperative close: the channel shows "closing" briefly, then settles
+          // off the list shortly after (handled by `settleChannels` on the next
+          // `channels.list`, mirroring the on-chain close confirming).
+          n.channels[idx] = { ...ch, state: 'ShuttingDown' }
+          closingSince.set(channelId, Date.now())
+        }
+        break
+      }
+      if (!found) fail('invalid_input', `channel not found: ${channelId}`)
       return null as T
+    }
 
     // liquidity
     case 'liquidity.get_dashboard':
       return dashboard() as T
     case 'liquidity.get_orders':
-      return state.orders as T
+      // Fresh array so `setOrders` re-renders after publish/cancel.
+      return [...state.orders] as T
+    case 'liquidity.refresh_orders':
+      // In-memory mock — nothing to re-scan; the store is already current.
+      return [...state.orders] as T
     case 'liquidity.get_matches':
-      return state.matches as T
+      return [...state.matches] as T
     case 'liquidity.get_matches_near_exhaustion':
       return dashboard().matches_near_exhaustion as T
     case 'liquidity.publish_order': {

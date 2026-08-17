@@ -1,7 +1,8 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { en } from './en'
 import { zh } from './zh'
 import type { Locale, Messages } from './types'
+import { app } from '../api/client'
 
 export type { Locale }
 
@@ -27,6 +28,12 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(KEY, l)
     setLocaleState(l)
   }
+
+  // Keep the native tray menu text in sync with the UI locale (no-op in the
+  // standalone browser workflow).
+  useEffect(() => {
+    app.setLocale(locale).catch(() => {})
+  }, [locale])
 
   const value = useMemo(
     () => ({ locale, setLocale, t: dict[locale] }),

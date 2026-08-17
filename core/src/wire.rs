@@ -77,6 +77,16 @@ pub struct WalletSummary {
   pub chain: Chain,
 }
 
+/// Fast wallet state — only local fields (no chain balance query), so the
+/// unlock form can render immediately without waiting for `get_summary`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WalletStatus {
+  pub has_wallet: bool,
+  pub unlocked: bool,
+  pub address: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WalletAddress {

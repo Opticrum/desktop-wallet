@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocale } from '../i18n/LocaleContext'
 import { useNode } from '../node/NodeContext'
-import { liquidity } from '../api/client'
+import { liquidity, wallet } from '../api/client'
 import { CkbTxModal, useCkbTx } from '../components/CkbTxModal'
 import {
   computeInboundSummary,
@@ -46,6 +46,8 @@ type BuyOrderModalProps = {
   open: boolean
   onClose: () => void
   onPublish: (values: PublishValues) => void
+  /** Node is down/starting — publishing is inert. */
+  disabled?: boolean
 }
 
 /**
@@ -53,7 +55,7 @@ type BuyOrderModalProps = {
  * duration); the per-block rate and APY are derived from those and shown as
  * hints, so the user never has to reason about `sh/block` directly.
  */
-function BuyOrderModal({ open, onClose, onPublish }: BuyOrderModalProps) {
+function BuyOrderModal({ open, onClose, onPublish, disabled }: BuyOrderModalProps) {
   const { t } = useLocale()
   const [capacity, setCapacity] = useState('25,000')
   const [cost, setCost] = useState('250')
@@ -123,7 +125,14 @@ function BuyOrderModal({ open, onClose, onPublish }: BuyOrderModalProps) {
         </div>
         <div className="modal-actions">
           <button className="btn-secondary" onClick={onClose}>{t.close}</button>
-          <button className="btn-primary" disabled={!valid} onClick={handlePublish}>{t.lmPublishOrder}</button>
+          <button
+            className="btn-primary"
+            disabled={!valid || disabled}
+            title={disabled ? t.nodeNotRunning : undefined}
+            onClick={handlePublish}
+          >
+            {t.lmPublishOrder}
+          </button>
         </div>
       </div>
     </div>
@@ -138,11 +147,13 @@ type AdjustDepositModalProps = {
   open: boolean
   mode: AdjustMode
   match: LiquidityMatch | null
+  /** Node is down/starting — 出入金 is inert. */
+  disabled?: boolean
   onClose: () => void
   onConfirm: (match: LiquidityMatch, mode: AdjustMode, amount: number) => void
 }
 
-function AdjustDepositModal({ open, mode, match, onClose, onConfirm }: AdjustDepositModalProps) {
+function AdjustDepositModal({ open, mode, match, disabled, onClose, onConfirm }: AdjustDepositModalProps) {
   const { t } = useLocale()
   const [amount, setAmount] = useState('')
 
@@ -175,7 +186,12 @@ function AdjustDepositModal({ open, mode, match, onClose, onConfirm }: AdjustDep
         </div>
         <div className="modal-actions">
           <button className="btn-secondary" onClick={onClose}>{t.close}</button>
-          <button className="btn-primary" disabled={!valid} onClick={handleConfirm}>
+          <button
+            className="btn-primary"
+            disabled={!valid || disabled}
+            title={disabled ? t.nodeNotRunning : undefined}
+            onClick={handleConfirm}
+          >
             {mode === 'inject' ? t.lmInject : t.lmWithdraw}
           </button>
         </div>
@@ -188,7 +204,30 @@ function AdjustDepositModal({ open, mode, match, onClose, onConfirm }: AdjustDep
 
 export function LiquidityMarket() {
   const { t } = useLocale()
-  const { chain } = useNode()
+  const { chain, running, starting } = useNode()
+
+  // Every on-chain action (发布/撤销/注入/抽离/提取) needs the node up.
+  const nodeReady = running && !starting
+
+  // Wallet lock gates the market — a locked wallet can't place trades, so the
+  // cell pool freezes and shows an unlock hint.
+  const [walletLocked, setWalletLocked] = useState(false)
+  useEffect(() => {
+    let alive = true
+    const poll = () =>
+      wallet
+        .getSummary()
+        .then((s) => {
+          if (alive) setWalletLocked(!s.unlocked)
+        })
+        .catch(() => {})
+    poll()
+    const id = window.setInterval(poll, 5000)
+    return () => {
+      alive = false
+      window.clearInterval(id)
+    }
+  }, [])
 
   const [orders, setOrders] = useState<LiquidityOrder[]>([])
   const [matches, setMatches] = useState<LiquidityMatch[]>([])
@@ -214,6 +253,57 @@ export function LiquidityMarket() {
   useEffect(() => {
     reload()
   }, [reload])
+
+  // On the lock→unlock transition, re-fetch — while locked the backend returns
+  // no orders, so fresh data arrives once the wallet can filter again.
+  const prevLockedRef = useRef(false)
+  useEffect(() => {
+    const wasLocked = prevLockedRef.current
+    prevLockedRef.current = walletLocked
+    if (wasLocked && !walletLocked) reload()
+  }, [walletLocked, reload])
+
+  // Manual refresh — the only time personal orders are re-scanned from the chain
+  // (normal loads read the local cache).
+  const [refreshing, setRefreshing] = useState(false)
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    try {
+      const [o, m] = await Promise.all([liquidity.refreshOrders(), liquidity.getMatches()])
+      setOrders(o)
+      setMatches(m)
+    } catch {
+      /* mock — best-effort */
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  // Manual refresh — re-scans personal orders from the chain (normal loads read
+  // the local cache). Rendered by the cell pool at its top-left.
+  const refreshButton = (
+    <button
+      type="button"
+      className="lm-refresh-btn"
+      onClick={handleRefresh}
+      disabled={refreshing}
+      aria-label={t.nodeRefresh}
+      title={t.nodeRefresh}
+    >
+      <svg
+        className={refreshing ? 'spin' : ''}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
+      </svg>
+    </button>
+  )
 
   const summary = useMemo(() => computeInboundSummary(matches), [matches])
 
@@ -251,14 +341,18 @@ export function LiquidityMarket() {
     () => matches.reduce((s, m) => s + m.channelCapacityCkb, 0),
     [matches],
   )
-  const splitPct =
-    orderDemandTotal + matchCapTotal > 0 ? orderDemandTotal / (orderDemandTotal + matchCapTotal) : 0.5
+  // Relative demand vs matched-capacity share — both bars read EMPTY when there
+  // is nothing to split (no fallback to a misleading 50/50 half-fill).
+  const splitTotal = orderDemandTotal + matchCapTotal
+  const orderPct = splitTotal > 0 ? (orderDemandTotal / splitTotal) * 100 : 0
+  const matchPct = splitTotal > 0 ? (matchCapTotal / splitTotal) * 100 : 0
 
   // Every CKB tx write resolves only once confirmed on-chain; the modal walks
   // the user through the wait, prints the tx hash, and reloads when it lands.
   const { ckbTxState, runCkbTx, closeCkbTx } = useCkbTx(reload)
 
   const handlePublish = async (v: PublishValues) => {
+    if (!nodeReady) return
     setBuyOpen(false)
     await runCkbTx(t.lmPublishOrder, async () => {
       const res = await liquidity.publishOrder({
@@ -274,6 +368,7 @@ export function LiquidityMarket() {
   }
 
   const handleAdjust = async (match: LiquidityMatch, mode: AdjustMode, amount: number) => {
+    if (!nodeReady) return
     setAdjust(null)
     const shannons = Math.round(amount * 1e8)
     await runCkbTx(t.lmAdjustTitle, async () => {
@@ -299,7 +394,7 @@ export function LiquidityMarket() {
   }
 
   const handleCancelOrder = async () => {
-    if (!cancelTarget) return
+    if (!cancelTarget || !nodeReady) return
     const outpoint = cancelTarget.outpoint
     try {
       await runCkbTx(t.lmCancelOrderTitle, async () => {
@@ -319,7 +414,7 @@ export function LiquidityMarket() {
   }
 
   const handleExtract = async () => {
-    if (!extractTarget) return
+    if (!extractTarget || !nodeReady) return
     const outpoint = extractTarget.outpoint
     let returned = extractTarget.depositCkb
     setExtractTarget(null)
@@ -428,6 +523,8 @@ export function LiquidityMarket() {
             mode={poolTab}
             selected={active ? active.item.outpoint : null}
             onSelect={setActive}
+            refreshButton={refreshButton}
+            disabled={walletLocked}
           />
         </div>
 
@@ -438,6 +535,7 @@ export function LiquidityMarket() {
               target={active}
               orders={orders}
               matches={matches}
+              disabled={!nodeReady}
               onClose={() => setActive(null)}
               onCancelOrder={setCancelTarget}
               onInject={(m) => setAdjust({ match: m, mode: 'inject' })}
@@ -478,9 +576,16 @@ export function LiquidityMarket() {
                 <div className="kpi-value">{orderStats.pending}</div>
               </div>
             </div>
-            <button type="button" className="btn-primary lm-buy-btn" onClick={() => setBuyOpen(true)}>
+            <button
+              type="button"
+              className="btn-primary lm-buy-btn"
+              disabled={!nodeReady}
+              title={nodeReady ? undefined : t.nodeNotRunning}
+              onClick={() => setBuyOpen(true)}
+            >
               + {t.lmBuyLiquidity}
             </button>
+            {!nodeReady && <span className="lm-node-hint">{t.nodeNotRunning}</span>}
           </section>
 
           <section className="panel lm-split">
@@ -490,14 +595,14 @@ export function LiquidityMarket() {
             <div className="lm-split-row">
               <span className="lm-split-label">{t.lmOrderDemand}</span>
               <span className="lm-split-track">
-                <span className="lm-split-fill is-order" style={{ width: `${splitPct * 100}%` }} />
+                <span className="lm-split-fill is-order" style={{ width: `${orderPct}%` }} />
               </span>
               <span className="lm-split-val">{formatCkb(orderDemandTotal)}</span>
             </div>
             <div className="lm-split-row">
               <span className="lm-split-label">{t.lmMatchCapacity}</span>
               <span className="lm-split-track">
-                <span className="lm-split-fill is-match" style={{ width: `${(1 - splitPct) * 100}%` }} />
+                <span className="lm-split-fill is-match" style={{ width: `${matchPct}%` }} />
               </span>
               <span className="lm-split-val">{formatCkb(matchCapTotal)}</span>
             </div>
@@ -507,9 +612,15 @@ export function LiquidityMarket() {
         </aside>
       </div>
 
-      <BuyOrderModal open={buyOpen} onClose={() => setBuyOpen(false)} onPublish={handlePublish} />
+      <BuyOrderModal
+        open={buyOpen}
+        disabled={!nodeReady}
+        onClose={() => setBuyOpen(false)}
+        onPublish={handlePublish}
+      />
       <AdjustDepositModal
         open={adjust !== null}
+        disabled={!nodeReady}
         mode={adjust?.mode ?? 'inject'}
         match={adjust?.match ?? null}
         onClose={() => setAdjust(null)}

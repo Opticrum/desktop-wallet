@@ -6,14 +6,14 @@ import { AppShell } from './layout/AppShell'
 import { AppDetail } from './pages/AppDetail'
 import { NewsPage } from './pages/NewsPage'
 import { ChangelogPage } from './pages/ChangelogPage'
-import { NodeDetail } from './pages/NodeDetail'
-import { LiquidityMarket } from './pages/LiquidityMarket'
+import { TrayExitHandler } from './components/TrayExitHandler'
 
 export default function App() {
   return (
     <ThemeProvider>
       <LocaleProvider>
         <NodeProvider>
+          <TrayExitHandler />
           <BrowserRouter>
             <Routes>
               <Route element={<AppShell />}>
@@ -23,9 +23,10 @@ export default function App() {
                 <Route path="news" element={<NewsPage />} />
                 <Route path="changelog" element={<ChangelogPage />} />
 
-                <Route path="node" element={<NodeDetail />} />
+                {/* node + liquidity are keep-alive in AppShell (no re-fetch on switch) */}
+                <Route path="node" element={null} />
 
-                <Route path="liquidity" element={<LiquidityMarket />} />
+                <Route path="liquidity" element={null} />
 
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>

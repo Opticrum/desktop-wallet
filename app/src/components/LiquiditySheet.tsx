@@ -27,6 +27,8 @@ type LiquiditySheetProps = {
   target: SheetTarget | null
   orders: LiquidityOrder[]
   matches: LiquidityMatch[]
+  /** Node is down/starting — all on-chain actions are inert. */
+  disabled?: boolean
   onClose: () => void
   onCancelOrder: (o: LiquidityOrder) => void
   onInject: (m: LiquidityMatch) => void
@@ -38,6 +40,7 @@ export function LiquiditySheet({
   target,
   orders,
   matches,
+  disabled,
   onClose,
   onCancelOrder,
   onInject,
@@ -141,8 +144,15 @@ export function LiquiditySheet({
         </div>
 
         <div className="lm-drawer-actions">
+          {disabled && <span className="lm-node-hint">{t.nodeNotRunning}</span>}
           {order.status === 'open' && (
-            <button type="button" className="btn-danger lm-buy-btn" onClick={() => onCancelOrder(order)}>
+            <button
+              type="button"
+              className="btn-danger lm-buy-btn"
+              disabled={disabled}
+              title={disabled ? t.nodeNotRunning : undefined}
+              onClick={() => onCancelOrder(order)}
+            >
               {t.lmRevokeOrder}
             </button>
           )}
@@ -238,16 +248,35 @@ export function LiquiditySheet({
       </div>
 
       <div className="lm-drawer-actions">
+        {disabled && <span className="lm-node-hint">{t.nodeNotRunning}</span>}
         {life.isExhausted ? (
-          <button type="button" className="btn-danger lm-buy-btn" onClick={() => onExtract(match)}>
+          <button
+            type="button"
+            className="btn-danger lm-buy-btn"
+            disabled={disabled}
+            title={disabled ? t.nodeNotRunning : undefined}
+            onClick={() => onExtract(match)}
+          >
             {t.lmExtractDelete}
           </button>
         ) : (
           <>
-            <button type="button" className="btn-danger lm-buy-btn" onClick={() => onWithdraw(match)}>
+            <button
+              type="button"
+              className="btn-danger lm-buy-btn"
+              disabled={disabled}
+              title={disabled ? t.nodeNotRunning : undefined}
+              onClick={() => onWithdraw(match)}
+            >
               {t.lmWithdraw}
             </button>
-            <button type="button" className="btn-primary lm-buy-btn" onClick={() => onInject(match)}>
+            <button
+              type="button"
+              className="btn-primary lm-buy-btn"
+              disabled={disabled}
+              title={disabled ? t.nodeNotRunning : undefined}
+              onClick={() => onInject(match)}
+            >
               {t.lmInject}
             </button>
           </>

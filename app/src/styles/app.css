@@ -7345,3 +7345,191 @@
   color: var(--danger);
   font-size: 12px;
 }
+
+/* ── Disabled node-dependent actions (node down / starting) ────────────────
+   出金/入金 cards and the liquidity-market on-chain buttons (发布/撤销/注入/
+   抽离/提取) all go inert while the node is not fully up. The `:disabled:hover`
+   overrides neutralize the normal hover lift so a disabled control never reads
+   as interactive. */
+.btn-primary:disabled,
+.btn-primary:disabled:hover,
+.btn-secondary:disabled,
+.btn-secondary:disabled:hover,
+.btn-danger:disabled,
+.btn-danger:disabled:hover {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-primary:disabled:hover {
+  background: var(--accent);
+}
+
+.btn-secondary:disabled:hover {
+  background: var(--surface-2);
+}
+
+.btn-danger:disabled:hover {
+  background: var(--danger);
+}
+
+/* Node-page 出金/入金 KPI cards — neutral dead card while the node is down.
+   The reserved hint row stays hidden until hover, where it reveals the
+   「节点还未启动」 status (muted, not the role tint) — same reveal as the
+   normal action hint, so it never promises a click that can't happen. */
+.node-kpi-grid .kpi-btn:disabled,
+.node-kpi-grid .kpi-btn:disabled:hover,
+.node-kpi-grid .kpi-btn:disabled:focus-visible {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.node-kpi-grid .kpi-btn:disabled:hover,
+.node-kpi-grid .kpi-btn:disabled:focus-visible {
+  background: var(--surface);
+}
+
+.node-kpi-grid .kpi-btn:disabled:hover .kpi-hint,
+.node-kpi-grid .kpi-btn:disabled:focus-visible .kpi-hint {
+  color: var(--ink-3);
+}
+
+/* Node-down hint — amber status dot + muted copy, shown next to the disabled
+   node-dependent actions (购买流动性, drawer 注入/抽离/撤销/提取). */
+.lm-node-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--ink-3);
+}
+.lm-node-hint::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warn);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 16%, transparent);
+}
+
+/* Fiber 端口 value — the URL itself is the 打开 fnn-cli trigger (rendered only
+   while the node is up). Hover/focus reveals a terminal icon + hint to the
+   right of the URL, mirroring CopyableText's hover reveal; clicking runs the
+   same flow as the old button (detect fnn-cli → open terminal / install guide).
+   The hint is `pointer-events: none` so it never intercepts the click. */
+.ncp-cli-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s ease;
+}
+.ncp-cli-trigger:hover,
+.ncp-cli-trigger:focus-visible {
+  color: var(--accent);
+  outline: none;
+}
+.ncp-cli-trigger-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  pointer-events: none;
+}
+.ncp-cli-trigger:hover .ncp-cli-trigger-hint,
+.ncp-cli-trigger:focus-visible .ncp-cli-trigger-hint {
+  opacity: 1;
+  transform: translateX(0);
+}
+.ncp-cli-trigger-hint svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Cell-pool manual refresh — re-scans personal orders from the chain (normal
+   loads read the local cache). Floats at the pool's top-left, mirroring the
+   corner donut on the right. */
+.lm-refresh-btn {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+  z-index: 3;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.lm-refresh-btn:hover {
+  color: var(--accent);
+  border-color: var(--line-strong);
+}
+.lm-refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.lm-refresh-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Keep-alive page shell — the primary pages (node / liquidity) stay mounted in
+   AppShell and are toggled by route, so switching pages never re-fetches their
+   data. */
+.app-page {
+  display: none;
+}
+.app-page.is-active {
+  display: block;
+}
+
+/* Wallet-locked pool — no cells are shown (a locked wallet can't filter which
+   cells are its own), so the cell layer is hidden and only the unlock hint
+   appears. The sims keep their positions and resume on unlock. */
+.lm-pool.is-disabled .lm-pool-cells {
+  display: none;
+}
+.lm-wallet-lock-hint {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--surface);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--warn);
+  box-shadow: var(--shadow-panel);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.lm-wallet-lock-hint svg {
+  width: 13px;
+  height: 13px;
+}

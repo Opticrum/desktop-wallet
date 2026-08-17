@@ -47,7 +47,7 @@ export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
   const [channelCapacity, setChannelCapacity] = useState('1000')
   const [channelBaseFee, setChannelBaseFee] = useState('1000')
   const [channelFeeRate, setChannelFeeRate] = useState('100')
-  const [pendingCloseId, setPendingCloseId] = useState<string | null>(null)
+  const [pendingCloseId, setPendingCloseId] = useState<{ channelId: string; force: boolean } | null>(null)
   const [pendingRemoveId, setPendingRemoveId] = useState<string | null>(null)
 
   // While the Fiber node is stopped, peer/channel operations freeze — track
@@ -56,13 +56,17 @@ export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
   const [running, setRunning] = useState(true)
   useEffect(() => {
     let alive = true
-    const poll = () =>
+    const poll = () => {
       node
         .getRuntime()
         .then((r) => {
           if (alive) setRunning(r.running)
         })
         .catch(() => {})
+      // Keep the channel list fresh so settled (closing) channels drop off the
+      // UI on their own — the mock settles them past a short window.
+      load()
+    }
     poll()
     const id = window.setInterval(poll, 5000)
     return () => {
@@ -208,10 +212,10 @@ export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
     onToast(t.nodeCreateToast)
   }
 
-  const handleCloseChannel = async (id: string) => {
+  const handleCloseChannel = async (id: string, force: boolean) => {
     setPendingCloseId(null)
     try {
-      await channels.closeChannel(id, false)
+      await channels.closeChannel(id, force)
     } catch {
       /* mock — best-effort */
     }
@@ -473,7 +477,13 @@ export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
                               <td className="row-action">
                                 <button
                                   className="row-action-btn"
-                                  onClick={() => setPendingCloseId(ch.channelId)}
+                                  onClick={() =>
+                                    setPendingCloseId({
+                                      channelId: ch.channelId,
+                                      // A channel already closing needs a force close to finish.
+                                      force: stateToBucket(ch.state) === 'closing',
+                                    })
+                                  }
                                   aria-label={t.nodeCloseChannel}
                                   title={frozen ? t.connFrozen : t.nodeCloseChannel}
                                   disabled={frozen}
@@ -584,15 +594,18 @@ export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
       </div>
 
       {/* Close channel confirm */}
+      {/* Close channel confirm — force close when the channel is already closing */}
       <ConfirmModal
-        open={!!pendingCloseId}
-        title={t.nodeConfirmDeleteTitle}
-        body={t.nodeConfirmDeleteChannelBody}
+        open={pendingCloseId !== null}
+        title={pendingCloseId?.force ? t.nodeForceCloseTitle : t.nodeConfirmDeleteTitle}
+        body={pendingCloseId?.force ? t.nodeForceCloseBody : t.nodeConfirmDeleteChannelBody}
         confirmLabel={t.nodeDeleteConfirm}
         cancelLabel={t.nodeDeleteCancel}
         danger
         onCancel={() => setPendingCloseId(null)}
-        onConfirm={() => pendingCloseId && handleCloseChannel(pendingCloseId)}
+        onConfirm={() =>
+          pendingCloseId && handleCloseChannel(pendingCloseId.channelId, pendingCloseId.force)
+        }
       />
 
       {/* Disconnect node confirm */}

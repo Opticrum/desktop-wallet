@@ -6,7 +6,8 @@ import { useLocale } from '../i18n/LocaleContext'
 import { useNode } from '../node/NodeContext'
 import { node, wallet } from '../api/client'
 import { toCommandError } from '../api/types'
-import type { NodeRuntime, WatchtowerConfig } from '../api/types'
+import type { NodeConfig, NodeRuntime, WatchtowerConfig } from '../api/types'
+import { fiberRpcUrl } from '../lib/node'
 
 type Props = {
   onToast: (msg: string) => void
@@ -47,6 +48,15 @@ function IconShield() {
   )
 }
 
+function IconTerminal() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m4 17 6-6-6-6" />
+      <path d="M12 19h8" />
+    </svg>
+  )
+}
+
 /** Watchtower mode badge label — wire modes (builtin | standalone | disabled). */
 function watchtowerLabel(mode: WatchtowerConfig['mode'], t: ReturnType<typeof useLocale>['t']): string {
   if (mode === 'builtin') return t.wtBuiltin
@@ -69,6 +79,11 @@ export function NodeControlPanel({ onToast, refreshKey = 0 }: Props) {
     hasWallet: true,
     unlocked: false,
   })
+  // Persisted node config — `rpc.listening_addr` feeds the Fiber 端口 row and
+  // the fnn-cli launch URL. Refetched when the config modal closes.
+  const [config, setConfig] = useState<NodeConfig | null>(null)
+  const [installOpen, setInstallOpen] = useState(false)
+  const [installUrl, setInstallUrl] = useState<string | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -108,6 +123,16 @@ export function NodeControlPanel({ onToast, refreshKey = 0 }: Props) {
     }
   }, [])
 
+  const refetchConfig = () =>
+    node
+      .getConfig()
+      .then(setConfig)
+      .catch(() => {})
+
+  useEffect(() => {
+    refetchConfig()
+  }, [])
+
   const running = runtime?.running ?? false
   // "Starting" survives page switches: the backend reports it on the runtime,
   // and the local `startRequested` covers the window while the IPC call flies.
@@ -140,6 +165,28 @@ export function NodeControlPanel({ onToast, refreshKey = 0 }: Props) {
       onToast(`${t.nodeStartFailed}${toCommandError(e).message}`)
     } finally {
       setStartRequested(false)
+    }
+  }
+
+  // fnn-cli drives the node's RPC — pointless to open it while the node is
+  // down or still booting, so gate it like the other node-dependent actions.
+  // The RPC URL row follows the other FIBER rows (公钥/地址/版本): it shows —
+  // until the node is actually up, even though the config is always readable.
+  const nodeReady = running && !starting
+  const rpcUrl = config && nodeReady ? fiberRpcUrl(config) : null
+
+  const handleOpenFnnCli = async () => {
+    if (!nodeReady || !rpcUrl) return
+    try {
+      const status = await node.fnnCliStatus()
+      if (status.installed) {
+        await node.openFnnCli(rpcUrl)
+      } else {
+        setInstallUrl(status.installUrl)
+        setInstallOpen(true)
+      }
+    } catch (e) {
+      onToast(`${t.fnnCliOpenFailed}${toCommandError(e).message}`)
     }
   }
 
@@ -216,6 +263,36 @@ export function NodeControlPanel({ onToast, refreshKey = 0 }: Props) {
           <span className="ncp-label">{t.fiberVersion}</span>
           <span className="ncp-value mono">{runtime?.version || '—'}</span>
         </div>
+        <div className="ncp-detail-row">
+          <span className="ncp-label">{t.fiberPort}</span>
+          <span className="ncp-value mono ncp-pubkey">
+            {rpcUrl ? (
+              // The URL itself is the 打开 fnn-cli trigger — hover reveals the
+              // action hint (mirrors CopyableText), click runs the open flow.
+              <span
+                className="ncp-cli-trigger"
+                role="button"
+                tabIndex={0}
+                aria-label={t.fnnCliOpen}
+                onClick={handleOpenFnnCli}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    handleOpenFnnCli()
+                  }
+                }}
+              >
+                <span className="ncp-cli-trigger-text">{rpcUrl}</span>
+                <span className="ncp-cli-trigger-hint" aria-hidden="true">
+                  <IconTerminal />
+                  {t.fnnCliOpen}
+                </span>
+              </span>
+            ) : (
+              '—'
+            )}
+          </span>
+        </div>
       </div>
 
       {/* ── Watchtower — derived from config, displayed as a status capsule ── */}
@@ -244,9 +321,24 @@ export function NodeControlPanel({ onToast, refreshKey = 0 }: Props) {
         onCancel={() => setStopOpen(false)}
         onConfirm={handleStop}
       />
+      <ConfirmModal
+        open={installOpen}
+        title={t.fnnCliNotInstalledTitle}
+        body={t.fnnCliNotInstalledBody}
+        confirmLabel={t.fnnCliInstall}
+        cancelLabel={t.nodeDeleteCancel}
+        onCancel={() => setInstallOpen(false)}
+        onConfirm={() => {
+          setInstallOpen(false)
+          if (installUrl) node.openUrl(installUrl).catch(() => {})
+        }}
+      />
       <NodeConfigModal
         open={configOpen}
-        onClose={() => setConfigOpen(false)}
+        onClose={() => {
+          setConfigOpen(false)
+          refetchConfig()
+        }}
         onToast={onToast}
         onWatchtowerChange={setWatchtower}
       />

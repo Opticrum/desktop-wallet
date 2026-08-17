@@ -102,6 +102,15 @@ impl WalletBackend for MockBackend {
     Ok(self.guard()?.wallet_summary())
   }
 
+  async fn get_status(&self) -> Result<WalletStatus, CommandError> {
+    let s = self.guard()?.wallet_summary();
+    Ok(WalletStatus {
+      has_wallet: s.has_wallet,
+      unlocked: s.unlocked,
+      address: s.address,
+    })
+  }
+
   async fn get_addresses(&self) -> Result<Vec<WalletAddress>, CommandError> {
     Ok(self.guard()?.wallet_addresses.clone())
   }
@@ -448,6 +457,11 @@ impl LiquidityBackend for MockBackend {
         })
         .collect(),
     )
+  }
+
+  async fn refresh_orders(&self) -> Result<Vec<LiquidityOrder>, CommandError> {
+    // In-memory mock — no chain to re-scan; the store is already current.
+    self.get_orders(None).await
   }
 
   async fn get_matches(&self, _scope: Option<String>) -> Result<Vec<LiquidityMatch>, CommandError> {

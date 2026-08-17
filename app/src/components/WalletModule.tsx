@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocale } from '../i18n/LocaleContext'
 import { wallet } from '../api/client'
-import type { WalletSummary, WalletTx, WalletTxKind } from '../api/types'
+import type { WalletStatus, WalletSummary, WalletTx, WalletTxKind } from '../api/types'
 import { toCommandError } from '../api/types'
 import { addressShort, typeCounts, TX_TYPE_ORDER } from '../lib/wallet'
+import { commandErrorText } from '../lib/errors'
 import { BottomDrawer } from './BottomDrawer'
 import { QrIcon, QrModal } from './QrModal'
 import { SendDetail } from '../pages/SendDetail'
@@ -36,6 +37,9 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
   const [activityOpen, setActivityOpen] = useState(false)
 
   const [summary, setSummary] = useState<WalletSummary | null>(null)
+  // Fast wallet state (no chain query) — gates the unlock form so the password
+  // field appears immediately, independent of the slower balance/tx trace-back.
+  const [status, setStatus] = useState<WalletStatus | null>(null)
   const [txs, setTxs] = useState<WalletTx[]>([])
   // wallet-unlock state (wallet exists but locked)
   const [unlockPw, setUnlockPw] = useState('')
@@ -51,16 +55,15 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
     // Only show the refreshing veil once a refresh actually stalls (no response
     // within 3s) — fast refreshes shouldn't flash anything.
     refreshTimer.current = window.setTimeout(() => setRefreshing(true), 3000)
-    Promise.all([wallet.getSummary(), wallet.getTransactions()])
-      .then(([s, t]) => {
-        setSummary(s)
-        setTxs(t)
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (refreshTimer.current) window.clearTimeout(refreshTimer.current)
-        setRefreshing(false)
-      })
+    // Summary and transactions resolve independently — the unlock gate only waits
+    // on the (fail-fast) summary, so the password field appears without waiting
+    // for the slower tx trace-back.
+    const summary = wallet.getSummary().then(setSummary).catch(() => {})
+    const txs = wallet.getTransactions().then(setTxs).catch(() => {})
+    Promise.all([summary, txs]).finally(() => {
+      if (refreshTimer.current) window.clearTimeout(refreshTimer.current)
+      setRefreshing(false)
+    })
   }, [])
 
   useEffect(() => {
@@ -68,6 +71,24 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
     const id = window.setInterval(refresh, 15_000)
     return () => window.clearInterval(id)
   }, [refresh, refreshKey])
+
+  // Fast status poll (5s) — reflects lock/unlock without waiting for the balance.
+  useEffect(() => {
+    let alive = true
+    const poll = () =>
+      wallet
+        .getStatus()
+        .then((s) => {
+          if (alive) setStatus(s)
+        })
+        .catch(() => {})
+    poll()
+    const id = window.setInterval(poll, 5000)
+    return () => {
+      alive = false
+      window.clearInterval(id)
+    }
+  }, [])
 
   const unlockWallet = async () => {
     if (!unlockPw) {
@@ -78,9 +99,10 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
     setUnlockError(null)
     try {
       await wallet.unlock(unlockPw)
+      wallet.getStatus().then(setStatus).catch(() => {})
       refresh()
     } catch (e) {
-      setUnlockError(toCommandError(e).message)
+      setUnlockError(commandErrorText(t, toCommandError(e)))
     }
     setUnlockBusy(false)
   }
@@ -92,8 +114,8 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
     channel_close: true,
   })
 
-  // ── wallet gate: no wallet yet → create/import onboarding ─────────────
-  if (!summary) {
+  // ── wallet gate (fast status — no chain query, so it renders immediately) ──
+  if (!status) {
     return (
       <section className="panel wallet-module">
         <div className="section-head">
@@ -105,7 +127,7 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
       </section>
     )
   }
-  if (!summary.hasWallet) {
+  if (!status.hasWallet) {
     return (
       <section className="panel wallet-module">
         <div className="section-head">
@@ -118,7 +140,7 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
       </section>
     )
   }
-  if (!summary.unlocked) {
+  if (!status.unlocked) {
     return (
       <section className="panel wallet-module">
         <div className="section-head">

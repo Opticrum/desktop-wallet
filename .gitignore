@@ -1,5 +1,8 @@
 .design-check
 .superpowers
+.tmp
+
+migrations
 node_modules/
 target/
 src-tauri/target/

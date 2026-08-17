@@ -100,6 +100,10 @@ impl<T: RPC> RealWalletBackend<T> {
   }
 
   /// Compute the on-chain balance across every managed wallet address (shannons).
+  ///
+  /// Each address query fails fast (3s timeout) so `get_summary` — and the
+  /// wallet unlock gate — never blocks on a slow/unreachable RPC. A stale 0
+  /// balance updates on the next poll once the chain responds.
   async fn total_balance_shannons(&self) -> u64 {
     let children = {
       let mut conn = self.db.lock().unwrap();
@@ -107,11 +111,14 @@ impl<T: RPC> RealWalletBackend<T> {
     };
     let mut total = 0u64;
     for child in &children {
-      total += self
-        .provider
-        .get_balance_by_address(&child.ckb_address)
-        .await
-        .unwrap_or(0);
+      let balance = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        self.provider.get_balance_by_address(&child.ckb_address),
+      )
+      .await
+      .unwrap_or(Ok(0))
+      .unwrap_or(0);
+      total += balance;
     }
     total
   }
@@ -182,6 +189,25 @@ impl<T: RPC> SigningWallet for RealWalletBackend<T> {
 
 #[async_trait]
 impl<T: RPC + Send + Sync> WalletBackend for RealWalletBackend<T> {
+  /// Fast local wallet state — no chain query, so the unlock form renders
+  /// immediately without waiting for the balance.
+  async fn get_status(&self) -> Result<WalletStatus, CommandError> {
+    let has_wallet = wallet_service::hd_wallet_exists(&self.keystore_path);
+    let unlocked = self.unlocked();
+    let address = self
+      .keyring
+      .lock()
+      .unwrap()
+      .first()
+      .map(|(r, _)| r.ckb_address.clone())
+      .unwrap_or_default();
+    Ok(WalletStatus {
+      has_wallet,
+      unlocked,
+      address,
+    })
+  }
+
   async fn get_summary(&self) -> Result<WalletSummary, CommandError> {
     let has_wallet = wallet_service::hd_wallet_exists(&self.keystore_path);
     let unlocked = self.unlocked();
@@ -1001,7 +1027,9 @@ mod tests {
       .await
       .unwrap();
     let err = backend.unlock("wrong".into(), None).await.unwrap_err();
-    assert!(matches!(err, CommandError::InvalidInput(_)));
+    // Wrong password → `NotAuthorized` (distinct code so the frontend can
+    // localize it; see wallet/crypto.rs).
+    assert!(matches!(err, CommandError::NotAuthorized(_)));
   }
 
   #[tokio::test]

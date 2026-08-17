@@ -29,6 +29,14 @@ export type WalletSummary = {
   chain: Chain
 }
 
+/** `wallet.get_status` — fast local wallet state (no chain balance), used to
+ *  render the unlock form without waiting for the summary. */
+export type WalletStatus = {
+  hasWallet: boolean
+  unlocked: boolean
+  address: string
+}
+
 export type WalletAddress = {
   address: string
   lockHash: string
@@ -68,6 +76,13 @@ export type NodeLog = {
   tsMs: number
   level: LogLevel
   msg: string
+}
+
+/** `node.fnn_cli_status` — whether the local `fnn-cli` binary is on PATH,
+ *  plus the install-docs URL to jump to when it isn't. */
+export type FnnCliStatus = {
+  installed: boolean
+  installUrl: string
 }
 
 // `NodeConfig` — config.yml 1:1 (snake_case), the camelCase exception.

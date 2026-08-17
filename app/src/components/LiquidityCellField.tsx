@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useLocale } from '../i18n/LocaleContext'
 import {
   buildPoolCells,
@@ -60,28 +60,6 @@ const RING_OVERHANG = 5
 function clampAxis(value: number, r: number, size: number): number {
   if (size < 2 * r) return size / 2
   return Math.min(Math.max(value, r), size - r)
-}
-
-/** Random, mostly non-overlapping placement inside the field. */
-function placeCells(sims: SimCell[], w: number, h: number): void {
-  const placed: { x: number; y: number; r: number }[] = []
-  for (const s of sims) {
-    let x = s.r
-    let y = s.r
-    let ok = false
-    for (let attempt = 0; attempt < 60 && !ok; attempt++) {
-      x = s.r + Math.random() * Math.max(0, w - s.r * 2)
-      y = s.r + Math.random() * Math.max(0, h - s.r * 2)
-      ok = placed.every((p) => Math.hypot(x - p.x, y - p.y) >= s.r + p.r + 8)
-    }
-    placed.push({ x, y, r: s.r })
-    s.x = clampAxis(x, s.r, w)
-    s.y = clampAxis(y, s.r, h)
-    const ang = Math.random() * Math.PI * 2
-    const spd = 3 + Math.random() * 6
-    s.vx = Math.cos(ang) * spd
-    s.vy = Math.sin(ang) * spd
-  }
 }
 
 function stepSim(sims: SimCell[], w: number, h: number, dt: number, frozenKey: string | null): void {
@@ -342,6 +320,17 @@ function OverviewChart({
   return (
     <div className="lm-pool-donut" role="img" aria-label={`${count} ${mode === 'orders' ? t.mgOrderTag : t.mgMatchTag}`}>
       <svg viewBox="0 0 100 100" aria-hidden>
+        {/* Track — always visible, so the corner overview reads as present even
+            when the pool is empty (no segments → a bare ring + count). */}
+        <circle
+          cx="50"
+          cy="50"
+          r={R}
+          fill="none"
+          stroke="var(--line)"
+          strokeWidth={11}
+          transform="rotate(-90 50 50)"
+        />
         {total > 0 &&
           segments.map((seg, i) => {
             if (seg.value === 0) return null
@@ -385,9 +374,21 @@ export type LiquidityCellFieldProps = {
   selected?: string | null
   /** `null` clears the selection (the clicked cell is selected again). */
   onSelect: (t: SheetTarget | null) => void
+  /** Optional manual-refresh control, rendered at the pool's top-left. */
+  refreshButton?: ReactNode
+  /** Wallet locked — the cell drift freezes and the pool dims with a hint. */
+  disabled?: boolean
 }
 
-export function LiquidityCellField({ orders, matches, mode, selected, onSelect }: LiquidityCellFieldProps) {
+export function LiquidityCellField({
+  orders,
+  matches,
+  mode,
+  selected,
+  onSelect,
+  refreshButton,
+  disabled = false,
+}: LiquidityCellFieldProps) {
   const { t } = useLocale()
 
   // Re-render every 30s so the match life ring and order dwell hours stay live
@@ -413,6 +414,9 @@ export function LiquidityCellField({ orders, matches, mode, selected, onSelect }
   const startedRef = useRef(false)
   const cellsRef = useRef(cells)
   cellsRef.current = cells
+  /** The other tab's cell positions, persisted across tab switches so switching
+   *  never re-scatters — only the active tab animates. */
+  const savedPositions = useRef(new Map<string, { x: number; y: number; vx: number; vy: number }>())
   const writeAllRef = useRef<() => void>(() => {})
 
   // The hovered cell freezes in place while a detailed tooltip is shown; the
@@ -442,8 +446,11 @@ export function LiquidityCellField({ orders, matches, mode, selected, onSelect }
     }
   }, [selected, cells])
 
-  // Physics loop + wall bounds. Set up once per tab; data changes are
-  // reconciled in a separate effect so existing cells never teleport.
+  // Physics loop + wall bounds. Rebuilt per tab (mode): this tab's cell
+  // positions are saved to `savedPositions` before teardown and restored on the
+  // next visit, so switching tabs never re-scatters. The loop pauses when the
+  // pool leaves the viewport (page hidden via keep-alive) so it doesn't burn CPU
+  // in the background. Data changes are reconciled in a separate effect.
   useEffect(() => {
     const host = fieldRef.current
     if (!host) return
@@ -471,65 +478,117 @@ export function LiquidityCellField({ orders, matches, mode, selected, onSelect }
       raf = requestAnimationFrame(loop)
     }
 
-    // Build a sim for every current cell, then scatter them non-overlapping.
+    // Build a sim for every current cell: restore saved positions for cells seen
+    // before (so a tab switch returns them to their exact spot), scatter only the
+    // brand-new ones.
     const buildAll = () => {
       for (const c of cellsRef.current) {
         if (simMap.current.has(c.key)) continue
+        const saved = savedPositions.current.get(c.key)
         const el = cellEls.current.get(c.key) ?? null
         const d = el ? el.offsetWidth : cellDiameter(c.capacityCkb, maxCap)
-        simMap.current.set(c.key, { key: c.key, el, x: 0, y: 0, vx: 0, vy: 0, r: d / 2 + RING_OVERHANG })
+        simMap.current.set(c.key, {
+          key: c.key,
+          el,
+          x: saved?.x ?? 0,
+          y: saved?.y ?? 0,
+          vx: saved?.vx ?? 0,
+          vy: saved?.vy ?? 0,
+          r: d / 2 + RING_OVERHANG,
+        })
       }
       const { w, h } = sizeRef.current
-      if (w > 0 && h > 0) placeCells([...simMap.current.values()], w, h)
+      if (w > 0 && h > 0) {
+        const all = [...simMap.current.values()]
+        const fresh = all.filter((s) => !savedPositions.current.has(s.key))
+        if (fresh.length > 0) {
+          const placed = all.map((s) => ({ x: s.x, y: s.y, r: s.r }))
+          for (const s of fresh) {
+            for (let attempt = 0; attempt < 60; attempt++) {
+              s.x = s.r + Math.random() * Math.max(0, w - s.r * 2)
+              s.y = s.r + Math.random() * Math.max(0, h - s.r * 2)
+              if (placed.every((p) => Math.hypot(s.x - p.x, s.y - p.y) >= s.r + p.r + 8)) break
+            }
+            placed.push({ x: s.x, y: s.y, r: s.r })
+            const ang = Math.random() * Math.PI * 2
+            const spd = 3 + Math.random() * 6
+            s.vx = Math.cos(ang) * spd
+            s.vy = Math.sin(ang) * spd
+          }
+        }
+      }
       writeAll()
     }
 
-    const start = () => {
-      if (startedRef.current || !host) return
-      const { w, h } = sizeRef.current
-      if (w <= 0 || h <= 0) return
-      startedRef.current = true
-      buildAll()
-      if (!reduced) raf = requestAnimationFrame(loop)
+    let running = false
+    const startLoop = () => {
+      if (running || reduced || disabled) return
+      running = true
+      last = performance.now()
+      raf = requestAnimationFrame(loop)
+    }
+    const stopLoop = () => {
+      running = false
+      cancelAnimationFrame(raf)
     }
 
     // On resize, keep each cell's spot but pull out-of-bounds ones back inside
-    // (clamping, not re-scattering).
+    // (clamping, not re-scattering). The first real size builds the sims. When
+    // the pool is hidden (keep-alive → size 0), leave the sims untouched — the
+    // IntersectionObserver already stops the loop.
     const ro = new ResizeObserver(() => {
       sizeRef.current = { w: host.clientWidth, h: host.clientHeight }
       const { w, h } = sizeRef.current
+      if (w <= 0 || h <= 0) {
+        stopLoop()
+        return
+      }
       for (const s of simMap.current.values()) {
         s.x = clampAxis(s.x, s.r, w)
         s.y = clampAxis(s.y, s.r, h)
       }
+      if (!startedRef.current) {
+        startedRef.current = true
+        buildAll()
+      }
       writeAll()
-      start()
+      startLoop()
     })
     ro.observe(host)
 
+    // Pause whenever the pool is off-screen (page hidden via keep-alive).
+    const io = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) startLoop()
+      else stopLoop()
+    })
+    io.observe(host)
+
     const onVisibility = () => {
-      cancelAnimationFrame(raf)
-      if (!document.hidden && !reduced && startedRef.current) {
-        last = performance.now()
-        raf = requestAnimationFrame(loop)
-      }
+      if (document.hidden) stopLoop()
+      else startLoop()
     }
     document.addEventListener('visibilitychange', onVisibility)
 
     return () => {
-      cancelAnimationFrame(raf)
+      // Persist this tab's positions so a later return doesn't re-scatter.
+      for (const [key, s] of simMap.current) {
+        savedPositions.current.set(key, { x: s.x, y: s.y, vx: s.vx, vy: s.vy })
+      }
+      stopLoop()
       ro.disconnect()
+      io.disconnect()
       document.removeEventListener('visibilitychange', onVisibility)
       simMap.current.clear()
       startedRef.current = false
       writeAllRef.current = () => {}
     }
-    // Intentionally keyed on mode only — data changes are reconciled below.
-  }, [mode, maxCap])
+    // Keyed on mode + maxCap + disabled — teardown/re-setup per tab and on lock
+    // state; data changes are reconciled below without moving existing cells.
+  }, [mode, maxCap, disabled])
 
-  // Reconcile the sim map when orders/matches change (publish / cancel /
-  // extract): drop removed cells and place brand-new ones without moving any
-  // of the existing cells.
+  // Reconcile the sim map when orders/matches change on this tab (publish /
+  // cancel / extract): drop removed cells and place brand-new ones without
+  // moving any of the existing cells.
   useEffect(() => {
     if (!startedRef.current) return
     const wanted = new Set(cells.map((c) => c.key))
@@ -582,11 +641,20 @@ export function LiquidityCellField({ orders, matches, mode, selected, onSelect }
   return (
     <>
       <div
-        className={`lm-pool ${themeClass}`}
+        className={`lm-pool ${themeClass}${disabled ? ' is-disabled' : ''}`}
         id="pool-panel"
         role="tabpanel"
         aria-labelledby={mode === 'orders' ? 'pool-tab-orders' : 'pool-tab-matches'}
       >
+        {disabled && (
+          <div className="lm-wallet-lock-hint" role="status">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="5" y="11" width="14" height="9" rx="2" />
+              <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+            </svg>
+            {t.lmWalletLockedHint}
+          </div>
+        )}
         <div className="lm-pool-cells" key={mode} ref={fieldRef}>
           {cells.map((c) => {
             const d = cellDiameter(c.capacityCkb, maxCap)
@@ -710,6 +778,7 @@ export function LiquidityCellField({ orders, matches, mode, selected, onSelect }
             )
           })}
         </div>
+        {refreshButton}
         <OverviewChart orders={orders} matches={matches} mode={mode} hoverKey={hovered?.key ?? null} />
       </div>
 

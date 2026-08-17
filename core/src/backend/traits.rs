@@ -14,12 +14,15 @@ use crate::wire::{
   ChannelList, CommandError, ConnectPeerResult, CreateWalletResult, DashboardData, ExtractResult,
   LiquidityMatch, LiquidityOrder, LogLevel, MatchDeadline, NodeConfig, NodeLog, NodeRuntime,
   OpenChannelResult, PublishOrderResult, SaveConfigResult, TxHashResult, WalletAddress,
-  WalletSummary, WalletTx,
+  WalletStatus, WalletSummary, WalletTx,
 };
 
 #[async_trait]
 pub trait WalletBackend: Send + Sync {
   async fn get_summary(&self) -> Result<WalletSummary, CommandError>;
+  /// Fast wallet state (no chain query) — used to gate the unlock form without
+  /// waiting for the on-chain balance in `get_summary`.
+  async fn get_status(&self) -> Result<WalletStatus, CommandError>;
   async fn get_addresses(&self) -> Result<Vec<WalletAddress>, CommandError>;
   async fn get_transactions(
     &self,
@@ -97,6 +100,8 @@ pub trait ChannelsBackend: Send + Sync {
 pub trait LiquidityBackend: Send + Sync {
   async fn get_dashboard(&self) -> Result<DashboardData, CommandError>;
   async fn get_orders(&self, scope: Option<String>) -> Result<Vec<LiquidityOrder>, CommandError>;
+  /// Re-scan the chain and sync the personal-order cache; returns the fresh list.
+  async fn refresh_orders(&self) -> Result<Vec<LiquidityOrder>, CommandError>;
   async fn get_matches(&self, scope: Option<String>) -> Result<Vec<LiquidityMatch>, CommandError>;
   async fn get_matches_near_exhaustion(
     &self,

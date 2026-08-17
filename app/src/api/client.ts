@@ -7,6 +7,7 @@ import type {
   Chain,
   ChannelList,
   DashboardData,
+  FnnCliStatus,
   LiquidityMatch,
   LiquidityOrder,
   LogLevel,
@@ -15,6 +16,7 @@ import type {
   NodeLog,
   NodeRuntime,
   WalletAddress,
+  WalletStatus,
   WalletSummary,
   WalletTx,
   WatchtowerConfig,
@@ -24,6 +26,8 @@ import type {
 
 export const wallet = {
   getSummary: () => call<WalletSummary>('wallet.get_summary'),
+  /** Fast local wallet state (no chain balance) — gates the unlock form. */
+  getStatus: () => call<WalletStatus>('wallet.get_status'),
   getAddresses: () => call<WalletAddress[]>('wallet.get_addresses'),
   getTransactions: (params?: { limit?: number; offset?: number }) =>
     call<WalletTx[]>('wallet.get_transactions', params),
@@ -56,6 +60,9 @@ export const node = {
   getConfig: () => call<NodeConfig>('node.get_config'),
   saveConfig: (config: NodeConfig) =>
     call<{ chain: Chain; watchtower: WatchtowerConfig }>('node.save_config', { config }),
+  fnnCliStatus: () => call<FnnCliStatus>('node.fnn_cli_status'),
+  openFnnCli: (url: string) => call<void>('node.fnn_cli_open', { url }),
+  openUrl: (url: string) => call<void>('node.open_url', { url }),
 }
 
 // ── channels ──────────────────────────────────────────────────────────────
@@ -88,6 +95,8 @@ export const liquidity = {
   getDashboard: () => call<DashboardData>('liquidity.get_dashboard'),
   getOrders: (scope?: 'mine' | 'all') =>
     call<LiquidityOrder[]>('liquidity.get_orders', scope ? { scope } : undefined),
+  /** Re-scan the chain and sync the personal-order cache; returns the fresh list. */
+  refreshOrders: () => call<LiquidityOrder[]>('liquidity.refresh_orders'),
   getMatches: (scope?: 'mine' | 'all') =>
     call<LiquidityMatch[]>('liquidity.get_matches', scope ? { scope } : undefined),
   /** SDK aggregate (snake_case) — sorted by urgency in Rust; the frontend does not re-sort. */
@@ -109,4 +118,13 @@ export const liquidity = {
     call<{ txHash: string; returnedCkb: number }>('liquidity.extract_spent_match', {
       matchOutpoint,
     }),
+}
+
+// ── app (host / tray) ────────────────────────────────────────────────────────
+
+export const app = {
+  /** Sync the UI locale to the shell so native tray menu text stays bilingual. */
+  setLocale: (locale: string) => call<void>('app.set_locale', { locale }),
+  /** Actually quit — after the tray-exit risk prompt is confirmed. */
+  exit: () => call<void>('app.exit'),
 }

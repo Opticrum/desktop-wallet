@@ -77,7 +77,9 @@ pub fn decrypt_with_key(
 
   cipher
     .decrypt(nonce, ciphertext)
-    .map_err(|_| CommandError::invalid_input("Decryption failed — wrong password?".to_string()))
+    // Distinct code so the frontend can localize the wrong-password message
+    // (`invalid_input` would be too generic to map reliably).
+    .map_err(|_| CommandError::NotAuthorized("wrong password".to_string()))
 }
 
 /// Decrypt a stored private key blob and parse it as a secp256k1 SecretKey.
