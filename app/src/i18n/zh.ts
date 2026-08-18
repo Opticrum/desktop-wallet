@@ -89,9 +89,7 @@ export const zh: Messages = {
   networkTestnet: '测试网',
   rpcUrlLabel: 'RPC 地址',
 
-  // Liquidity — inbound liquidity hero
-  lmInboundLiquidity: '入向流动性',
-  lmInboundDesc: '已匹配通道可承接的入向容量',
+  // Liquidity — KPI labels + buy action
   lmActiveMatches: '活跃匹配',
   lmTotalDeposit: '质押总额',
   lmAvgRate: '平均费率',
@@ -106,6 +104,8 @@ export const zh: Messages = {
   lmRateShPerBlock: '费率',
   lmDeposit: '质押 (CKB)',
   lmFiberAddressOptional: 'Fiber 地址（可选）',
+  lmFiberRiskTitle: '未填 Fiber 地址',
+  lmFiberRiskBody: '流动性卖方仅凭 fiber key 链接你的节点，成功率取决于你的节点在全网拓扑中的可达性。为最大程度提高被匹配成功率，建议填写有效的 Fiber 地址。',
   lmEstimatedApy: '预估年化',
   lmPublishOrder: '发布订单',
   lmOrderPublished: '订单已发布',
@@ -134,6 +134,34 @@ export const zh: Messages = {
   lmExtractDeleteTitle: '提取并删除该订单？',
   lmExtractDeleteBody: '该匹配已过期，将提取剩余质押并删除订单。',
   lmExtractDeleted: '已提取 {amount} CKB 并删除订单',
+
+  // Help dialog — About Opticrum (protocol / buyer / seller)
+  aboutButton: '关于',
+  helpTitle: '关于 Opticrum',
+  helpTabProtocol: '协议',
+  helpTabBuyer: '买方视角',
+  helpTabSeller: '卖方视角',
+  hpLead: 'Opticrum 是构建在 CKB × Fiber Network 上的去中心化流动性市场：买家发布链上订单购买入站流动性，卖方用真实 Fiber 通道匹配，按块赚取线性租金。没有中间人——RISC-V 合约运行在 CKB-VM 中，合约即市场。',
+  hpS1Title: '链上机制',
+  hpS1a: '订单（Order cell）：买家设定要购买的流动性、租金费率与租期，发布链上订单。',
+  hpS1b: '匹配（Match cell）：卖方用真实 Fiber 通道匹配订单，通道经 outpoint 链上校验——证明真实存在且容量达标。',
+  hpS1c: '线性租金：租金按块累积（shannons_per_block × 已过块数 = 一次乘法），无除法、无浮点，确定性可验证。',
+  hpS2Title: '信任与安全',
+  hpS2a: '非托管：资金始终锁定在链上 cell，每一步由合约强制执行；无预言机、无管理员密钥、无可信服务器。',
+  hpS2b: '无状态机：匹配即刻生效，无需审批；买方的保护是可以随时撤回资金。',
+  hbLead: '你需要入站流动性时，发布一个订单，设定额度、费率和租期，卖方会来匹配你的订单。',
+  hbS1Title: '发布订单',
+  hbS1a: '设定要购买的入站流动性（通道容量）、总成本与租期；系统按块费率从你的质押中线性扣租金。',
+  hbS1b: '填上有效的 Fiber 地址能大幅提高被匹配成功率——否则卖方只能凭 fiber key 尝试连接你的节点，成功率取决于网络拓扑。',
+  hbS2Title: '匹配与调整',
+  hbS2a: '匹配后通道接入你的节点，租金按块从质押中扣除，用多少付多少。',
+  hbS2b: '可随时注入更多质押或撤出剩余；未匹配的订单可随时取消，质押返还钱包。',
+  hsLead: '你有富余的 Fiber 通道容量时，可以匹配买方订单，把闲置通道租出去赚取租金。',
+  hsS1Title: '匹配订单',
+  hsS1a: '从市场选择带租金的订单，用你已有的 Fiber 通道匹配，生成 Match cell；通道需真实存在且容量达标（链上校验）。',
+  hsS2Title: '赚取与提取',
+  hsS2a: '租金按块线性累积（shannons_per_block × 已过块数），可随时链上提取（Extract）。',
+  hsS2b: '匹配耗尽后销毁回收剩余 CKB；你只提供通道并赚取租金，全程不托管买方资金。',
 
   // Liquidity — shared table labels + health
   matchCapacity: '容量',
@@ -175,9 +203,12 @@ export const zh: Messages = {
 
   // Liquidity — market dashboard (right sidebar)
   lmMarketOverview: '市场概览',
-  lmOrderMatchSplit: '订单 / 匹配',
-  lmOrderDemand: '订单需求',
-  lmMatchCapacity: '匹配容量',
+  lmGlobalOrderDemand: '全局订单需求',
+  lmTotalOrders: '订单',
+  lmOrdersUnit: '笔',
+  lmLockedCapacity: '锁定容量',
+  lmYieldDistribution: '收益率分布',
+  lmNoYieldData: '暂无分布数据',
 
   // Liquidity — cell anatomy
   lmApyLabel: 'APY',
@@ -375,6 +406,11 @@ export const zh: Messages = {
   watchtowerUrl: '瞭望塔服务 URL',
   configFile: '配置文件',
   nodeChainDesc: '流动性市场将跟随该链',
+
+  // Node config — modal tabs
+  cfgTabForm: '表单',
+  cfgTabPreview: '配置文件预览',
+  cfgCopyConfig: '复制',
 
   // Node config — structured sections
   cfgSectionServices: '服务',

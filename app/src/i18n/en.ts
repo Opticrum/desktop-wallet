@@ -90,9 +90,7 @@ export const en: Messages = {
   networkTestnet: 'Testnet',
   rpcUrlLabel: 'RPC URL',
 
-  // Liquidity — inbound liquidity hero
-  lmInboundLiquidity: 'Inbound liquidity',
-  lmInboundDesc: 'Inbound capacity secured from matched channels',
+  // Liquidity — KPI labels + buy action
   lmActiveMatches: 'Active matches',
   lmTotalDeposit: 'Total deposit',
   lmAvgRate: 'Avg rate',
@@ -107,6 +105,8 @@ export const en: Messages = {
   lmRateShPerBlock: 'Rate',
   lmDeposit: 'Deposit (CKB)',
   lmFiberAddressOptional: 'Fiber address (optional)',
+  lmFiberRiskTitle: 'No Fiber address set',
+  lmFiberRiskBody: 'Without an address, liquidity sellers can only reach your node via your fiber key. Whether a connection succeeds depends on the reachability of your node in the network topology. Add a valid Fiber address to maximize your chance of being matched.',
   lmEstimatedApy: 'Estimated APY',
   lmPublishOrder: 'Publish order',
   lmOrderPublished: 'Order published',
@@ -135,6 +135,34 @@ export const en: Messages = {
   lmExtractDeleteTitle: 'Extract & delete this order?',
   lmExtractDeleteBody: 'This match has expired. The remaining deposit will be returned and the order deleted.',
   lmExtractDeleted: 'Extracted {amount} CKB and deleted the order',
+
+  // Help dialog — About Opticrum (protocol / buyer / seller)
+  aboutButton: 'About',
+  helpTitle: 'About Opticrum',
+  helpTabProtocol: 'Protocol',
+  helpTabBuyer: 'Buyer',
+  helpTabSeller: 'Seller',
+  hpLead: 'Opticrum is a decentralized liquidity marketplace on CKB × the Fiber Network: buyers post on-chain orders for inbound liquidity, sellers match them with real Fiber channels, and rent accrues per block. No intermediary — a RISC-V contract runs in the CKB-VM; the contract is the marketplace.',
+  hpS1Title: 'On-chain mechanics',
+  hpS1a: 'Orders: a buyer sets the liquidity to buy, the rent rate, and the term, then publishes an Order cell.',
+  hpS1b: 'Matches: a seller matches with a real Fiber channel, producing a Match cell; the channel is verified on-chain by outpoint — real, with the required capacity.',
+  hpS1c: 'Linear rent: rent accrues per block (shannons_per_block × elapsed blocks — one multiply), no division, no floats, deterministically verifiable.',
+  hpS2Title: 'Trust & safety',
+  hpS2a: 'Non-custodial: funds stay locked in on-chain cells, every step enforced by the contract — no oracle, no admin key, no trusted server.',
+  hpS2b: 'No state machine: a match is active immediately; the buyer protection is the ability to withdraw funds anytime.',
+  hbLead: 'When you need inbound liquidity, post an order — set the amount, rate, and term, and sellers will come match it.',
+  hbS1Title: 'Post an order',
+  hbS1a: 'Set the inbound liquidity (channel capacity), total cost, and term; rent is deducted linearly from your deposit per block.',
+  hbS1b: 'A valid Fiber address greatly improves your match rate — otherwise sellers can only reach your node by your fiber key, and success depends on network topology.',
+  hbS2Title: 'Matched & adjusting',
+  hbS2a: 'Once matched, a channel connects to your node and rent accrues per block from your deposit — pay only for what you use.',
+  hbS2b: 'Top up or withdraw anytime; cancel unmatched orders freely and your deposit returns to your wallet.',
+  hsLead: 'With spare Fiber channel capacity, match buyer orders and earn rent from idle channels.',
+  hsS1Title: 'Match an order',
+  hsS1a: 'Pick an order with rent from the market and match it with one of your Fiber channels, producing a Match cell; the channel must be real and meet the capacity (verified on-chain).',
+  hsS2Title: 'Earn & extract',
+  hsS2a: 'Rent accrues linearly per block (shannons_per_block × elapsed blocks); extract it on-chain at any time.',
+  hsS2b: 'When a match is exhausted, destroy it to reclaim the remaining CKB. You only provide channels and earn rent — you never custody buyer funds.',
 
   // Liquidity — shared table labels + health
   matchCapacity: 'Capacity',
@@ -176,9 +204,12 @@ export const en: Messages = {
 
   // Liquidity — market dashboard (right sidebar)
   lmMarketOverview: 'Market overview',
-  lmOrderMatchSplit: 'Orders / Matches',
-  lmOrderDemand: 'Order demand',
-  lmMatchCapacity: 'Matched capacity',
+  lmGlobalOrderDemand: 'Global order demand',
+  lmTotalOrders: 'Orders',
+  lmOrdersUnit: 'orders',
+  lmLockedCapacity: 'Locked capacity',
+  lmYieldDistribution: 'Yield distribution',
+  lmNoYieldData: 'No distribution data yet',
 
   // Liquidity — cell anatomy
   lmApyLabel: 'APY',
@@ -376,6 +407,11 @@ export const en: Messages = {
   watchtowerUrl: 'Watchtower service URL',
   configFile: 'Config file',
   nodeChainDesc: 'The liquidity market follows this chain',
+
+  // Node config — modal tabs
+  cfgTabForm: 'Form',
+  cfgTabPreview: 'Config preview',
+  cfgCopyConfig: 'Copy config',
 
   // Node config — structured sections
   cfgSectionServices: 'Services',

@@ -160,11 +160,11 @@ fn ckb_section<'a>(cfg: &'a NodeConfig, base_dir: &Path) -> CkbSectionYaml<'a> {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::mock_data;
+  use crate::node::default_config::default_config;
 
   #[test]
   fn fnn_config_from_wire_sets_required_fields() {
-    let cfg = mock_data::mock_config();
+    let cfg = default_config();
     let dir = tempfile::tempdir().unwrap();
     let base = dir.path();
     let fnn_cfg = fnn_config_from_wire(&cfg, base).unwrap();
@@ -190,7 +190,7 @@ mod tests {
 
   #[test]
   fn scripts_map_into_fiber_config() {
-    let cfg = mock_data::mock_config();
+    let cfg = default_config();
     let dir = tempfile::tempdir().unwrap();
     let fnn_cfg = fnn_config_from_wire(&cfg, dir.path()).unwrap();
     let fiber = fnn_cfg.fiber.as_ref().unwrap();
@@ -204,7 +204,7 @@ mod tests {
 
   #[test]
   fn udt_whitelist_maps_into_ckb_config() {
-    let cfg = mock_data::mock_config();
+    let cfg = default_config();
     let dir = tempfile::tempdir().unwrap();
     let fnn_cfg = fnn_config_from_wire(&cfg, dir.path()).unwrap();
     let ckb = fnn_cfg.ckb.as_ref().unwrap();

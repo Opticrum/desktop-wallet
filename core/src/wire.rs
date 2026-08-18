@@ -125,6 +125,11 @@ pub struct NodeRuntime {
   /// UI shows "preparing" instead of treating it as stopped.
   pub starting: bool,
   pub alias: Option<String>,
+  /// Wall-clock ms the embedded node was (last) started — the uptime anchor for
+  /// the frontend's live timer. `None` while the node is stopped.
+  pub started_at_ms: Option<u64>,
+  /// Derived: `(now − started_at_ms) / 3_600_000`, truncated to whole hours;
+  /// `0` while the node is stopped.
   pub uptime_hours: u32,
   pub fiber_pubkey: String,
   pub fiber_addr: Option<String>,

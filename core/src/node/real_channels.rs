@@ -252,16 +252,24 @@ fn build_channel_list(
   channels: &[FiberChannel],
   versions: &HashMap<String, String>,
 ) -> ChannelList {
+  // `list_channels` is called with `include_closed: true`, so the node keeps
+  // `Closed` channels around after settlement. The frontend's display buckets
+  // are active|pending|closing — no Closed landing spot (docs/ipc §6) — so a
+  // settled channel drops off the list here and vanishes on its own.
+  let open: Vec<&FiberChannel> = channels
+    .iter()
+    .filter(|c| !matches!(c.state, ChannelState::Closed(_)))
+    .collect();
   let mut nodes: Vec<ChannelNode> = Vec::new();
   let mut seen: HashSet<String> = HashSet::new();
 
   for p in peers {
     let peer_id = p.pubkey.to_string();
     seen.insert(peer_id.clone());
-    let peer_channels = channels
+    let peer_channels = open
       .iter()
       .filter(|c| c.pubkey.to_string() == peer_id)
-      .map(channel_to_wire)
+      .map(|c| channel_to_wire(c))
       .collect();
     nodes.push(ChannelNode {
       peer: PeerInfo {
@@ -275,7 +283,7 @@ fn build_channel_list(
   }
 
   // Channels whose counterparty isn't in list_peers (e.g. disconnected).
-  for c in channels {
+  for c in open {
     let pid = c.pubkey.to_string();
     if !seen.contains(&pid) {
       seen.insert(pid.clone());
@@ -452,6 +460,37 @@ mod tests {
     // peer id = 66-char hex pubkey (no 0x)
     assert_eq!(list.nodes[0].peer.id.len(), 66);
     assert_eq!(list.nodes[0].channels.len(), 1);
+  }
+
+  #[test]
+  fn build_channel_list_drops_closed_keeps_shutting_down() {
+    let peer = fiber_json_types::peer::PeerInfo {
+      pubkey: Pubkey([0x02; 33]),
+      address: "/ip4/1.2.3.4/tcp/8115".to_string(),
+    };
+    let mut shutting = sample_channel();
+    shutting.channel_id = Hash256([0x22; 32]);
+    shutting.state = ChannelState::ShuttingDown(ShuttingDownFlags(0));
+    let mut closed = sample_channel();
+    closed.channel_id = Hash256([0x33; 32]);
+    closed.state = ChannelState::Closed(CloseFlags(0));
+    let list = build_channel_list(
+      &[peer],
+      &[sample_channel(), shutting, closed],
+      &HashMap::new(),
+    );
+
+    // The node keeps closed channels around (`include_closed: true`), but the
+    // active|pending|closing display buckets have no Closed landing spot — only
+    // the still-open ones (incl. ShuttingDown → "closing") surface.
+    assert_eq!(list.nodes.len(), 1);
+    assert_eq!(list.nodes[0].channels.len(), 2);
+    assert!(list
+      .nodes[0]
+      .channels
+      .iter()
+      .any(|c| c.state == "ShuttingDown"));
+    assert!(!list.nodes[0].channels.iter().any(|c| c.state == "Closed"));
   }
 
   #[tokio::test]

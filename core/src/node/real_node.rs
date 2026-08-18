@@ -8,14 +8,16 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 
-use crate::backend::mock::{parse_chain, watchtower_from_config};
 use crate::backend::traits::NodeBackend;
 use crate::backend::SigningWallet;
-use crate::mock_data;
+use crate::util::{parse_chain, watchtower_from_config};
 use crate::wire::*;
+
+use super::default_config::default_config;
 
 use super::embedded_node::EmbeddedNode;
 use super::fiber_api::{FiberNodeApi, FiberNodeInfo};
@@ -32,8 +34,8 @@ fn with_p2p(addr: &str, pubkey: &str) -> String {
 
 fn load_config(path: &Path) -> NodeConfig {
   match std::fs::read_to_string(path) {
-    Ok(s) => serde_json::from_str(&s).unwrap_or_else(|_| mock_data::mock_config()),
-    Err(_) => mock_data::mock_config(),
+    Ok(s) => serde_json::from_str(&s).unwrap_or_else(|_| default_config()),
+    Err(_) => default_config(),
   }
 }
 
@@ -64,6 +66,9 @@ pub struct RealNodeBackend {
   /// The fiber node's secp256k1 identity pubkey (66-hex), captured on start so
   /// it survives the node stopping.
   node_pubkey: Mutex<Option<String>>,
+  /// When the embedded node was (last) started — the uptime anchor. Cleared on
+  /// stop, so a stopped node reports `started_at_ms: None`, `uptime_hours: 0`.
+  started_at: Mutex<Option<SystemTime>>,
 }
 
 impl RealNodeBackend {
@@ -84,6 +89,7 @@ impl RealNodeBackend {
       starting: AtomicBool::new(false),
       node_id: Mutex::new(None),
       node_pubkey: Mutex::new(None),
+      started_at: Mutex::new(None),
     }
   }
 
@@ -148,11 +154,29 @@ impl RealNodeBackend {
           )
         }
       };
+    // Uptime derives from when the embedded node started. Report the start
+    // anchor and elapsed hours only while the node is up (or booting) — a
+    // stopped node reads as 0 / None regardless of any stale anchor.
+    let (started_at_ms, uptime_hours) = if running || starting {
+      match *self.started_at.lock().unwrap() {
+        Some(t) => {
+          let started_ms = t.duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+          let elapsed_hours =
+            SystemTime::now().duration_since(t).unwrap_or_default().as_secs() as u32 / 3600;
+          (Some(started_ms), elapsed_hours)
+        }
+        None => (None, 0),
+      }
+    } else {
+      (None, 0)
+    };
+
     NodeRuntime {
       running,
       starting,
       alias,
-      uptime_hours: 0,
+      started_at_ms,
+      uptime_hours,
       fiber_pubkey,
       fiber_addr,
       addresses,
@@ -191,6 +215,8 @@ impl RealNodeBackend {
     }
     let node = EmbeddedNode::start(&fnn_cfg).await?;
     *self.embedded.lock().await = Some(node);
+    // Anchor the uptime at the moment the embedded node came up.
+    *self.started_at.lock().unwrap() = Some(SystemTime::now());
 
     // Poll the local fiber RPC until it warms up (~10s). The node itself is
     // already running by now, so a warm-up miss must not fail the start — the
@@ -243,6 +269,8 @@ impl NodeBackend for RealNodeBackend {
     if let Some(node) = self.embedded.lock().await.take() {
       node.stop().await?;
     }
+    // A stopped node has no uptime anchor — idempotent even if already stopped.
+    *self.started_at.lock().unwrap() = None;
     Ok(())
   }
 
@@ -369,5 +397,22 @@ mod tests {
     assert!(!r.running);
     // The guard returned before `EmbeddedNode::start`, so no panic.
     backend.starting.store(false, Ordering::SeqCst);
+  }
+
+  #[tokio::test]
+  async fn uptime_derives_from_start_anchor() {
+    let (backend, _dir) = test_backend(Arc::new(MockFiberApi::new(Some(sample_info()))));
+    // Simulate a node that started ~3700s ago — the runtime reports 1 full hour
+    // of uptime plus the wall-clock start anchor the frontend ticks against.
+    *backend.started_at.lock().unwrap() =
+      Some(SystemTime::now() - std::time::Duration::from_secs(3700));
+    let r = backend.runtime_from_info(Some(&sample_info()), true, false);
+    assert_eq!(r.uptime_hours, 1);
+    assert!(r.started_at_ms.is_some(), "start anchor reported while running");
+    // Stopped (anchor cleared) → no uptime and no start anchor.
+    *backend.started_at.lock().unwrap() = None;
+    let r = backend.runtime_from_info(Some(&sample_info()), false, false);
+    assert_eq!(r.uptime_hours, 0);
+    assert!(r.started_at_ms.is_none(), "no start anchor while stopped");
   }
 }

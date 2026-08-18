@@ -4,13 +4,16 @@ import { useNode } from '../node/NodeContext'
 import { liquidity, wallet } from '../api/client'
 import { CkbTxModal, useCkbTx } from '../components/CkbTxModal'
 import {
-  computeInboundSummary,
   costAndDaysToRateShPerBlock,
   dwellHours,
+  formatCkb,
+  formatYieldRange,
+  mapDashboardData,
   matchLife,
   shannonsPerBlockToApyBps,
   type LiquidityMatch,
   type LiquidityOrder,
+  type MappedDashboard,
   type SheetTarget,
 } from '../lib/liquidity'
 import { LiquidityCellField } from '../components/LiquidityCellField'
@@ -20,16 +23,14 @@ import { Toast } from '../components/Toast'
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-function formatCkb(amount: number): string {
-  return amount.toLocaleString(undefined, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  })
-}
-
 /** Value-only APY (no unit suffix) — for labels that already carry a unit. */
 function formatBpsValue(bps: number): string {
   return (bps / 100).toFixed(2) + '%'
+}
+
+/** Bare APY number — the `%` unit rides in the tile's `.kpi-sub`. */
+function formatBpsNum(bps: number): string {
+  return (bps / 100).toFixed(2)
 }
 
 // ── Buy order modal ───────────────────────────────────────────────────────
@@ -120,7 +121,29 @@ function BuyOrderModal({ open, onClose, onPublish, disabled }: BuyOrderModalProp
 
           <div className="lm-form-field">
             <label>{t.lmFiberAddressOptional}</label>
-            <input className="search-input mono" type="text" value={fiberAddress} onChange={(e) => setFiberAddress(e.target.value)} placeholder="/ip4/…/tcp/8228" spellCheck={false} />
+            <input className="search-input mono lm-fiber-address" type="text" value={fiberAddress} onChange={(e) => setFiberAddress(e.target.value)} placeholder="/ip4/…/tcp/8228" spellCheck={false} />
+            {fiberAddress.trim() === '' && (
+              <div className="lm-fiber-risk" role="note">
+                <svg
+                  className="lm-fiber-risk-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                <div className="lm-fiber-risk-text">
+                  <div className="lm-fiber-risk-title">{t.lmFiberRiskTitle}</div>
+                  <div className="lm-fiber-risk-body">{t.lmFiberRiskBody}</div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
         <div className="modal-actions">
@@ -239,12 +262,22 @@ export function LiquidityMarket() {
   const [adjust, setAdjust] = useState<{ match: LiquidityMatch; mode: AdjustMode } | null>(null)
   const [cancelTarget, setCancelTarget] = useState<LiquidityOrder | null>(null)
   const [extractTarget, setExtractTarget] = useState<LiquidityMatch | null>(null)
+  // Global whole-chain market overview — `null` until the first load; a loaded
+  // all-zero value (node offline) still renders real numbers.
+  const [dashboard, setDashboard] = useState<MappedDashboard | null>(null)
 
   const reload = useCallback(async () => {
     try {
-      const [o, m] = await Promise.all([liquidity.getOrders(), liquidity.getMatches()])
+      const [o, m, d] = await Promise.all([
+        liquidity.getOrders(),
+        liquidity.getMatches(),
+        // Whole-chain scan — best-effort so a scan failure can't sink the
+        // personal orders/matches update.
+        liquidity.getDashboard().catch(() => null),
+      ])
       setOrders(o)
       setMatches(m)
+      if (d) setDashboard(mapDashboardData(d))
     } catch {
       /* mock — best-effort */
     }
@@ -269,9 +302,14 @@ export function LiquidityMarket() {
   const handleRefresh = async () => {
     setRefreshing(true)
     try {
-      const [o, m] = await Promise.all([liquidity.refreshOrders(), liquidity.getMatches()])
+      const [o, m, d] = await Promise.all([
+        liquidity.refreshOrders(),
+        liquidity.getMatches(),
+        liquidity.getDashboard().catch(() => null),
+      ])
       setOrders(o)
       setMatches(m)
+      if (d) setDashboard(mapDashboardData(d))
     } catch {
       /* mock — best-effort */
     } finally {
@@ -305,8 +343,6 @@ export function LiquidityMarket() {
     </button>
   )
 
-  const summary = useMemo(() => computeInboundSummary(matches), [matches])
-
   // ── Strip dashboard — per-tab KPIs ────────────────────────────────────────
   const orderStats = useMemo(() => {
     const open = orders.filter((o) => o.status !== 'cancelled')
@@ -331,21 +367,6 @@ export function LiquidityMarket() {
       : 0
     return { active: active.length, totalDeposit, avgRate, avgRemaining }
   }, [matches])
-
-  // ── Aside — order demand vs matched capacity split ───────────────────────
-  const orderDemandTotal = useMemo(
-    () => orders.filter((o) => o.status !== 'cancelled').reduce((s, o) => s + o.channelCapacityCkb, 0),
-    [orders],
-  )
-  const matchCapTotal = useMemo(
-    () => matches.reduce((s, m) => s + m.channelCapacityCkb, 0),
-    [matches],
-  )
-  // Relative demand vs matched-capacity share — both bars read EMPTY when there
-  // is nothing to split (no fallback to a misleading 50/50 half-fill).
-  const splitTotal = orderDemandTotal + matchCapTotal
-  const orderPct = splitTotal > 0 ? (orderDemandTotal / splitTotal) * 100 : 0
-  const matchPct = splitTotal > 0 ? (matchCapTotal / splitTotal) * 100 : 0
 
   // Every CKB tx write resolves only once confirmed on-chain; the modal walks
   // the user through the wait, prints the tx hash, and reloads when it lands.
@@ -551,31 +572,66 @@ export function LiquidityMarket() {
                 {chain === 'mainnet' ? t.networkMainnet : t.networkTestnet}
               </span>
             </div>
+
+            {/* Hero — global order demand (whole-chain) */}
             <div className="lm-dash-figure">
-              <span className="stat-label">{t.lmInboundLiquidity}</span>
+              <span className="stat-label">{t.lmGlobalOrderDemand}</span>
               <div className="lm-dash-value">
-                {formatCkb(summary.totalInboundCkb)}
-                <span className="lm-dash-unit">CKB</span>
+                {dashboard ? formatCkb(dashboard.totalOrdersCapacityCkb) : '—'}
+                <span className="lm-dash-unit">{t.unitCkb}</span>
               </div>
             </div>
+
+            {/* 2×2 KPI grid — global chain-wide numbers */}
             <div className="kpi-grid kpi-grid-2 conn-kpis lm-dash-kpis">
               <div className="kpi">
-                <div className="kpi-label">{t.lmActiveMatches}</div>
-                <div className="kpi-value">{summary.activeMatches}</div>
+                <div className="kpi-label">{t.lmTotalOrders}</div>
+                <div className="kpi-value">{dashboard ? dashboard.totalOrders.toLocaleString() : '—'}</div>
+                <div className="kpi-sub">{t.lmOrdersUnit}</div>
               </div>
               <div className="kpi">
-                <div className="kpi-label">{t.lmTotalDeposit}</div>
-                <div className="kpi-value">{formatCkb(summary.totalDepositCkb)}</div>
+                <div className="kpi-label">{t.lmLockedCapacity}</div>
+                <div className="kpi-value">{dashboard ? formatCkb(dashboard.totalCapacityLockedCkb) : '—'}</div>
+                <div className="kpi-sub">{t.unitCkb}</div>
+              </div>
+              <div className="kpi">
+                <div className="kpi-label">{t.lmAvgApy}</div>
+                <div className="kpi-value">{dashboard ? formatBpsNum(dashboard.avgAnnualYieldBps) : '—'}</div>
+                <div className="kpi-sub">%</div>
               </div>
               <div className="kpi">
                 <div className="kpi-label">{t.lmAvgRate}</div>
-                <div className="kpi-value">{formatBpsValue(summary.avgRateBps)}</div>
-              </div>
-              <div className="kpi">
-                <div className="kpi-label">{t.lmPendingOrders}</div>
-                <div className="kpi-value">{orderStats.pending}</div>
+                <div className="kpi-value">{dashboard ? dashboard.avgShannonsPerBlock.toLocaleString() : '—'}</div>
+                <div className="kpi-sub">{t.shannonsPerBlock}</div>
               </div>
             </div>
+
+            {/* Yield distribution mini histogram */}
+            <div className="lm-yield">
+              <div className="lm-yield-head">
+                <span className="stat-label">{t.lmYieldDistribution}</span>
+              </div>
+              {dashboard?.hasYieldData ? (
+                <div className="lm-yield-bars">
+                  {dashboard.yieldBuckets.map((b) => (
+                    <div
+                      key={`${b.lowBps}-${b.highBps}`}
+                      className="lm-yield-row"
+                      title={`${formatYieldRange(b)} · ${b.count} ${t.mgOrderTag} · ${formatCkb(b.capacityCkb)} ${t.unitCkb}`}
+                    >
+                      <span className="lm-yield-row-label">{formatYieldRange(b)}</span>
+                      <div className="lm-yield-track">
+                        <div className="lm-yield-fill" style={{ width: `${Math.round(b.share * 100)}%` }} />
+                      </div>
+                      <span className="lm-yield-row-count">{b.count.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="lm-yield-empty">{t.lmNoYieldData}</div>
+              )}
+            </div>
+
             <button
               type="button"
               className="btn-primary lm-buy-btn"
@@ -586,26 +642,6 @@ export function LiquidityMarket() {
               + {t.lmBuyLiquidity}
             </button>
             {!nodeReady && <span className="lm-node-hint">{t.nodeNotRunning}</span>}
-          </section>
-
-          <section className="panel lm-split">
-            <div className="section-head">
-              <h2 className="lm-title">{t.lmOrderMatchSplit}</h2>
-            </div>
-            <div className="lm-split-row">
-              <span className="lm-split-label">{t.lmOrderDemand}</span>
-              <span className="lm-split-track">
-                <span className="lm-split-fill is-order" style={{ width: `${orderPct}%` }} />
-              </span>
-              <span className="lm-split-val">{formatCkb(orderDemandTotal)}</span>
-            </div>
-            <div className="lm-split-row">
-              <span className="lm-split-label">{t.lmMatchCapacity}</span>
-              <span className="lm-split-track">
-                <span className="lm-split-fill is-match" style={{ width: `${matchPct}%` }} />
-              </span>
-              <span className="lm-split-val">{formatCkb(matchCapTotal)}</span>
-            </div>
           </section>
             </>
           )}

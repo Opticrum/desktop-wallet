@@ -64,10 +64,21 @@ function watchtowerLabel(mode: WatchtowerConfig['mode'], t: ReturnType<typeof us
   return t.wtDisabled
 }
 
+/** Live uptime text — minute granularity: "0h 0m" / "0h 5m" / "1h 23m". */
+function formatUptime(ms: number): string {
+  const totalMinutes = Math.floor(ms / 60000)
+  const h = Math.floor(totalMinutes / 60)
+  const m = totalMinutes % 60
+  return `${h}h ${m}m`
+}
+
 export function NodeControlPanel({ onToast, refreshKey = 0 }: Props) {
   const { t, locale } = useLocale()
   const { chain } = useNode()
   const [runtime, setRuntime] = useState<NodeRuntime | null>(null)
+  // Live-uptime ticker anchor — bumped every second while the node is up so
+  // the "运行时长" counts up smoothly between the 5s runtime polls.
+  const [nowMs, setNowMs] = useState(() => Date.now())
   const [stopOpen, setStopOpen] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
   const [watchtower, setWatchtower] = useState<WatchtowerConfig>({ mode: 'builtin', endpoint: null })
@@ -106,6 +117,15 @@ export function NodeControlPanel({ onToast, refreshKey = 0 }: Props) {
     }
   }, [refreshKey])
 
+  // 1s ticker for the live uptime readout — runs only while the node reports a
+  // start anchor (startedAtMs), so a stopped node doesn't re-render every second.
+  useEffect(() => {
+    if (runtime?.startedAtMs == null) return
+    setNowMs(Date.now())
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [runtime?.startedAtMs])
+
   useEffect(() => {
     let alive = true
     const check = () =>
@@ -138,7 +158,10 @@ export function NodeControlPanel({ onToast, refreshKey = 0 }: Props) {
   // and the local `startRequested` covers the window while the IPC call flies.
   const starting = startRequested || (runtime?.starting ?? false)
   const alias = runtime?.alias ?? '—'
-  const uptimeHours = runtime?.uptimeHours ?? 0
+  // Uptime anchored by the backend's `startedAtMs`; the 1s ticker counts it up
+  // live, so it reads "0h 0m → 0h 5m → 1h 23m" instead of whole hours.
+  const startedAtMs = runtime?.startedAtMs ?? null
+  const uptimeText = startedAtMs != null ? formatUptime(Math.max(0, nowMs - startedAtMs)) : '0h 0m'
   const fiberPubkey = runtime?.fiberPubkey || '—'
   const fiberAddr = runtime?.fiberAddr || '—'
   const startDisabled = !walletGate.hasWallet || !walletGate.unlocked
@@ -147,7 +170,7 @@ export function NodeControlPanel({ onToast, refreshKey = 0 }: Props) {
     setStopOpen(false)
     try {
       await node.stop()
-      setRuntime((r) => (r ? { ...r, running: false } : r))
+      setRuntime((r) => (r ? { ...r, running: false, startedAtMs: null } : r))
     } catch {
       /* mock — best-effort */
     }
@@ -202,7 +225,7 @@ export function NodeControlPanel({ onToast, refreshKey = 0 }: Props) {
           <span className="ncp-meta-line">
             {alias}
             <span className="ncp-meta-sep">·</span>
-            {uptimeHours}h
+            {uptimeText}
           </span>
         </div>
         <div className="ncp-status-right">

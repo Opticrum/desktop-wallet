@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ConfirmModal } from './ConfirmModal'
 import { CopyableText } from './CopyableText'
 import { useLocale } from '../i18n/LocaleContext'
-import { channels, node } from '../api/client'
+import { channels } from '../api/client'
 import { toCommandError } from '../api/types'
+import { useNode } from '../node/NodeContext'
 import type { ChannelNode } from '../api/types'
 import { stateToBucket } from '../lib/node'
 import { shortHash } from '../lib/wallet'
@@ -36,6 +37,10 @@ const midTruncate = (s: string, max: number) => {
 
 export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
   const { t } = useLocale()
+  // Runtime/frozen gating comes from the shared NodeContext (it polls
+  // `node.get_runtime`). The channel list itself refreshes only on demand — an
+  // interval refresh re-runs the default-expand and pops collapsed peers open.
+  const { running } = useNode()
   const [nodes, setNodes] = useState<ChannelNode[]>([])
   const [refreshing, setRefreshing] = useState(false)
   const [refreshingNode, setRefreshingNode] = useState<string | null>(null)
@@ -50,31 +55,6 @@ export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
   const [pendingCloseId, setPendingCloseId] = useState<{ channelId: string; force: boolean } | null>(null)
   const [pendingRemoveId, setPendingRemoveId] = useState<string | null>(null)
 
-  // While the Fiber node is stopped, peer/channel operations freeze — track
-  // the runtime the same way the control panel does (5s poll) and gate the
-  // action buttons on `frozen`.
-  const [running, setRunning] = useState(true)
-  useEffect(() => {
-    let alive = true
-    const poll = () => {
-      node
-        .getRuntime()
-        .then((r) => {
-          if (alive) setRunning(r.running)
-        })
-        .catch(() => {})
-      // Keep the channel list fresh so settled (closing) channels drop off the
-      // UI on their own — the mock settles them past a short window.
-      load()
-    }
-    poll()
-    const id = window.setInterval(poll, 5000)
-    return () => {
-      alive = false
-      window.clearInterval(id)
-    }
-  }, [])
-
   const frozen = !running
 
   // The instant the node stops, dismiss in-flight forms/confirmations so no
@@ -87,19 +67,20 @@ export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
     setPendingRemoveId(null)
   }, [frozen])
 
+  // Auto-expand the first channel-bearing peer exactly once, on the first load
+  // — a later refresh must never re-run this and pop a collapsed peer open.
+  const initialExpandDone = useRef(false)
   const load = useCallback(async () => {
     try {
       const c = await channels.list()
       setNodes(c.nodes)
-      // Default-expand the first node that already has channels, so the nested
-      // layout is visible without collapsing the whole list.
-      setExpanded((prev) => {
-        if (prev.size > 0) return prev
+      if (!initialExpandDone.current) {
+        initialExpandDone.current = true
         const first = c.nodes.find((n) => n.channels.length > 0)
-        return first ? new Set([first.peer.id]) : new Set()
-      })
+        if (first) setExpanded(new Set([first.peer.id]))
+      }
     } catch {
-      /* mock — best-effort */
+      /* best-effort */
     }
   }, [])
 

@@ -253,30 +253,38 @@ fn build_dashboard(orders: &[OrderInfo], matches: &[MatchInfo], tip_block: u64) 
     .count() as u64;
   let exhausted = total_matches - active;
 
-  let total_capacity_locked_shannons = matches.iter().map(|m| m.ckb_capacity).sum();
-  let total_orders_capacity_shannons = orders.iter().map(|o| o.ckb_capacity).sum();
+  // Demand / rate / yield are ORDER-side: only the Order cell carries
+  // `channel_capacity` (Match cells discard it at match time), so a match-side
+  // APY is not derivable on-chain. "Locked capacity" = total escrow held
+  // across order + match cells (the CKB the protocol currently holds).
+  let total_orders_capacity_shannons: u64 = orders
+    .iter()
+    .map(|o| o.order_data.channel_capacity)
+    .sum();
+  let total_capacity_locked_shannons: u64 = orders
+    .iter()
+    .map(|o| o.ckb_capacity)
+    .sum::<u64>()
+    + matches.iter().map(|m| m.ckb_capacity).sum::<u64>();
 
-  let avg_shannons: u64 = if active == 0 {
+  let avg_shannons: u64 = if orders.is_empty() {
     0
   } else {
-    let sum: u64 = matches
-      .iter()
-      .filter(|m| !m.is_exhausted(tip_block))
-      .map(|m| m.match_data.shannons_per_block)
-      .sum();
-    (sum as f64 / active as f64).round() as u64
+    let sum: u64 = orders.iter().map(|o| o.order_data.shannons_per_block).sum();
+    (sum as f64 / orders.len() as f64).round() as u64
   };
 
   let mut yd = SdkYieldDistribution::standard();
   let mut total_yield_bps: f64 = 0.0;
-  let mut yield_count: u64 = 0;
-  for m in matches.iter().filter(|m| !m.is_exhausted(tip_block)) {
-    let capacity = std::cmp::max(m.ckb_capacity, 1);
-    let annual = rent_per_block_to_annual_yield(m.match_data.shannons_per_block, capacity);
+  let yield_count = orders.len() as u64;
+  for o in orders {
+    let annual = rent_per_block_to_annual_yield(
+      o.order_data.shannons_per_block,
+      o.order_data.channel_capacity,
+    );
     let bps = (annual * 10_000.0) as u64;
-    yd.add(bps, m.ckb_capacity);
+    yd.add(bps, o.order_data.channel_capacity);
     total_yield_bps += annual * 10_000.0;
-    yield_count += 1;
   }
   let avg_annual_yield_bps = if yield_count > 0 {
     (total_yield_bps / yield_count as f64).round() as u64
@@ -717,13 +725,13 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
       outpoint.clone(),
       SidecarEntry {
         rental_days,
-        created_at_ms: crate::backend::mock::now_ms(),
+        created_at_ms: crate::util::now_ms(),
         deposit_ckb: rent_capacity_shannons as f64 / CKB_DECIMAL as f64,
       },
     );
     // Persist the new order into the personal cache immediately — its outpoint
     // is immutable, so the next load shows it without a re-scan.
-    let created_at_ms = crate::backend::mock::now_ms();
+    let created_at_ms = crate::util::now_ms();
     let new_order = LiquidityOrder {
       outpoint: outpoint.clone(),
       channel_capacity_ckb: capacity_shannons as f64 / CKB_DECIMAL as f64,
@@ -1192,7 +1200,10 @@ mod tests {
     assert_eq!(d.total_matches, 2);
     assert_eq!(d.active_matches, 1);
     assert_eq!(d.exhausted_matches, 1);
-    assert_eq!(d.total_orders_capacity_shannons, 51_000_000_000_000);
+    // Orders-capacity is the inbound demand (channel_capacity), not the escrow;
+    // locked capacity spans order + match escrow.
+    assert_eq!(d.total_orders_capacity_shannons, 50_000_000_000_000);
+    assert_eq!(d.total_capacity_locked_shannons, 101_000_000_000_000);
     assert_eq!(d.recent_orders.len(), 1);
     assert_eq!(d.recent_matches.len(), 2);
     assert_eq!(d.matches_near_exhaustion.len(), 1);

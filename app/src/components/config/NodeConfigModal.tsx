@@ -38,6 +38,8 @@ export function NodeConfigModal({
   const [config, setConfig] = useState<NodeConfig>(defaultNodeConfig)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [detect, setDetect] = useState<DetectState>({ status: 'idle', chain: 'testnet' })
+  const [tab, setTab] = useState<'form' | 'preview'>('form')
+  const [copied, setCopied] = useState(false)
 
   // Load the authoritative config from the shell whenever the modal opens.
   useEffect(() => {
@@ -54,6 +56,8 @@ export function NodeConfigModal({
         if (alive) setConfig(defaultNodeConfig)
       })
     setAdvancedOpen(false)
+    setTab('form')
+    setCopied(false)
     return () => {
       alive = false
     }
@@ -166,6 +170,23 @@ export function NodeConfigModal({
     }
   }
 
+  const handleCopyYaml = async () => {
+    try {
+      await navigator.clipboard.writeText(yaml)
+    } catch {
+      const ta = document.createElement('textarea')
+      ta.value = yaml
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1400)
+  }
+
   const api: ConfigFormApi = {
     config,
     patchFiber,
@@ -231,15 +252,58 @@ export function NodeConfigModal({
             </button>
           </div>
 
-          <div className="config-modal-body">
-            <NetworkSection />
-            <ScriptsSection />
-            <WatchtowerSection />
-            <RpcSection />
-            <CkbSection />
-            <ServicesSection />
-            <AdvancedPanel />
+          <div className="config-modal-tabs" role="tablist" aria-label={t.nodeConfig}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'form'}
+              className={`config-modal-tab${tab === 'form' ? ' active' : ''}`}
+              onClick={() => setTab('form')}
+            >
+              {t.cfgTabForm}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'preview'}
+              className={`config-modal-tab${tab === 'preview' ? ' active' : ''}`}
+              onClick={() => setTab('preview')}
+            >
+              {t.cfgTabPreview}
+            </button>
           </div>
+
+          {tab === 'form' ? (
+            <div className="config-modal-body">
+              <NetworkSection />
+              <ScriptsSection />
+              <WatchtowerSection />
+              <RpcSection />
+              <CkbSection />
+              <ServicesSection />
+              <AdvancedPanel />
+            </div>
+          ) : (
+            <div className="config-modal-body">
+              <div className="config-preview">
+                <div className="config-preview-head">
+                  <span className="config-preview-title mono">
+                    config.yml · {(yamlBytes / 1024).toFixed(1)} KB
+                  </span>
+                  <button
+                    type="button"
+                    className={`btn-secondary config-preview-copy${copied ? ' copied' : ''}`}
+                    onClick={handleCopyYaml}
+                  >
+                    {copied ? t.copied : t.cfgCopyConfig}
+                  </button>
+                </div>
+                <pre className="config-preview-body mono">
+                  <code>{yaml}</code>
+                </pre>
+              </div>
+            </div>
+          )}
 
           <div className="config-modal-foot">
             <div className="config-modal-path mono">

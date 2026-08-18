@@ -1,10 +1,9 @@
 //! Backend bundle — composes the four domain backends behind one handle.
 //!
 //! The shell holds an `Arc<BackendBundle>` and dispatches each IPC command to
-//! the matching domain. `BackendMode` selects mock (default) vs real; the real
-//! wallet backend lands in P1 (`backend::real`), the other domains stay mock.
+//! the matching domain. The runtime mock layer was removed; every domain is
+//! served by the real backend.
 
-pub mod mock;
 pub mod real;
 pub mod real_liquidity;
 pub mod traits;
@@ -15,16 +14,7 @@ use crate::wire::{Chain, CommandError};
 
 pub use traits::{ChannelsBackend, LiquidityBackend, NodeBackend, WalletBackend};
 
-use mock::MockBackend;
-
-/// Which backend implementation the shell serves.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BackendMode {
-  Mock,
-  Real,
-}
-
-/// Connection/paths for the real backend (P1). Mock mode ignores it.
+/// Connection/paths for the real backend.
 #[derive(Debug, Clone)]
 pub struct BackendConfig {
   pub database_url: String,
@@ -73,19 +63,7 @@ pub struct BackendBundle {
 }
 
 impl BackendBundle {
-  /// All four domains served by the in-memory mock store.
-  pub fn mock() -> Self {
-    let mock = Arc::new(MockBackend::new());
-    BackendBundle {
-      wallet: mock.clone(),
-      node: mock.clone(),
-      channels: mock.clone(),
-      liquidity: mock,
-    }
-  }
-
-  /// Real wallet + mock node/channels/liquidity (strangler: wallet goes real
-  /// first, the other domains stay on the in-memory mock).
+  /// Compose the four real domain backends.
   pub async fn real(cfg: BackendConfig) -> Result<Self, CommandError> {
     use crate::chain::chain_provider::ChainProvider;
     use crate::chain::real_chain_provider::RealChainProvider;
@@ -136,7 +114,9 @@ impl BackendBundle {
     use crate::node::fiber_api::{FiberNodeApi, FiberRpcApi};
     use crate::node::rpc_client::RpcClient as FiberRpcClient;
     use crate::node::{real_channels::RealChannelsBackend, real_node::RealNodeBackend};
-    let fiber_url = crate::mock_data::mock_config().rpc.listening_addr;
+    let fiber_url = crate::node::default_config::default_config()
+      .rpc
+      .listening_addr;
     let fiber_client = FiberRpcClient::new(&fiber_url, false, None).expect("valid fiber rpc url");
     let fiber_api: Arc<dyn FiberNodeApi> = Arc::new(FiberRpcApi::new(fiber_client.clone()));
     let node_config_path = std::path::PathBuf::from(&cfg.node_config_path);
@@ -160,13 +140,5 @@ impl BackendBundle {
       channels,
       liquidity,
     })
-  }
-
-  /// Select the bundle from a mode.
-  pub async fn for_mode(mode: BackendMode, cfg: BackendConfig) -> Result<Self, CommandError> {
-    match mode {
-      BackendMode::Mock => Ok(Self::mock()),
-      BackendMode::Real => Self::real(cfg).await,
-    }
   }
 }

@@ -53,16 +53,19 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
   // items + 显示/退出. The menu's 显示 item restores the window.
   let mut builder = TrayIconBuilder::with_id(TRAY_ID)
     .menu(&menu)
-    .on_menu_event(|app, event| match event.id().as_ref() {
-      "show" => show_main_window(app),
-      "quit" => {
+    .on_menu_event(|app, event| {
+      eprintln!("TRAY-DEBUG: menu event id={:?}", event.id().as_ref());
+      match event.id().as_ref() {
+        "show" => show_main_window(app),
+        "quit" => {
         // Bring the window up and let the frontend show the bilingual risk
         // prompt — the real exit happens only after the user confirms there.
         show_main_window(app);
         let _ = app.emit("tray-exit-requested", ());
       }
       _ => {}
-    });
+    }
+  });
 
   if let Some(icon) = icon {
     builder = builder.icon(icon);
@@ -138,6 +141,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 /// Rebuild the tray menu from the stored locale + node status and swap it in.
 /// Item ids stay stable, so the menu-event handler keeps matching `show`/`quit`.
 pub fn rebuild_menu(app: &AppHandle) -> tauri::Result<()> {
+  eprintln!("TRAY-DEBUG: rebuild_menu");
   let menu = build_menu(app)?;
   if let Some(tray) = app.tray_by_id(TRAY_ID) {
     tray.set_menu(Some(menu))?;
@@ -147,6 +151,7 @@ pub fn rebuild_menu(app: &AppHandle) -> tauri::Result<()> {
 
 /// Bring the main window to the front (used by the 显示 item and left-click).
 fn show_main_window(app: &AppHandle) {
+  eprintln!("TRAY-DEBUG: show_main_window");
   if let Some(window) = app.get_webview_window("main") {
     let _ = window.show();
     let _ = window.unminimize();

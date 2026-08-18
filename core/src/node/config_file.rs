@@ -211,12 +211,12 @@ pub fn write_fiber_config(cfg: &NodeConfig, base_dir: &Path) -> Result<std::path
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::mock_data;
+  use crate::node::default_config::default_config;
 
   #[test]
   fn writes_expected_yaml_layout() {
     let dir = tempfile::tempdir().unwrap();
-    let cfg = mock_data::mock_config();
+    let cfg = default_config();
     let path = write_fiber_config(&cfg, dir.path()).unwrap();
     let yaml = std::fs::read_to_string(&path).unwrap();
 

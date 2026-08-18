@@ -1,15 +1,12 @@
 // IPC transport — the single gateway between the frontend and Rust.
 //
-// In the Tauri shell the command is dispatched via `@tauri-apps/api` `invoke`.
-// Outside the shell (standalone vite browser dev at :5174, no Tauri) the
-// DEV-ONLY `browserMock` adapter serves the same wire-shaped data so UI work
-// can continue without the desktop host.
+// The desktop app is Tauri-only (the runtime browser mock was removed), so every
+// command is dispatched via `@tauri-apps/api` `invoke`.
 
 import { invoke } from '@tauri-apps/api/core'
-import { browserInvoke } from './browserMock'
 import { toCommandError } from './types'
 
-/** True when running inside the Tauri webview. */
+/** True when running inside the Tauri webview (always true — desktop only). */
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 /**
@@ -29,13 +26,10 @@ const CKB_TX_COMMANDS = new Set([
 
 export async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   try {
-    if (isTauri) {
-      // The docs name commands `<domain>.<verb>`; Tauri registers commands by
-      // the Rust function name (`wallet_get_summary`), so map dots → underscores.
-      const wireName = cmd.replace(/\./g, '_')
-      return await invoke<T>(wireName, args)
-    }
-    return await browserInvoke<T>(cmd, args)
+    // The docs name commands `<domain>.<verb>`; Tauri registers commands by
+    // the Rust function name (`wallet_get_summary`), so map dots → underscores.
+    const wireName = cmd.replace(/\./g, '_')
+    return await invoke<T>(wireName, args)
   } catch (e) {
     if (CKB_TX_COMMANDS.has(cmd)) {
       // Print code + message as a single string — the console's collapsed

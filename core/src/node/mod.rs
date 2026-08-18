@@ -2,6 +2,7 @@
 
 pub mod ckb_key;
 pub mod config_file;
+pub mod default_config;
 pub mod embed_config;
 pub mod embedded_node;
 pub mod fiber_api;

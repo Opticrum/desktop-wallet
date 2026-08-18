@@ -95,9 +95,7 @@ export type Messages = {
   networkTestnet: string
   rpcUrlLabel: string
 
-  // Liquidity — inbound liquidity hero
-  lmInboundLiquidity: string
-  lmInboundDesc: string
+  // Liquidity — KPI labels + buy action
   lmActiveMatches: string
   lmTotalDeposit: string
   lmAvgRate: string
@@ -112,6 +110,8 @@ export type Messages = {
   lmRateShPerBlock: string
   lmDeposit: string
   lmFiberAddressOptional: string
+  lmFiberRiskTitle: string
+  lmFiberRiskBody: string
   lmEstimatedApy: string
   lmPublishOrder: string
   lmOrderPublished: string
@@ -140,6 +140,34 @@ export type Messages = {
   lmExtractDeleteTitle: string
   lmExtractDeleteBody: string
   lmExtractDeleted: string
+
+  // Help dialog — About Opticrum (protocol / buyer / seller)
+  aboutButton: string
+  helpTitle: string
+  helpTabProtocol: string
+  helpTabBuyer: string
+  helpTabSeller: string
+  hpLead: string
+  hpS1Title: string
+  hpS1a: string
+  hpS1b: string
+  hpS1c: string
+  hpS2Title: string
+  hpS2a: string
+  hpS2b: string
+  hbLead: string
+  hbS1Title: string
+  hbS1a: string
+  hbS1b: string
+  hbS2Title: string
+  hbS2a: string
+  hbS2b: string
+  hsLead: string
+  hsS1Title: string
+  hsS1a: string
+  hsS2Title: string
+  hsS2a: string
+  hsS2b: string
 
   // Liquidity — shared table labels + health
   matchCapacity: string
@@ -181,9 +209,12 @@ export type Messages = {
 
   // Liquidity — market dashboard (right sidebar)
   lmMarketOverview: string
-  lmOrderMatchSplit: string
-  lmOrderDemand: string
-  lmMatchCapacity: string
+  lmGlobalOrderDemand: string
+  lmTotalOrders: string
+  lmOrdersUnit: string
+  lmLockedCapacity: string
+  lmYieldDistribution: string
+  lmNoYieldData: string
 
   // Liquidity — cell anatomy
   lmApyLabel: string
@@ -388,6 +419,11 @@ export type Messages = {
   watchtowerUrl: string
   configFile: string
   nodeChainDesc: string
+
+  // Node config — modal tabs
+  cfgTabForm: string
+  cfgTabPreview: string
+  cfgCopyConfig: string
 
   // Node config — structured sections
   cfgSectionServices: string

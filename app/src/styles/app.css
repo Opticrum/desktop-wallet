@@ -204,25 +204,36 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
+  min-width: 30px;
   height: 28px;
-  border-radius: 5px;
-  border: none;
-  background: transparent;
+  padding: 0 9px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.02em;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
 
 .top-bar-quick-btn:hover {
   background: var(--surface-hover);
+  border-color: var(--line-strong);
   color: var(--text-primary);
 }
 
 .top-bar-quick-btn:active {
   background: var(--surface-hover);
+  border-color: var(--accent);
   color: var(--accent);
+}
+
+.top-bar-quick-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -3168,6 +3179,99 @@
   flex-direction: column;
   gap: 16px;
   overflow-y: auto;
+}
+
+/* Form / config-preview tab bar (DESIGN §7.3 tab anatomy) */
+.config-modal-tabs {
+  display: flex;
+  align-items: center;
+  gap: 27px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.config-modal-tab {
+  position: relative;
+  background: none;
+  border: none;
+  padding: 12px 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: color 0.15s ease;
+  font-family: inherit;
+}
+
+.config-modal-tab:hover {
+  color: var(--ink);
+}
+
+.config-modal-tab.active {
+  color: var(--accent);
+}
+
+.config-modal-tab.active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+}
+
+/* Read-only config.yml preview panel */
+.config-preview {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.config-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.config-preview-title {
+  font-size: 12px;
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+
+.config-preview-copy.btn-secondary {
+  min-height: 0;
+  height: 32px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.config-preview-copy.copied {
+  background: var(--accent-muted);
+  color: var(--accent);
+  box-shadow: none;
+}
+
+.config-preview-body {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink);
+  white-space: pre;
+  tab-size: 2;
 }
 
 /* Structured config sections */
@@ -6663,8 +6767,7 @@
   gap: 16px;
 }
 
-.lm-dash .section-head,
-.lm-split .section-head {
+.lm-dash .section-head {
   margin: 0;
   align-items: center;
 }
@@ -6695,60 +6798,182 @@
   margin-bottom: 0;
 }
 
+/* ── Market dashboard — yield distribution histogram ──────────────────────── */
+
+.lm-yield {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lm-yield-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.lm-yield-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.lm-yield-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto; /* range | track | count */
+  align-items: center;
+  gap: 8px;
+}
+
+.lm-yield-row-label {
+  min-width: 44px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-4);
+  white-space: nowrap;
+}
+
+.lm-yield-track {
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.lm-yield-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--accent-muted), var(--accent));
+  transition: width 0.3s ease;
+}
+
+.lm-yield-row-count {
+  min-width: 26px;
+  text-align: right;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+
+.lm-yield-empty {
+  font-size: 11px;
+  color: var(--ink-4);
+}
+
 .lm-buy-btn {
   width: 100%;
   justify-content: center;
 }
 
-.lm-split {
-  padding: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+/* ── Help dialog — About Opticrum ────────────────────────────────────────── */
+
+.help-dialog {
+  max-width: 560px;
 }
 
-.lm-split-row {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+.help-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  margin: 4px 0 16px;
+  background: var(--surface-2);
+  border-radius: var(--radius-pill);
+}
+
+.help-tab {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-}
-
-.lm-split-label {
-  font-size: 11px;
+  gap: 6px;
+  padding: 7px 16px;
+  border: none;
+  background: none;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
   font-weight: 600;
   color: var(--ink-3);
+  cursor: pointer;
   white-space: nowrap;
+  transition: color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
 }
 
-.lm-split-track {
-  height: 6px;
-  border-radius: 3px;
-  background: var(--surface-2);
-  overflow: hidden;
+.help-tab:hover {
+  color: var(--ink-2);
 }
 
-.lm-split-fill {
-  display: block;
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.4s ease;
+.help-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
-.lm-split-fill.is-order {
-  background: var(--me-accent);
+.help-tab.is-active {
+  color: var(--accent);
+  background: var(--surface);
+  box-shadow: var(--shadow-elevate);
 }
 
-.lm-split-fill.is-match {
-  background: var(--accent);
+.help-body {
+  max-height: 62vh;
+  overflow-y: auto;
+  padding-right: 4px;
+  animation: help-body-in 160ms ease-out;
 }
 
-.lm-split-val {
+@keyframes help-body-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.help-lead {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+
+.help-section + .help-section {
+  margin-top: 14px;
+}
+
+.help-section-title {
+  margin: 0 0 6px;
   font-size: 11px;
   font-weight: 700;
-  color: var(--ink-2);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+.help-section-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.help-section-list li {
+  position: relative;
+  padding-left: 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+
+.help-section-list li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 8px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 @media (max-width: 1080px) {
@@ -6820,6 +7045,56 @@
 
 .lm-form-hint strong {
   color: var(--ink-2);
+}
+
+/* Risk notice under the fiber-address field — publishing without an address
+   leaves matchability to the network topology, so warn while it stays empty. */
+.lm-fiber-risk {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  border: 1px solid color-mix(in srgb, var(--warn) 26%, transparent);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.lm-fiber-risk-icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+  color: var(--warn);
+}
+
+.lm-fiber-risk-text {
+  flex: 1;
+}
+
+.lm-fiber-risk-title {
+  font-weight: 700;
+  color: var(--warn);
+  margin-bottom: 2px;
+}
+
+.lm-fiber-risk-body {
+  color: var(--ink-3);
+}
+
+/* Fiber-address input — teal-tinted so it stands out from the plain numeric
+   fields: it's the field that determines match reachability, so the market's
+   own accent marks it as the recommended one. */
+.lm-form-field .search-input.lm-fiber-address {
+  background: var(--me-accent-soft);
+  border-color: color-mix(in srgb, var(--me-accent) 40%, transparent);
+}
+
+.lm-form-field .search-input.lm-fiber-address:focus {
+  border-color: var(--me-accent);
+  background: var(--me-accent-soft);
 }
 
 /* Derived hints panel in the buy-order form — the rate + APY inferred from

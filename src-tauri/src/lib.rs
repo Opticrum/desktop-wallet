@@ -4,7 +4,7 @@ mod tray;
 
 use std::sync::Arc;
 
-use opticrum_wallet_core::backend::{BackendBundle, BackendConfig, BackendMode};
+use opticrum_wallet_core::backend::{BackendBundle, BackendConfig};
 use opticrum_wallet_core::wire::Chain;
 use tauri::{Manager, WindowEvent};
 
@@ -13,13 +13,9 @@ pub struct AppState(pub Arc<BackendBundle>);
 
 impl AppState {
   async fn new(cfg: BackendConfig) -> Self {
-    // Real backend by default — the app serves live on-chain/fiber data.
-    // Set `OPTICRUM_BACKEND=mock` to force the in-memory mock (dev/reference).
-    let mode = match std::env::var("OPTICRUM_BACKEND").as_deref() {
-      Ok("mock") => BackendMode::Mock,
-      _ => BackendMode::Real,
-    };
-    let bundle = BackendBundle::for_mode(mode, cfg)
+    // Real backend — the app serves live on-chain/fiber data (the runtime mock
+    // layer was removed).
+    let bundle = BackendBundle::real(cfg)
       .await
       .unwrap_or_else(|e| panic!("backend init failed: {e}"));
     AppState(Arc::new(bundle))

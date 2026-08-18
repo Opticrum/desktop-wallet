@@ -54,7 +54,7 @@
 
 | 渲染字段 | 来源 | 备注 |
 |---|---|---|
-| `nodeRuntime.{nodeAlias, uptimeHours, fiberPubkey, fiberAddr, chain}` | `node.get_runtime` | |
+| `nodeRuntime.{nodeAlias, startedAtMs, fiberPubkey, fiberAddr, chain}` | `node.get_runtime` | `uptimeHours` 保留（整小时派生）；前端计时用 `startedAtMs` |
 | `nodeWatchtower.{mode, endpoint}` | 同上 | wire 值为 standalone / disabled / builtin；mock/UI 现用 `'local'\|'remote'`（`NodeControlPanel` `wt-${mode}`），接入时迁移 |
 | `running`（本地布尔） | `node.get_runtime` | 子进程状态，state-as-data 非错误 |
 | `logs[].{ts, level, msg}` + `stats.{INFO,WARN,ERROR}` | `node.get_logs` | stats 为前端计数 |
@@ -74,7 +74,7 @@
 | sheet match | `matchLife, channelCapacityCkb, withdrawableCkb, channelOutpoint, outpoint, annualYieldBps, shannonsPerBlock, depositCkb, createdAt, expiresAt` | |
 | strip dashboard KPIs（orders tab） | `totalDemand, avgApy, pending, avgDwell` | 前端 reduce |
 | strip dashboard KPIs（matches tab） | `active, totalDeposit, avgRate, avgRemaining` | 前端 reduce |
-| market overview（右 aside） | `summary.{totalInboundCkb, activeMatches, totalDepositCkb, avgRateBps}` + `orderStats.pending` + `orderDemandTotal` + `matchCapTotal` + `splitPct` | `computeInboundSummary` 前端公式 |
+| market overview（右 aside） | `dashboard.{totalOrdersCapacityCkb, totalOrders, totalCapacityLockedCkb, avgAnnualYieldBps, avgShannonsPerBlock}` + 收益分布直方图 `yield_distribution.buckets` | `get_dashboard` → `mapDashboardData`（snake→camel 薄 mapper；`formatCkb`/`formatBpsValue`/`toLocaleString`） |
 | 表单 | publish（`channelCapacityCkb, shannonsPerBlock, depositCkb, rentalDays=30, fiberAddress?`）；adjust（`depositCkb`/`withdrawableCkb` 封顶） | |
 
 ### 1.3 HTTP 边界域（不设计 command，仅标注）
@@ -99,7 +99,7 @@
 10. 链网检测 `detectChainFromRpc(rpcUrl)`：`includes('testnet')→testnet` / `includes('mainnet')→mainnet` / 否则 `null`（纯字符串启发式）
 11. `config.yml` 序列化 + 体积：`serializeConfigYaml(config)` → `new Blob(yaml).size / 1024` → `'~/.fiber-node/config.yml · X.X KB'`
 12. QR 伪图案：`address` 做 FNV-1a 32-bit + xorshift 位流确定性渲染 finder/timing/alignment（纯前端渲染，非 IPC）
-13. `uptimeHours + 'h'` 展示（原始整数）
+13. `startedAtMs` → 每秒刷新 `Xh Ym` 实时计时展示（分钟级；`uptimeHours` 为整小时派生，不再直接渲染）
 14. `activeTypes` 过滤（仅展示选中的交易类型；依据 `wallet.get_transactions` 的 `kind`）
 15. level filter chips（本地筛选日志等级；依据 `node.get_logs` 返回）
 16. fiber `state_name` → `active|pending|closing` 显示桶映射（依据 `Channel.state`）
@@ -150,7 +150,7 @@
 | 1 | `wallet.unlock/create_hd_wallet/import_mnemonic/import_private_key/derive_addresses/lock`（HD 钱包、keystore、BIP32、解锁会话） | rust-server-wallet | SDK 明确无钱包/密钥/签名；rust-server `services/wallet/` 能力完整但强耦合 `DbPool`（`wallets` 表）与 HttpOnly cookie 会话 | 抽出 `services/wallet/{hd_wallet,crypto,keystore,address,wallet_session}` 进 opticrum-wallet-core，去 DbPool；子键改为每次 unlock 由 keystore+mnemonic 重派生（复用 `unlock_keystore` 派生循环）或轻量本地索引；`WalletSessionManager` 原样复用即得 `unlocked` 语义（TTL 3600s 滑动、`clear`） |
 | 2 | `wallet.get_summary`/`get_addresses`：`available_ckb/total_ckb/locked_ckb`、`address`、`lock_hash`、`chain` | rust-server-wallet | SDK 无余额聚合；rust-server `get_hd_wallet_balance`/`get_hd_wallet_address_balances` 用 `ChainProvider.get_balance_by_address` 循环求和（返回**原始 shannons**，`/1e8` 在 core 层预换算），但绑 DbPool（`list_wallets_by_type 'hd_child'`）；chain→hrp 地址/lock_hash 派生在 `address.rs` | 抽无 DB 版本：对解锁钱包地址集合逐个 `provider.get_balance_by_address` 求和并 `/1e8` 填 `WalletSummary`（available=sum、locked 预留）；`address` 用 `ckb_address_from_pubkey(hrp per chain)`；`lock_hash` 用 `script_lock_hash(lock_arg)`（即 channels.list 的 `owner_lock_hash` 输入） |
 | 3 | `channels.list` → `ChannelNode`/`Channel`（peer id/alias/addr、capacity_ckb、local/remote_balance_ckb、state） | **new-core-crate** | SDK 只谈 CKB opticrum 协议，不接触 Fiber 网络；通道/对端/节点数据只来自 fiber-node JSON-RPC。rust-server `RealChainProvider.scan_fiber_channels`/`list_peers` 可复用但绑 `ChainProvider` trait + `fiber-json-types`（vendored fiber RPC 类型），SDK 无法提供；alias 链上无（需 peer/`announced_node_name` 匹配，替代 mock `connectedNodes[].alias`） | 移植 rust-server `fiber/rpc_client.rs` + `fiber-json-types` 调用面进 new-core-crate，写 `channels.list`：`scan_fiber_channels(owner_lock_hash=当前钱包 lock_hash)` + `list_peers` 按 `counterparty_fiber_key` 分组 → `ChannelNode`；`*_ckb = shannons/1e8`；`state_name` 保留原始、前端映射 `active`/`pending`/`closing`（公式，设计决策 #2） |
-| 4 | `node.get_runtime` → `NodeRuntime`：`fiber_pubkey/addr`、`alias`、`chain`、`running`、`uptime_hours`、`watchtower{mode,endpoint}` | **new-core-crate** | SDK 无。rust-server `get_fiber_node_info` 有 node_info 解析（version/commit_hash/pubkey/addresses/chain_hash + '0x' 十六进制 counts），但 running/uptime_hours（子进程状态，rust-server 是常驻进程无此概念）、持久化 chain、watchtower 派生（`standalone_watchtower_rpc_url→standalone` / `disable_built_in_watchtower→disabled` / 否则 `builtin`）均需 desktop 新写 | new-core-crate 写 `NodeProcessManager`（spawn/terminate、`process_start_ts→uptime_hours`、`running` bool）+ 组装 `get_runtime`：node_info + 子进程状态 + 持久化 `config.fiber.chain` + config 派生 `watchtower{mode,endpoint}` |
+| 4 | `node.get_runtime` → `NodeRuntime`：`fiber_pubkey/addr`、`alias`、`chain`、`running`、`started_at_ms`（+ `uptime_hours` 派生）、`watchtower{mode,endpoint}` | **new-core-crate** | SDK 无。rust-server `get_fiber_node_info` 有 node_info 解析（version/commit_hash/pubkey/addresses/chain_hash + '0x' 十六进制 counts），但 running/uptime_hours（子进程状态，rust-server 是常驻进程无此概念）、持久化 chain、watchtower 派生（`standalone_watchtower_rpc_url→standalone` / `disable_built_in_watchtower→disabled` / 否则 `builtin`）均需 desktop 新写 | new-core-crate 写 `NodeProcessManager`（spawn/terminate、`process_start_ts→started_at_ms` + `uptime_hours` 派生、`running` bool）+ 组装 `get_runtime`：node_info + 子进程状态 + 持久化 `config.fiber.chain` + config 派生 `watchtower{mode,endpoint}` |
 | 5 | `wallet.send_ckb` 真实 CKB 转账（组装+签名+广播+确认） | **new-core-crate** | `RealChainProvider.send_transaction` 是 placeholder（`'create_order:'`/`'cancel_order:'` 前缀检测返回伪 hash，真实路径报错）；`HdWalletSigner`/`InternalSigner.sign()` 只对 `'operation:tx_hex'` 字符串做 SHA256 签名（非真 CKB 交易）；rust-server 无 secp256k1_blake160 转账组装 | 新写 `send_ckb` 流水线：`AddSecp256k1SighashCellDep` + `BalanceTransaction` + cinnabar `balance_and_sign` → send → register → `wait_for_confirmation`（300s 超时，参照 `TransactionAssembler`）；用解锁的 HD child key 真签；`address.rs` 校验 CKB2021 bech32m（ckb/ckt） |
 | 6 | `wallet.get_transactions` 账户历史：`kind(receive/send/channel_open/channel_close)` + `amount_ckb`(带符号) + `timestamp_ms` + `tx_hash` | **new-core-crate** | 无现有实现。rust-server `RealChainProvider` 有可复用底层（`get_cells_by_lock_arg` / `get_transaction` 含 TxInputInfo/TxOutputInfo 与 `lock_args_len` / `get_block_timestamp`），但 "funding-lock args 长度 20 / channel outpoint 识别 channel_open/close + CellOutput 容量差算 amount + 分类" 的索引器逻辑不存在于任何层 | new-core-crate 写 desktop account-history indexer：对钱包各 lock_hash `get_cells_by_lock_arg` → `get_transaction` → Rust 内按 `lock_args_len==20` / channel outpoint 判定 kind、容量差算 signed `amount_ckb`、`get_block_timestamp(block)` 得 `timestamp_ms`；replace mock `wallet.txs` |
 | 7 | `liquidity.get_matches` 返回 `deposit_ckb / withdrawable_ckb / created_at_ms / expires_at_ms`（SDK 只有块序号） | **new-core-crate** | `MatchSummary` 只有 `remaining_capacity_ckb/last_extraction_block/projected_exhaustion_block`，连 `match_creation_block` 都没有（只在 `MatchDetail`/`MatchDeadline`）；`deposit_ckb/withdrawable_ckb` 在 `MatchInfo.ckb_capacity`（opticrum-calculator 原始字段，SDK 未暴露为聚合）；block→ms 时间戳 SDK 无（`get_block_timestamp` 只在 rust-server ChainProvider，SDK 无） | new-core-crate 写 `get_matches` 服务：`scan_matches` → 每 `MatchInfo` 调 `get_block_timestamp(match_current_block)→created_at_ms`、`get_block_timestamp(projected_exhaustion_block)→expires_at_ms`（`shannons_per_block==0`→`u64::MAX`）；`deposit_ckb`=本地 sidecar（回退 `withdrawable_ckb`）；`withdrawable_ckb`=`MatchInfo.ckb_capacity/1e8`（xUDT 时 `xudt.amount/1e8`）；`channel_capacity_ckb`=`remaining_capacity_ckb`（耗尽为 0）。前端 `matchLife/rentalDaysForMatch/daysLeft/computeInboundSummary` 仍按 #2 留前端 |
@@ -195,7 +195,7 @@
 
 **需 new-core-crate 新写**：
 - `channels.list`：`scan_fiber_channels(owner_lock_hash=当前钱包 lock_hash)` + `list_peers` 按 `counterparty_fiber_key` 分组 → `ChannelNode`；`*_ckb=shannons/1e8`；`state_name` 保留原始、前端映射 `active|pending|closing`；alias 链上无，需 peer/`announced_node_name` 匹配（替代 mock `connectedNodes[].alias`）。**注意**：现有 `scan_fiber_channels` 忽略 owner 且 `include_closed: true`（real_chain_provider.rs:331），core 需自行过滤 owner / Closed
-- `node.get_runtime`：`NodeProcessManager`（spawn/terminate、`process_start_ts→uptime_hours`、`running` bool）+ node_info + 持久化 `config.fiber.chain` + config 派生 `watchtower{mode,endpoint}`
+- `node.get_runtime`：`NodeProcessManager`（spawn/terminate、`process_start_ts→started_at_ms` + `uptime_hours` 派生、`running` bool）+ node_info + 持久化 `config.fiber.chain` + config 派生 `watchtower{mode,endpoint}`
 - `disconnect_peer`（不在 trait，经 fiber `rpc_client` call `'disconnect_peer'`，ConfirmModal 确认后调用）；`open_channel` 补 temp_id→channel_id 轮询；`connect_peer` 从 addr 的 `/p2p/` 段解析 pubkey；fee-at-open 未知，标注 no-op 并经 update 后补
 - `channels.list` 费用补充：ChannelReady 通道调 fiber `get_channel_info` 补 `base_fee_mshannons/fee_rate_ppm`（不可用时 `None`，可选增强，前端可不渲染）
 - `node.start/stop`：idempotent、spawn 用 config 指定 fiber-node 可执行；`node.get_logs(level/since_ts_ms/limit)`：stdout/stderr 环形缓冲 + level 归一化 INFO/WARN/ERROR。实时日志流标注 **Phase 2 `node.log_line`**
@@ -256,7 +256,7 @@
 |---|---|
 | **钱包服务** | 从 rust-server 抽出 `services/wallet/{hd_wallet,crypto,keystore,address,wallet_session}` 去 DbPool；子键按 unlock 重派生；`WalletSessionManager` 原样复用（TTL 3600s） |
 | **钱包查询** | `get_summary`/`get_addresses`（`get_balance_by_address` 求和 + `/1e8`）；`get_transactions` account-history indexer（新写） |
-| **节点管理** | `NodeProcessManager`（spawn/terminate/uptime/running）+ `get_runtime` 组装；环形日志缓冲 + `get_logs`；`node.get_config/save_config`（`NodeConfig` serde_yaml 1:1 + chain/watchtower 持久化） |
+| **节点管理** | `NodeProcessManager`（spawn/terminate/`started_at_ms`→uptime/running）+ `get_runtime` 组装；环形日志缓冲 + `get_logs`；`node.get_config/save_config`（`NodeConfig` serde_yaml 1:1 + chain/watchtower 持久化） |
 | **Fiber 调用面** | 移植 `fiber/rpc_client.rs` + `fiber-json-types`；`channels.list`（`scan_fiber_channels`+`list_peers` 按 `counterparty_fiber_key` 分组）；`connect_peer`/`disconnect_peer`/`open_channel`（temp_id→channel_id 轮询）/`close_channel`；`get_channel_info` 费用补取 |
 | **流动性富化服务** | `get_matches`（`get_block_timestamp` block→ms + `ckb_capacity/1e8`）；`get_orders`（透传 `fiber_address` + `ckb_capacity/1e8`）；本地 sidecar `outpoint→{rental_days, created_at_ms, deposit_ckb}` |
 | **签名/广播** | `send_ckb` 真签流水线（`AddSecp256k1SighashCellDep`+`BalanceTransaction`+cinnabar `balance_and_sign`+`wait_for_confirmation` 300s）；liquidity 写操作（publish/cancel/inject/withdraw/extract）统一包层，extract 返回 `returned_ckb` |

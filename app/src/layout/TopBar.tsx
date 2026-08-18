@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useLocale } from '../i18n/LocaleContext'
 import { useTheme } from '../theme/ThemeContext'
+import { HelpDialog } from '../components/HelpDialog'
 
 type NavItem = {
   to: string
@@ -14,6 +16,8 @@ export function TopBar() {
   const { t, locale, setLocale } = useLocale()
   const { theme, setTheme } = useTheme()
   const { pathname } = useLocation()
+  // "关于 Opticrum" help dialog — opened from the top-right About button.
+  const [helpOpen, setHelpOpen] = useState(false)
 
   // Brand lockup suffix ("Desktop" from "Opticrum Desktop") — the wordmark's
   // two-tone split (Optic|rum) is a visual-design constant, not content.
@@ -116,23 +120,71 @@ export function TopBar() {
               type="button"
               className="top-bar-quick-btn"
               title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+              aria-label={theme === 'dark' ? 'Light mode' : 'Dark mode'}
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             >
-              {theme === 'dark' ? '☀' : '☾'}
+              {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
             </button>
             <button
               type="button"
               className="top-bar-quick-btn"
               title={locale === 'zh' ? 'English' : '中文'}
-              style={{ fontSize: 11, fontWeight: 600, width: 'auto', padding: '0 8px' }}
               onClick={() => setLocale(locale === 'zh' ? 'en' : 'zh')}
             >
               {locale === 'zh' ? 'EN' : '中'}
             </button>
+            <button
+              type="button"
+              className="top-bar-quick-btn"
+              title={t.helpTitle}
+              onClick={() => setHelpOpen(true)}
+            >
+              {t.aboutButton}
+            </button>
           </div>
         </div>
       </header>
+      <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
+  )
+}
+
+/* Sun / moon glyphs for the theme toggle — inline SVG keeps the icon and the
+   lang label on the same baseline (emoji glyphs render inconsistently). */
+function SunIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+    </svg>
+  )
+}
+
+function MoonIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </svg>
   )
 }
 

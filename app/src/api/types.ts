@@ -60,6 +60,7 @@ export type NodeRuntime = {
   starting: boolean
   alias: string | null
   uptimeHours: number
+  startedAtMs: number | null
   fiberPubkey: string
   fiberAddr: string | null
   addresses: string[]

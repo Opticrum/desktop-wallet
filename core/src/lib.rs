@@ -8,8 +8,8 @@
 pub mod backend;
 pub mod chain;
 pub mod db;
-pub mod mock_data;
 pub mod node;
 pub mod state;
+pub mod util;
 pub mod wallet;
 pub mod wire;

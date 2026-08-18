@@ -7,7 +7,7 @@
 // - `matchLife().label` / `LiquidityMatch.health` are **lowercase**
 //   (`healthy|warning|critical|exhausted`), matching the wire enum.
 
-import type { MatchHealth, WalletTxKind } from '../api/types'
+import type { DashboardData, MatchHealth, WalletTxKind } from '../api/types'
 
 // ── view types ──────────────────────────────────────────────────────────────
 
@@ -154,6 +154,65 @@ export function formatCkbPerBlock(shannons: number): string {
   if (ckb === 0) return '0'
   return ckb.toFixed(4).replace(/\.?0+$/, '')
 }
+
+// ── global market dashboard (snake → camel thin mapper) ─────────────────────
+
+/** High bound for a yield bucket Rust leaves open (u64::MAX → unbounded). */
+const OPEN_BPS = 1e15
+
+export type YieldBucketView = {
+  lowBps: number
+  highBps: number
+  /** True when this is the top, open-ended band ("≥ X%"). */
+  openEnded: boolean
+  count: number
+  capacityCkb: number
+  /** 0–1 share of the largest bucket's count — drives the histogram bar. */
+  share: number
+}
+
+/** Global whole-chain market overview — the `lm-dash` panel (camelCase). */
+export type MappedDashboard = {
+  totalOrders: number
+  totalCapacityLockedCkb: number
+  totalOrdersCapacityCkb: number
+  avgAnnualYieldBps: number
+  avgShannonsPerBlock: number
+  yieldBuckets: YieldBucketView[]
+  hasYieldData: boolean
+}
+
+/** Thin snake_case → camelCase mapper for `liquidity.get_dashboard`. */
+export function mapDashboardData(raw: DashboardData): MappedDashboard {
+  const buckets = (raw.yield_distribution?.buckets ?? []).map((b) => ({
+    lowBps: b.low_bps,
+    highBps: b.high_bps,
+    openEnded: b.high_bps >= OPEN_BPS,
+    count: b.count,
+    capacityCkb: b.capacity_shannons / 1e8,
+  }))
+  const maxCount = buckets.reduce((m, b) => Math.max(m, b.count), 1)
+  return {
+    totalOrders: raw.total_orders,
+    totalCapacityLockedCkb: raw.total_capacity_locked_shannons / 1e8,
+    totalOrdersCapacityCkb: raw.total_orders_capacity_shannons / 1e8,
+    avgAnnualYieldBps: raw.avg_annual_yield_bps,
+    avgShannonsPerBlock: raw.avg_shannons_per_block,
+    yieldBuckets: buckets.map((b) => ({ ...b, share: b.count / maxCount })),
+    hasYieldData: buckets.some((b) => b.count > 0),
+  }
+}
+
+/** "0–2%" / open-ended "≥25%" — the yield-band label for a histogram row. */
+export function formatYieldRange(b: YieldBucketView): string {
+  const lo = trimPercent(b.lowBps / 100)
+  if (b.openEnded) return `≥${lo}%`
+  return `${lo}–${trimPercent(b.highBps / 100)}%`
+}
+
+/** Percent string with ≤1 decimal, trailing `.0` trimmed (25 → "25"). */
+const trimPercent = (v: number) =>
+  v >= 100 ? String(Math.round(v)) : v.toFixed(1).replace(/\.0$/, '')
 
 /** Outpoint without its `:index` suffix, then truncated for the detail row. */
 export function truncateOutpointNoIndex(outpoint: string): string {

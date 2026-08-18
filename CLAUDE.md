@@ -22,7 +22,7 @@ opticrum-wallet/
 ### The three parts
 
 - **`mockup/`** — the original static SPA that nails the visual layout and copy. It is a **frozen reference**: do not modify it. Run it standalone in a browser to compare against the desktop app. All design/spec docs refer to this project's structure.
-- **`app/`** — the desktop app's frontend (byte-for-byte port of `mockup/`: same components, styles, i18n). This is the **live** frontend: all future UI work happens here. It consumes data through the `app/src/api/` IPC layer (`client.ts` → `transport.ts` → Rust or the browser fallback); pure formulas live in `app/src/lib/`.
+- **`app/`** — the desktop app's frontend (byte-for-byte port of `mockup/`: same components, styles, i18n). This is the **live** frontend: all future UI work happens here. It consumes data through the `app/src/api/` IPC layer (`client.ts` → `transport.ts` → Rust via Tauri `invoke`); pure formulas live in `app/src/lib/`.
 - **`src-tauri/`** — the Tauri 2.x Rust host. **Thin commands only** — validate args, call the core, serialize. Business logic belongs in a testable crate (a `opticrum-wallet-core` crate that embeds `opticrum-sdk` and reuses `rust-server`'s wallet code is planned), not in command bodies.
 
 ## Build & Run
@@ -73,14 +73,14 @@ StrictMode
 
 **Shell ↔ frontend boundary:**
 - Dev: OS WebView loads `http://localhost:5174` (vite). Production: WebView loads `../app/dist` over the tauri protocol.
-- Frontend talks to Rust only through `@tauri-apps/api` `invoke()` (IPC commands). The 37-command surface from `docs/ipc/ipc-api.md` is implemented in `src-tauri/src/commands.rs` (wire types in `wire.rs`, mock datasets in `mock_data.rs`, shared store in `state.rs`); the frontend transport lives in `app/src/api/` (`transport.ts` maps the docs' `<domain>.<verb>` names to Tauri's underscore fn names). OS-integration commands (`node.fnn_cli_*`, `node.open_url`) live in `src-tauri/src/fnn_cli.rs`, and the host/tray commands (`app.set_locale`, `app.exit`) live in `src-tauri/src/tray.rs` — neither in the core.
+- Frontend talks to Rust only through `@tauri-apps/api` `invoke()` (IPC commands). The 37-command surface from `docs/ipc/ipc-api.md` is implemented in `src-tauri/src/commands.rs`, dispatching to `opticrum-wallet-core` (`core/src/backend/`, wire types in `core/src/wire.rs`); the frontend transport lives in `app/src/api/` (`transport.ts` maps the docs' `<domain>.<verb>` names to Tauri's underscore fn names). OS-integration commands (`node.fnn_cli_*`, `node.open_url`) live in `src-tauri/src/fnn_cli.rs`, and the host/tray commands (`app.set_locale`, `app.exit`) live in `src-tauri/src/tray.rs` — neither in the core.
 - The app marketplace is the only part that should `fetch` a remote catalog; wallet/channels/node/liquidity stay local (invoke → Rust).
 
 **Styling:** plain CSS in `app/src/styles/` — `tokens.css` (CSS variables for both `[data-theme='light']` and `[data-theme='dark']`, slate gray + teal accent, default dark) and `app.css` (single stylesheet). Never hardcode colors.
 
 **i18n:** homegrown dictionary swap. `app/src/i18n/types.ts` = strict `Messages` shape; `zh.ts` + `en.ts` parallel; `LocaleContext.tsx` provides `t`. Default `zh`.
 
-**Mock data:** wallet/channels/node/liquidity datasets live in `src-tauri/src/mock_data.rs` (served over IPC) with a DEV-ONLY wire-shaped mirror in `app/src/api/browserMock.ts` for the standalone browser workflow; marketplace content (apps/banners/news/changelogs) stays in `app/src/content/` (HTTP content domain). Pages consume everything through `app/src/api/client.ts`; pure formulas live in `app/src/lib/`.
+**Data:** wallet/channels/node/liquidity all come from the real backend over IPC (the runtime mock layer was removed — the app is desktop/Tauri-only). Marketplace content (apps/banners/news/changelogs) stays in `app/src/content/` (HTTP content domain). Pages consume everything through `app/src/api/client.ts`; pure formulas live in `app/src/lib/`.
 
 ## Conventions & Constraints
 
@@ -91,7 +91,6 @@ StrictMode
 - **Theme parity:** light and dark themes must look finished. Add tokens to both blocks in `tokens.css`; never inline a color that should be a token.
 - **No top bar.** Logo, theme, and language toggles live where the design says — left sidebar brand + footer toggles.
 - **Visual language:** slate neutrals + teal accent. Avoid purple gradients, generic glassmorphism, Inter-as-only-font defaults. System font stack already declared in `tokens.css`.
-- **Mock data realism:** fake but plausible — real-shaped txids, pubkey prefixes, CKB amounts, timestamps. New datasets go in `app/src/mock/`.
 - **Rust shell discipline:** keep `src-tauri/` commands thin; put logic in a testable crate following the sibling repos' patterns (generic over traits, in-memory fakes for tests).
 - **Clippy gate:** every Rust change (shell `src-tauri/` or the `core/` crate) must end clean under `cargo clippy` — no warnings, not just no errors. Run `cargo clippy` (optionally `cargo fmt --check`) before finishing.
 
