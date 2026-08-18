@@ -100,21 +100,22 @@
 }
 
 [data-theme='dark'] {
-  --page-bg: #080a0e;
-  --shell-bg: #0c0f14;
-  --surface: #141820;
-  --surface-2: #1a1f2a;
-  --surface-hover: #1e2640;
-  --ink: #f2f3f7;
-  --ink-2: #c8ccd8;
-  --ink-3: #8b91a3;
-  --ink-4: #5c6378;
-  --line: rgba(242, 243, 247, 0.08);
-  --line-strong: rgba(242, 243, 247, 0.14);
+  /* Cool-slate palette: one notch brighter, lower contrast, softer shadows. */
+  --page-bg: #111419;
+  --shell-bg: #161a21;
+  --surface: #1d222c;
+  --surface-2: #242a36;
+  --surface-hover: #2b3446;
+  --ink: #eceef3;
+  --ink-2: #c3c8d3;
+  --ink-3: #969dae;
+  --ink-4: #6b7286;
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.16);
 
   --accent: #5b7aff;
   --accent-hover: #7a94ff;
-  --accent-muted: #1a2240;
+  --accent-muted: #1b2447;
   --accent-ink: #ffffff;
 
   --ok: #34d399;
@@ -148,25 +149,25 @@
   --donut-2: #ff8040;
   --donut-3: #8b7cff;
   --donut-4: #22c5f0;
-  --donut-track: rgba(242, 243, 247, 0.08);
+  --donut-track: rgba(255, 255, 255, 0.10);
 
-  --modal-backdrop: rgba(0, 0, 0, 0.65);
+  --modal-backdrop: rgba(0, 0, 0, 0.58);
 
-  /* Log console terminal — keep current palette in dark theme */
-  --log-bg: #0f1218;
-  --log-chrome-bg: #151a24;
-  --log-title: #8b91a3;
-  --log-ink: #a8aebc;
-  --log-time: #5c6378;
+  /* Log console terminal — brightened a step to match the lifted surfaces */
+  --log-bg: #161a22;
+  --log-chrome-bg: #1c2230;
+  --log-title: #969dae;
+  --log-ink: #b7bdc9;
+  --log-time: #6b7286;
   --log-info: #7aa2d4;
   --log-warn: #e0b35c;
   --log-error: #e06c75;
-  --log-line: rgba(255, 255, 255, 0.04);
+  --log-line: rgba(255, 255, 255, 0.05);
 
   --shadow-soft: none;
-  --shadow-panel: 0 24px 60px rgba(0, 0, 0, 0.45);
-  --shadow-accent: 0 12px 28px rgba(63, 97, 255, 0.35);
-  --shadow-elevate: 0 6px 18px rgba(0, 0, 0, 0.45);
+  --shadow-panel: 0 24px 60px rgba(0, 0, 0, 0.32);
+  --shadow-accent: 0 12px 28px rgba(63, 97, 255, 0.32);
+  --shadow-elevate: 0 6px 18px rgba(0, 0, 0, 0.30);
 
   --bg: var(--page-bg);
   --bg-elevated: var(--surface);
