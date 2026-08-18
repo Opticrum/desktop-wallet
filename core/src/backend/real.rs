@@ -9,9 +9,15 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
+use ckb_cinnabar_calculator::re_exports::ckb_types::{
+  core::ScriptHashType, packed::Script, prelude::{Builder, Entity, Pack},
+};
 use ckb_cinnabar_calculator::re_exports::secp256k1::{PublicKey, SecretKey};
-use ckb_cinnabar_calculator::rpc::RPC;
+use ckb_cinnabar_calculator::rpc::{Network, RPC};
+use ckb_cinnabar_calculator::skeleton::TYPE_ID_CODE_HASH;
 use diesel::sqlite::SqliteConnection;
+use opticrum_calculator::config::opticrum_contract_type_id;
+use opticrum_calculator::types::{MatchArgs, OrderArgs};
 
 use crate::chain::chain_provider::{ChainProvider, TransactionInfo};
 use crate::db::txs_cache;
@@ -46,6 +52,9 @@ pub struct RealWalletBackend<T: RPC> {
   keystore_path: PathBuf,
   testnet: bool,
   fee_rate: u64,
+  /// Live node config, shared with the node backend — the `scripts[]` list is
+  /// the fiber contract set used to classify txs as channel open/close.
+  node_config: Arc<Mutex<NodeConfig>>,
   /// Decrypted HD-child keys — RAM only while unlocked.
   keyring: Mutex<Vec<(WalletRecord, SecretKey)>>,
   /// BIP39 seed (64 bytes) — RAM only while unlocked, for `derive_addresses`.
@@ -62,6 +71,7 @@ impl<T: RPC> RealWalletBackend<T> {
     keystore_path: PathBuf,
     testnet: bool,
     fee_rate: u64,
+    node_config: Arc<Mutex<NodeConfig>>,
   ) -> Self {
     Self {
       rpc,
@@ -70,6 +80,7 @@ impl<T: RPC> RealWalletBackend<T> {
       keystore_path,
       testnet,
       fee_rate,
+      node_config,
       keyring: Mutex::new(Vec::new()),
       seed: Mutex::new(None),
       enc_key: Mutex::new(None),
@@ -339,8 +350,45 @@ impl<T: RPC + Send + Sync> WalletBackend for RealWalletBackend<T> {
         && wallet_lock_args.iter().any(|a| a == &out.lock_args_hex)
     };
 
+    // Fiber contract set from the live node config: an output locked by the
+    // FundingLock contract marks a channel funding (open); an input spending
+    // any configured fiber script marks a channel close. `lock_code_hash` on
+    // the wire is bare hex while config code_hashes carry a `0x` prefix —
+    // normalize both before comparing.
+    let (funding_hash, fiber_hashes) = {
+      let cfg = self.node_config.lock().unwrap();
+      let normalize = |h: &str| h.strip_prefix("0x").unwrap_or(h).to_ascii_lowercase();
+      let mut fiber: HashSet<String> = HashSet::new();
+      let mut funding = None;
+      for s in &cfg.scripts {
+        let h = normalize(&s.code_hash);
+        fiber.insert(h.clone());
+        if s.name == "FundingLock" {
+          funding = Some(h);
+        }
+      }
+      (funding, fiber)
+    };
+
+    // Opticrum liquidity lock: the code_hash is the script hash of the deployed
+    // contract's type script `(TYPE_ID, Type, opticrum_contract_type_id)`. The
+    // calculator only implements the testnet type_id — mainnet would panic, so
+    // Opticrum classification is testnet-only for now.
+    let opticrum_lock_hash: Option<String> = if self.testnet {
+      let type_id = opticrum_contract_type_id(Network::Testnet);
+      let type_script = Script::new_builder()
+        .code_hash(TYPE_ID_CODE_HASH.pack())
+        .hash_type(ScriptHashType::Type)
+        .args(type_id.as_bytes().pack())
+        .build();
+      Some(hex::encode(type_script.calc_script_hash().as_bytes()))
+    } else {
+      None
+    };
+
     // Per tx, the wallet's net flow: outputs to the wallet minus wallet cells
-    // consumed as inputs. Positive → Receive, negative → Send.
+    // consumed as inputs. Positive → Receive, negative → Send — unless fiber or
+    // Opticrum contracts in the I/O say it is a channel or liquidity action.
     let mut txs: Vec<WalletTx> = Vec::new();
     for tx_hash in &tx_hashes {
       let loaded = match self.load_tx(tx_hash, stable_bound).await {
@@ -350,19 +398,47 @@ impl<T: RPC + Send + Sync> WalletBackend for RealWalletBackend<T> {
       let info = &loaded.info;
       let mut received = 0f64;
       let mut spent = 0f64;
+      let mut out_is_funding = false;
+      let mut in_spends_fiber = false;
+      let mut out_is_order = false;
+      let mut in_spends_match = false;
       for out in &info.outputs {
         if is_wallet_lock(out) {
           received += out.capacity as f64 / 1e8;
         }
+        if funding_hash.as_deref() == Some(out.lock_code_hash.as_str()) {
+          out_is_funding = true;
+        }
+        // An Opticrum cell locked by the order args = a rent pledge (the wallet
+        // funded the order). Order vs match is an exact args-length check.
+        if opticrum_lock_hash.as_deref() == Some(out.lock_code_hash.as_str()) {
+          if let Ok(args) = hex::decode(&out.lock_args_hex) {
+            if OrderArgs::from_slice(&args).is_ok() {
+              out_is_order = true;
+            }
+          }
+        }
       }
       for input in &info.inputs {
-        // Resolve each input's previous output to see if it is a wallet cell.
+        // Resolve each input's previous output to see if it is a wallet cell —
+        // and whether it spends a fiber contract cell (channel close) or an
+        // Opticrum match cell (rent extraction). The same walk drives all three;
         // `previous_tx_hash` is plain 64-hex (no "0x"). Read through the same
         // cache — the walk stops at previously-resolved txs.
         if let Ok(prev) = self.load_tx(&input.previous_tx_hash, stable_bound).await {
           if let Some(out) = prev.info.outputs.get(input.previous_index as usize) {
             if is_wallet_lock(out) {
               spent += out.capacity as f64 / 1e8;
+            }
+            if fiber_hashes.contains(&out.lock_code_hash) {
+              in_spends_fiber = true;
+            }
+            if opticrum_lock_hash.as_deref() == Some(out.lock_code_hash.as_str()) {
+              if let Ok(args) = hex::decode(&out.lock_args_hex) {
+                if MatchArgs::from_slice(&args).is_ok() {
+                  in_spends_match = true;
+                }
+              }
             }
           }
         }
@@ -371,14 +447,29 @@ impl<T: RPC + Send + Sync> WalletBackend for RealWalletBackend<T> {
       if net.abs() < 1e-6 {
         continue; // no net movement (e.g. self-transfer / dust)
       }
+      // Fiber first: a funding tx creates the FundingLock cell → open; a close
+      // spends the channel cell to settle → close. Opticrum: an order-cell
+      // output → rent pledge; a spent match cell → rent extraction. Everything
+      // else is a plain wallet transfer by net sign.
+      let kind = if out_is_funding {
+        WalletTxKind::ChannelOpen
+      } else if in_spends_fiber {
+        WalletTxKind::ChannelClose
+      } else if out_is_order {
+        WalletTxKind::RentPledge
+      } else if in_spends_match {
+        WalletTxKind::RentExtract
+      } else if net > 0.0 {
+        WalletTxKind::Receive
+      } else {
+        WalletTxKind::Send
+      };
       txs.push(WalletTx {
         id: format!("tx-{tx_hash}"),
-        kind: if net > 0.0 {
-          WalletTxKind::Receive
-        } else {
-          WalletTxKind::Send
-        },
-        amount_ckb: net.abs(),
+        kind,
+        // Signed: +receive/inbound, −send/outbound (wire contract). `net` is
+        // nonzero here (the near-zero skip ran above).
+        amount_ckb: net,
         timestamp_ms: loaded.timestamp_ms,
         tx_hash: format!("0x{tx_hash}"),
       });
@@ -637,9 +728,16 @@ mod tests {
   use crate::db::init_test_db;
   use crate::db::txs_cache;
   use crate::db::wallets;
+  use crate::node::default_config::default_config;
   use crate::wallet::signer::secp256k1_lock_ex;
   use ckb_cinnabar_calculator::indexer::{CellType, Tx, TxWithCell};
   use ckb_cinnabar_calculator::simulation::FakeRpcClient;
+
+  /// The default node config — ships the FundingLock / CommitmentLock fiber
+  /// scripts the classifier matches against.
+  fn test_node_config() -> Arc<Mutex<NodeConfig>> {
+    Arc::new(Mutex::new(default_config()))
+  }
 
   fn test_backend() -> (RealWalletBackend<FakeRpcClient>, Arc<MockChainProvider>) {
     let fake = FakeRpcClient::default();
@@ -647,7 +745,15 @@ mod tests {
     let db = init_test_db();
     let dir = tempfile::tempdir().unwrap();
     let keystore_path = dir.path().join("keystore.json");
-    let backend = RealWalletBackend::new(fake, provider.clone(), db, keystore_path, true, 1000);
+    let backend = RealWalletBackend::new(
+      fake,
+      provider.clone(),
+      db,
+      keystore_path,
+      true,
+      1000,
+      test_node_config(),
+    );
     (backend, provider)
   }
 
@@ -705,7 +811,15 @@ mod tests {
     let db = init_test_db();
     let dir = tempfile::tempdir().unwrap();
     let keystore_path = dir.path().join("keystore.json");
-    let backend = RealWalletBackend::new(fake, provider.clone(), db, keystore_path, true, 1000);
+    let backend = RealWalletBackend::new(
+      fake,
+      provider.clone(),
+      db,
+      keystore_path,
+      true,
+      1000,
+      test_node_config(),
+    );
 
     let created = backend
       .create_hd_wallet("test".into(), "pw".into(), 1)
@@ -767,7 +881,308 @@ mod tests {
       }
     }
     assert_eq!(recv, 10000.0, "the 10000 receive must survive the spend");
-    assert_eq!(send, 1000.0, "the spend must show as a Send, not a 9000 receive");
+    assert_eq!(send, -1000.0, "the spend must show as a Send, not a 9000 receive");
+  }
+
+  /// A channel funding tx (wallet funds a FundingLock cell) must classify as
+  /// `channel_open`; spending the funding cell to settle must be `channel_close`;
+  /// a plain wallet receive stays `receive`.
+  #[tokio::test]
+  async fn get_transactions_classifies_channel_open_and_close() {
+    use crate::wallet::address;
+
+    let tx_a = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    let tx_fund = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+    let tx_close = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+    let mut fake = FakeRpcClient::default();
+    // tx_a: wallet output (seed receive). tx_fund: wallet input (funds the
+    // channel). tx_close: wallet output (settlement back).
+    for (hash, block, io_type) in [
+      (tx_a, 100u64, CellType::Output),
+      (tx_fund, 101u64, CellType::Input),
+      (tx_close, 102u64, CellType::Output),
+    ] {
+      fake.insert_fake_tx(Tx::Ungrouped(TxWithCell {
+        tx_hash: hash.parse().unwrap(),
+        block_number: block.into(),
+        tx_index: 0u32.into(),
+        io_index: 0u32.into(),
+        io_type,
+      }));
+    }
+    let provider = Arc::new(MockChainProvider::new());
+    let db = init_test_db();
+    let dir = tempfile::tempdir().unwrap();
+    let keystore_path = dir.path().join("keystore.json");
+    let backend = RealWalletBackend::new(
+      fake,
+      provider.clone(),
+      db,
+      keystore_path,
+      true,
+      1000,
+      test_node_config(),
+    );
+
+    let created = backend
+      .create_hd_wallet("test".into(), "pw".into(), 1)
+      .await
+      .unwrap();
+    let lock_arg = address::lock_arg_from_address(&created.address).unwrap();
+    let lock_code = hex::encode(crate::wallet::address::SIGHASH_TYPE_HASH);
+    let lock_args = hex::encode(lock_arg);
+
+    // The FundingLock contract from the default config. Config code_hashes
+    // carry the `0x` prefix while on-chain lock_code_hash is bare hex — this
+    // exercises the classifier's normalization on both sides.
+    let funding_hash = default_config()
+      .scripts
+      .iter()
+      .find(|s| s.name == "FundingLock")
+      .expect("default config has FundingLock")
+      .code_hash
+      .trim_start_matches("0x")
+      .to_string();
+
+    let wallet_out = |capacity: u64| TxOutputInfo {
+      capacity,
+      lock_code_hash: lock_code.clone(),
+      lock_hash_type: "Type".to_string(),
+      lock_args_hex: lock_args.clone(),
+      lock_args_len: 20,
+      data_hex: String::new(),
+    };
+    let funding_out = TxOutputInfo {
+      capacity: 100_000_000_000, // 1000 CKB locked into the channel
+      lock_code_hash: funding_hash,
+      lock_hash_type: "Type".to_string(),
+      lock_args_hex: hex::encode([7u8; 20]),
+      lock_args_len: 20,
+      data_hex: String::new(),
+    };
+
+    // tx_a: wallet receives 10000 CKB (seed).
+    provider.add_transaction(
+      tx_a,
+      TransactionInfo {
+        tx_hash: tx_a.to_string(),
+        block_number: 100,
+        inputs: vec![],
+        outputs: vec![wallet_out(1_000_000_000_000)],
+      },
+    );
+    // tx_fund: opens a channel — spends the seed cell, locks 1000 CKB into the
+    // FundingLock cell, 9000 change back to the wallet.
+    provider.add_transaction(
+      tx_fund,
+      TransactionInfo {
+        tx_hash: tx_fund.to_string(),
+        block_number: 101,
+        inputs: vec![TxInputInfo {
+          previous_tx_hash: tx_a.to_string(),
+          previous_index: 0,
+        }],
+        outputs: vec![wallet_out(900_000_000_000), funding_out],
+      },
+    );
+    // tx_close: closes the channel — spends the FundingLock cell, settles 1000
+    // CKB back to the wallet.
+    provider.add_transaction(
+      tx_close,
+      TransactionInfo {
+        tx_hash: tx_close.to_string(),
+        block_number: 102,
+        inputs: vec![TxInputInfo {
+          previous_tx_hash: tx_fund.to_string(),
+          previous_index: 1,
+        }],
+        outputs: vec![wallet_out(100_000_000_000)],
+      },
+    );
+
+    let txs = backend.get_transactions(None, None).await.unwrap();
+    let by_hash = |hash: &str| -> &WalletTx {
+      txs
+        .iter()
+        .find(|t| t.tx_hash == format!("0x{hash}"))
+        .unwrap_or_else(|| panic!("tx 0x{hash} missing from history: {txs:#?}"))
+    };
+
+    assert_eq!(
+      by_hash(tx_fund).kind,
+      WalletTxKind::ChannelOpen,
+      "funding tx must be ChannelOpen"
+    );
+    assert_eq!(by_hash(tx_fund).amount_ckb, -1000.0, "funding is outbound");
+    assert_eq!(
+      by_hash(tx_close).kind,
+      WalletTxKind::ChannelClose,
+      "close tx must be ChannelClose"
+    );
+    assert_eq!(by_hash(tx_close).amount_ckb, 1000.0, "close is inbound");
+    // Plain receive with no fiber contracts must not be reclassified.
+    assert_eq!(by_hash(tx_a).kind, WalletTxKind::Receive);
+  }
+
+  /// An Opticrum order-cell output (wallet funds the order) → `rent_pledge`; a
+  /// spent Opticrum match cell (rent paid back to the wallet) → `rent_extract`.
+  #[tokio::test]
+  async fn get_transactions_classifies_rent_pledge_and_extract() {
+    use crate::wallet::address;
+
+    // The Opticrum lock code_hash — script hash of the deployed contract's type
+    // script, derived exactly like production (testnet).
+    let opticrum_lock_hash = {
+      let type_id = opticrum_contract_type_id(Network::Testnet);
+      let ts = Script::new_builder()
+        .code_hash(TYPE_ID_CODE_HASH.pack())
+        .hash_type(ScriptHashType::Type)
+        .args(type_id.as_bytes().pack())
+        .build();
+      hex::encode(ts.calc_script_hash().as_bytes())
+    };
+
+    let tx_seed = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+    let tx_pledge = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+    let tx_match = "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a";
+    let tx_extract = "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b";
+    let mut fake = FakeRpcClient::default();
+    // tx_pledge: wallet input (funds the order). tx_extract: wallet output
+    // (receives the rent). tx_seed: wallet output. tx_match is only resolved
+    // as the extract tx's previous output — no indexer entry needed.
+    for (hash, block, io_type) in [
+      (tx_seed, 100u64, CellType::Output),
+      (tx_pledge, 101u64, CellType::Input),
+      (tx_extract, 103u64, CellType::Output),
+    ] {
+      fake.insert_fake_tx(Tx::Ungrouped(TxWithCell {
+        tx_hash: hash.parse().unwrap(),
+        block_number: block.into(),
+        tx_index: 0u32.into(),
+        io_index: 0u32.into(),
+        io_type,
+      }));
+    }
+    let provider = Arc::new(MockChainProvider::new());
+    let db = init_test_db();
+    let dir = tempfile::tempdir().unwrap();
+    let keystore_path = dir.path().join("keystore.json");
+    let backend = RealWalletBackend::new(
+      fake,
+      provider.clone(),
+      db,
+      keystore_path,
+      true,
+      1000,
+      test_node_config(),
+    );
+
+    let created = backend
+      .create_hd_wallet("test".into(), "pw".into(), 1)
+      .await
+      .unwrap();
+    let lock_arg = address::lock_arg_from_address(&created.address).unwrap();
+    let lock_code = hex::encode(crate::wallet::address::SIGHASH_TYPE_HASH);
+    let lock_args = hex::encode(lock_arg);
+
+    let wallet_out = |capacity: u64| TxOutputInfo {
+      capacity,
+      lock_code_hash: lock_code.clone(),
+      lock_hash_type: "Type".to_string(),
+      lock_args_hex: lock_args.clone(),
+      lock_args_len: 20,
+      data_hex: String::new(),
+    };
+    // OrderArgs = 33-byte fiber pubkey + 32-byte buyer lock hash (65 bytes);
+    // MatchArgs = OrderArgs + 36-byte outpoint + 32-byte seller lock hash (133).
+    let order_args_hex = hex::encode([0x02u8; 33].into_iter().chain([0xaa; 32]).collect::<Vec<u8>>());
+    let match_args_hex = hex::encode(
+      [0x02u8; 33]
+        .into_iter()
+        .chain([0xaa; 32])
+        .chain([0x03; 36])
+        .chain([0xbb; 32])
+        .collect::<Vec<u8>>(),
+    );
+    let opticrum_out = |capacity: u64, args_hex: &str, args_len: usize| TxOutputInfo {
+      capacity,
+      lock_code_hash: opticrum_lock_hash.clone(),
+      lock_hash_type: "Type".to_string(),
+      lock_args_hex: args_hex.to_string(),
+      lock_args_len: args_len,
+      data_hex: String::new(),
+    };
+
+    // tx_seed: wallet receives 10000 CKB.
+    provider.add_transaction(
+      tx_seed,
+      TransactionInfo {
+        tx_hash: tx_seed.to_string(),
+        block_number: 100,
+        inputs: vec![],
+        outputs: vec![wallet_out(1_000_000_000_000)],
+      },
+    );
+    // tx_pledge: spends the seed cell, locks 1000 CKB into an Opticrum order
+    // cell, 9000 change back to the wallet.
+    provider.add_transaction(
+      tx_pledge,
+      TransactionInfo {
+        tx_hash: tx_pledge.to_string(),
+        block_number: 101,
+        inputs: vec![TxInputInfo {
+          previous_tx_hash: tx_seed.to_string(),
+          previous_index: 0,
+        }],
+        outputs: vec![wallet_out(900_000_000_000), opticrum_out(100_000_000_000, &order_args_hex, 65)],
+      },
+    );
+    // tx_match: creates the match cell (resolved only as the extract input).
+    provider.add_transaction(
+      tx_match,
+      TransactionInfo {
+        tx_hash: tx_match.to_string(),
+        block_number: 102,
+        inputs: vec![],
+        outputs: vec![opticrum_out(100_000_000_000, &match_args_hex, 133)],
+      },
+    );
+    // tx_extract: spends the match cell, settles 1000 CKB back to the wallet.
+    provider.add_transaction(
+      tx_extract,
+      TransactionInfo {
+        tx_hash: tx_extract.to_string(),
+        block_number: 103,
+        inputs: vec![TxInputInfo {
+          previous_tx_hash: tx_match.to_string(),
+          previous_index: 0,
+        }],
+        outputs: vec![wallet_out(100_000_000_000)],
+      },
+    );
+
+    let txs = backend.get_transactions(None, None).await.unwrap();
+    let by_hash = |hash: &str| -> &WalletTx {
+      txs
+        .iter()
+        .find(|t| t.tx_hash == format!("0x{hash}"))
+        .unwrap_or_else(|| panic!("tx 0x{hash} missing from history: {txs:#?}"))
+    };
+
+    assert_eq!(
+      by_hash(tx_pledge).kind,
+      WalletTxKind::RentPledge,
+      "order-cell output must be RentPledge"
+    );
+    assert_eq!(by_hash(tx_pledge).amount_ckb, -1000.0, "pledge is outbound");
+    assert_eq!(
+      by_hash(tx_extract).kind,
+      WalletTxKind::RentExtract,
+      "spent match cell must be RentExtract"
+    );
+    assert_eq!(by_hash(tx_extract).amount_ckb, 1000.0, "extract is inbound");
+    // A plain wallet receive stays Receive (no Opticrum contract).
+    assert_eq!(by_hash(tx_seed).kind, WalletTxKind::Receive);
   }
 
   /// Seed a 1-address wallet with tx_a (block 100, wallet receives 10000 CKB)
@@ -804,7 +1219,15 @@ mod tests {
     let db = init_test_db();
     let dir = tempfile::tempdir().unwrap();
     let keystore_path = dir.path().join("keystore.json");
-    let backend = RealWalletBackend::new(fake, provider.clone(), db, keystore_path, true, 1000);
+    let backend = RealWalletBackend::new(
+      fake,
+      provider.clone(),
+      db,
+      keystore_path,
+      true,
+      1000,
+      test_node_config(),
+    );
 
     let created = backend
       .create_hd_wallet("test".into(), "pw".into(), 1)
@@ -876,7 +1299,15 @@ mod tests {
     let db = init_test_db();
     let dir = tempfile::tempdir().unwrap();
     let keystore_path = dir.path().join("keystore.json");
-    let backend = RealWalletBackend::new(fake, provider.clone(), db, keystore_path, true, 1000);
+    let backend = RealWalletBackend::new(
+      fake,
+      provider.clone(),
+      db,
+      keystore_path,
+      true,
+      1000,
+      test_node_config(),
+    );
 
     let created = backend
       .create_hd_wallet("test".into(), "pw".into(), 1)
@@ -923,7 +1354,7 @@ mod tests {
     let (backend, provider, _tx_a, _tx_b) = seeded_history_backend(500).await;
 
     let txs = backend.get_transactions(None, None).await.unwrap();
-    assert_eq!(sum_flows(&txs), (10000.0, 1000.0));
+    assert_eq!(sum_flows(&txs), (10000.0, -1000.0));
     assert!(
       provider.get_transaction_calls.load(std::sync::atomic::Ordering::Relaxed) > 0,
       "first refresh must trace from the chain"
@@ -939,7 +1370,7 @@ mod tests {
       .store(0, std::sync::atomic::Ordering::Relaxed);
 
     let txs2 = backend.get_transactions(None, None).await.unwrap();
-    assert_eq!(sum_flows(&txs2), (10000.0, 1000.0));
+    assert_eq!(sum_flows(&txs2), (10000.0, -1000.0));
     assert_eq!(
       provider.get_transaction_calls.load(std::sync::atomic::Ordering::Relaxed),
       0,
@@ -1063,7 +1494,15 @@ mod tests {
     let db = init_test_db();
     let dir = tempfile::tempdir().unwrap();
     let keystore_path = dir.path().join("keystore.json");
-    let mut backend = RealWalletBackend::new(fake, provider.clone(), db, keystore_path, true, 1000);
+    let mut backend = RealWalletBackend::new(
+      fake,
+      provider.clone(),
+      db,
+      keystore_path,
+      true,
+      1000,
+      test_node_config(),
+    );
 
     backend
       .create_hd_wallet("t".into(), "pw".into(), 1)

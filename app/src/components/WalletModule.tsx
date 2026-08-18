@@ -112,6 +112,8 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
     send: true,
     channel_open: true,
     channel_close: true,
+    rent_pledge: true,
+    rent_extract: true,
   })
 
   // ── wallet gate (fast status — no chain query, so it renders immediately) ──

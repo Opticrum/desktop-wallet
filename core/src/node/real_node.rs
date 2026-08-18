@@ -32,7 +32,7 @@ fn with_p2p(addr: &str, pubkey: &str) -> String {
   }
 }
 
-fn load_config(path: &Path) -> NodeConfig {
+pub(crate) fn load_config(path: &Path) -> NodeConfig {
   match std::fs::read_to_string(path) {
     Ok(s) => serde_json::from_str(&s).unwrap_or_else(|_| default_config()),
     Err(_) => default_config(),
@@ -52,7 +52,9 @@ fn persist_config(path: &Path, config: &NodeConfig) -> Result<(), CommandError> 
 pub struct RealNodeBackend {
   fiber: Arc<dyn FiberNodeApi>,
   config_path: PathBuf,
-  config: Mutex<NodeConfig>,
+  /// Live node config, shared with the wallet backend so `save_config` edits
+  /// are visible to tx classification (fiber contract scripts) immediately.
+  config: Arc<Mutex<NodeConfig>>,
   embedded: tokio::sync::Mutex<Option<EmbeddedNode>>,
   wallet: Arc<dyn SigningWallet>,
   base_dir: PathBuf,
@@ -77,12 +79,12 @@ impl RealNodeBackend {
     config_path: PathBuf,
     base_dir: PathBuf,
     wallet: Arc<dyn SigningWallet>,
+    config: Arc<Mutex<NodeConfig>>,
   ) -> Self {
-    let config = load_config(&config_path);
     Self {
       fiber,
       config_path,
-      config: Mutex::new(config),
+      config,
       embedded: tokio::sync::Mutex::new(None),
       wallet,
       base_dir,
@@ -334,8 +336,15 @@ mod tests {
   fn test_backend(fiber: Arc<dyn FiberNodeApi>) -> (RealNodeBackend, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
     let config_path = dir.path().join("node-config.json");
+    let config = Arc::new(Mutex::new(load_config(&config_path)));
     (
-      RealNodeBackend::new(fiber, config_path, dir.path().join("fiber-node"), Arc::new(TestWallet)),
+      RealNodeBackend::new(
+        fiber,
+        config_path,
+        dir.path().join("fiber-node"),
+        Arc::new(TestWallet),
+        config,
+      ),
       dir,
     )
   }
@@ -379,6 +388,7 @@ mod tests {
       dir.path().join("node-config.json"),
       dir.path().join("fiber-node"),
       Arc::new(TestWallet),
+      Arc::new(Mutex::new(load_config(&dir.path().join("node-config.json")))),
     );
     assert_eq!(
       reloaded.get_config().await.unwrap().fiber.announced_node_name,

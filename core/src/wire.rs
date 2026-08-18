@@ -102,6 +102,8 @@ pub enum WalletTxKind {
   Send,
   ChannelOpen,
   ChannelClose,
+  RentPledge,
+  RentExtract,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

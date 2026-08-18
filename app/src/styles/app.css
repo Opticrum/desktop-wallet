@@ -1418,6 +1418,8 @@
 .activity-dot.send { background: var(--orange); }
 .activity-dot.channel_open { background: var(--violet); }
 .activity-dot.channel_close { background: var(--cyan); }
+.activity-dot.rent_pledge { background: var(--me-accent); }
+.activity-dot.rent_extract { background: var(--accent); }
 
 .activity-title {
   font-size: 15px;
@@ -1454,7 +1456,7 @@
 }
 
 .activity-amount.negative {
-  color: var(--ink);
+  color: var(--danger);
 }
 
 /* Click-to-copy affordance for addresses & other display strings. */
@@ -4047,6 +4049,18 @@
   color: var(--cyan);
   border-color: color-mix(in srgb, var(--cyan) 35%, transparent);
   background: color-mix(in srgb, var(--cyan) 12%, transparent);
+}
+
+.filter-chip.active-rent-pledge {
+  color: var(--me-accent);
+  border-color: color-mix(in srgb, var(--me-accent) 35%, transparent);
+  background: color-mix(in srgb, var(--me-accent) 12%, transparent);
+}
+
+.filter-chip.active-rent-extract {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .filter-empty {

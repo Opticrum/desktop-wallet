@@ -13,6 +13,10 @@ export function txLabel(type: WalletTxKind, t: ReturnType<typeof useLocale>['t']
       return t.txChannelOpen
     case 'channel_close':
       return t.txChannelClose
+    case 'rent_pledge':
+      return t.txRentPledge
+    case 'rent_extract':
+      return t.txRentExtract
   }
 }
 

@@ -42,7 +42,13 @@ export type WalletAddress = {
   lockHash: string
 }
 
-export type WalletTxKind = 'receive' | 'send' | 'channel_open' | 'channel_close'
+export type WalletTxKind =
+  | 'receive'
+  | 'send'
+  | 'channel_open'
+  | 'channel_close'
+  | 'rent_pledge'
+  | 'rent_extract'
 
 export type WalletTx = {
   id: string

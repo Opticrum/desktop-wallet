@@ -8,7 +8,7 @@ pub mod real;
 pub mod real_liquidity;
 pub mod traits;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::wire::{Chain, CommandError};
 
@@ -92,6 +92,12 @@ impl BackendBundle {
     let db = db::init_db(&cfg.database_url)?;
     let testnet = cfg.network == Chain::Testnet;
 
+    // One live node config shared by the node backend (owns save) and the
+    // wallet backend (reads fiber contract scripts for tx classification).
+    let node_config = Arc::new(Mutex::new(crate::node::real_node::load_config(
+      std::path::Path::new(&cfg.node_config_path),
+    )));
+
     let wallet = Arc::new(crate::backend::real::RealWalletBackend::new(
       rpc.clone(),
       provider.clone(),
@@ -99,6 +105,7 @@ impl BackendBundle {
       std::path::PathBuf::from(&cfg.keystore_path),
       testnet,
       cfg.fee_rate,
+      node_config.clone(),
     ));
     let liquidity = Arc::new(crate::backend::real_liquidity::RealLiquidityBackend::new(
       rpc,
@@ -129,6 +136,7 @@ impl BackendBundle {
       node_config_path,
       node_base_dir,
       wallet.clone(),
+      node_config,
     ));
     let channels = Arc::new(RealChannelsBackend::new(Arc::new(
       crate::node::real_channels::RealFiberChannels::new(fiber_client),

@@ -270,6 +270,8 @@ export type Messages = {
   txSend: string
   txChannelOpen: string
   txChannelClose: string
+  txRentPledge: string
+  txRentExtract: string
   txFilterLabel: string
   txFilterEmpty: string
   txEmpty: string

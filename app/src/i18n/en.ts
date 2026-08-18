@@ -262,6 +262,8 @@ export const en: Messages = {
   txSend: 'Sent',
   txChannelOpen: 'Channel opened',
   txChannelClose: 'Channel closed',
+  txRentPledge: 'Liquidity pledged',
+  txRentExtract: 'Rent extracted',
   txFilterLabel: 'Transaction type filter',
   txFilterEmpty: 'No matching transactions',
   txEmpty: 'No transactions yet',

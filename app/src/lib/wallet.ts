@@ -6,11 +6,18 @@ import type { WalletTx, WalletTxKind } from '../api/types'
 export type Tx = WalletTx
 export type TxType = WalletTxKind
 
-const TX_TYPES: TxType[] = ['receive', 'send', 'channel_open', 'channel_close']
+const TX_TYPES: TxType[] = ['receive', 'send', 'channel_open', 'channel_close', 'rent_pledge', 'rent_extract']
 
 /** Transaction-type counts — reduce over `wallet.get_transactions` `kind`. */
 export function typeCounts(txs: Tx[]): Record<TxType, number> {
-  const counts: Record<TxType, number> = { receive: 0, send: 0, channel_open: 0, channel_close: 0 }
+  const counts: Record<TxType, number> = {
+    receive: 0,
+    send: 0,
+    channel_open: 0,
+    channel_close: 0,
+    rent_pledge: 0,
+    rent_extract: 0,
+  }
   for (const tx of txs) counts[tx.kind] += 1
   return counts
 }

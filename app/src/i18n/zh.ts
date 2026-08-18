@@ -261,6 +261,8 @@ export const zh: Messages = {
   txSend: '付款',
   txChannelOpen: '开通通道',
   txChannelClose: '关闭通道',
+  txRentPledge: '流动性租金质押',
+  txRentExtract: '流动性租金提取',
   txFilterLabel: '交易类型筛选',
   txFilterEmpty: '无匹配交易',
   txEmpty: '没有交易记录',
