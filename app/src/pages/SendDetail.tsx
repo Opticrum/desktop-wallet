@@ -1,5 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocale } from '../i18n/LocaleContext'
+import { useScrollLock } from '../lib/useScrollLock'
 
 function IconClose() {
   return (
@@ -10,25 +11,49 @@ function IconClose() {
   )
 }
 
+/** Minimum spendable CKB amount — a secp256k1_blake160 cell with empty data. */
+const MIN_SEND_CKB = 61
+
 /**
  * Floating send dialog rendered above the wallet page.
- * Controlled by `open` + `onClose`. Closes on backdrop click, Escape, or
- * the close button. Form is intentionally read-only — this is a visual
- * mockup for the Send flow.
+ * Collects a recipient CKB address + amount (CKB), validates locally, then
+ * hands off to `onSubmit` — the parent runs the tx through the 3-step
+ * confirmation modal (构造 → 发送上链 → 打包确认).
  */
 export function SendDetail({
   open,
   onClose,
   addressShort,
+  availableCkb,
+  busy,
+  onSubmit,
 }: {
   open: boolean
   onClose: () => void
   /** Compact receiving address shown as the placeholder. */
   addressShort: string
+  /** Available spendable balance in CKB — upper bound for the amount. */
+  availableCkb: number
+  /** Disables the confirm button while a tx is running. */
+  busy: boolean
+  /** Fired with (address, amountCkb) once the form validates. */
+  onSubmit: (address: string, amountCkb: number) => void
 }) {
   const { t } = useLocale()
+  const [address, setAddress] = useState('')
+  const [amount, setAmount] = useState('')
+  const [error, setError] = useState<string | null>(null)
 
-  // Escape to dismiss
+  // Reset the form each time the dialog opens.
+  useEffect(() => {
+    if (open) {
+      setAddress('')
+      setAmount('')
+      setError(null)
+    }
+  }, [open])
+
+  // Escape to dismiss.
   useEffect(() => {
     if (!open) return
     const handler = (e: KeyboardEvent) => {
@@ -38,14 +63,34 @@ export function SendDetail({
     return () => window.removeEventListener('keydown', handler)
   }, [open, onClose])
 
+  useScrollLock(open)
+
   if (!open) return null
 
+  const handleConfirm = () => {
+    const amt = Number(amount)
+    if (!address.trim()) {
+      setError(t.sendAddressRequired)
+      return
+    }
+    if (!Number.isFinite(amt) || amt <= 0) {
+      setError(t.sendAmountInvalid)
+      return
+    }
+    if (amt < MIN_SEND_CKB) {
+      setError(t.sendAmountMin)
+      return
+    }
+    if (amt > availableCkb) {
+      setError(t.sendAmountExceed)
+      return
+    }
+    setError(null)
+    onSubmit(address.trim(), amt)
+  }
+
   return (
-    <div
-      className="send-modal-backdrop"
-      onClick={onClose}
-      role="presentation"
-    >
+    <div className="send-modal-backdrop" role="presentation">
       <div
         className="send-modal"
         role="dialog"
@@ -77,8 +122,10 @@ export function SendDetail({
               id="send-addr"
               className="search-input"
               placeholder={addressShort}
-              defaultValue=""
-              readOnly
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              spellCheck={false}
+              autoComplete="off"
             />
           </div>
 
@@ -91,15 +138,23 @@ export function SendDetail({
                 id="send-amount"
                 className="search-input"
                 placeholder="0.00"
-                defaultValue=""
-                readOnly
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
               />
               <span className="send-form-unit">CKB</span>
             </div>
           </div>
 
+          {error && <div className="send-form-error">{error}</div>}
+
           <div className="send-form-actions">
-            <button type="button" className="btn-primary" disabled>
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={busy}
+              onClick={handleConfirm}
+            >
               {t.sendConfirm}
             </button>
           </div>

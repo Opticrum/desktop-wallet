@@ -2,8 +2,11 @@
 //!
 //! Scans live Order/Match cells with the SDK, then maps the protocol types to
 //! the wire shapes. Local-tracking fields the chain does not carry (`deposit_ckb`,
-//! `rental_days`, `created_at_ms` for orders; `deposit_ckb`/`withdrawable_ckb`
-//! for matches) surface as null/0 in P2 — they land with the publish path (P4).
+//! `rental_days`, `created_at_ms` for orders) surface as null/0 in P2 — they land
+//! with the publish path (P4). Matches carry the hesitation-window fields derived
+//! from `MatchInfo` (`match_creation_block`, `hesitation_ends_at_ms`, `role`) and
+//! `withdrawable_ckb` is the full stake only while the wallet is the buyer inside
+//! the window.
 //! `scope` defaults to `'mine'`: `get_orders`/`get_matches` narrow to cells the
 //! wallet owns (buyer lock hash for orders; buyer **or** seller for matches),
 //! computed from the wallet's secp256k1 lock; `'all'` returns every on-chain cell.
@@ -22,9 +25,10 @@ use ckb_cinnabar_calculator::{
 };
 use opticrum_calculator::{
   calculator::rent_per_block_to_annual_yield,
-  config::{BLOCKS_PER_YEAR, CKB_DECIMAL, ORDER_TO_MATCH_CAPACITY_RESERVE},
+  config::{BLOCKS_PER_YEAR, CKB_DECIMAL, HESITATION_BLOCKS, ORDER_TO_MATCH_CAPACITY_RESERVE},
   types::{CompressedPubkey, MatchInfo, OrderArgs, OrderData, OrderInfo},
 };
+use opticrum_protocol::{MATCH_ARGS_LEN, ORDER_ARGS_LEN};
 use opticrum_sdk::{
   dashboard::get_match_detail,
   deadline::compute_match_deadline,
@@ -38,7 +42,7 @@ use opticrum_sdk::{
 
 use diesel::sqlite::SqliteConnection;
 
-use crate::backend::SigningWallet;
+use crate::backend::{SigningWallet, TxProgressReporter};
 use crate::chain::chain_provider::ChainProvider;
 use crate::db::orders_cache;
 use crate::state::SidecarEntry;
@@ -69,7 +73,9 @@ fn estimate_order_rental_days(o: &OrderInfo) -> Option<u32> {
   if rate == 0 {
     return None;
   }
-  let rent = o.ckb_capacity.saturating_sub(ORDER_TO_MATCH_CAPACITY_RESERVE);
+  let rent = o
+    .ckb_capacity
+    .saturating_sub(ORDER_TO_MATCH_CAPACITY_RESERVE);
   let days = (rent / rate) / BLOCKS_PER_DAY;
   if days == 0 {
     return None;
@@ -90,6 +96,18 @@ fn map_sdk_err(e: SdkError) -> CommandError {
       CommandError::NotExhausted(format!("match not exhausted (remaining {v} CKB)"))
     }
     SdkError::NotAuthorized(m) => CommandError::NotAuthorized(m),
+    SdkError::WithdrawWindowExpired => CommandError::WithdrawWindowExpired(
+      "buyer withdrawal window has expired (12h after match creation)".into(),
+    ),
+    SdkError::HesitationNotElapsed => CommandError::HesitationNotElapsed(
+      "seller cannot extract before the 12h hesitation window elapses".into(),
+    ),
+    SdkError::PartialWithdrawNotAllowed => CommandError::PartialWithdrawNotAllowed(
+      "buyer may only withdraw ALL rent (a full dump), not a partial amount".into(),
+    ),
+    SdkError::InjectDuringHesitation => CommandError::InjectDuringHesitation(
+      "fund injection is prohibited inside the 12h hesitation window".into(),
+    ),
   }
 }
 
@@ -115,6 +133,7 @@ fn order_to_wire(o: &OrderInfo) -> LiquidityOrder {
   let capacity_ckb = capacity_shannons as f64 / CKB_DECIMAL as f64;
   LiquidityOrder {
     outpoint: outpoint_0x(&o.order_outpoint.tx_hash, o.order_outpoint.index),
+    fiber_pubkey: hex::encode(o.order_args.fiber_pubkey.as_bytes()),
     channel_capacity_ckb: capacity_ckb,
     channel_capacity_shannons: capacity_shannons,
     shannons_per_block: o.order_data.shannons_per_block,
@@ -135,9 +154,34 @@ fn order_to_wire(o: &OrderInfo) -> LiquidityOrder {
 
 /// `MatchInfo` → wire `LiquidityMatch`. Block→ms timestamps come from the
 /// provider (real mode: on-chain header time; tests: `MockChainProvider` → 0).
+/// The channel capacity a match funds — the capacity of the funding cell the
+/// match references via `channel_outpoint`. The match cell's own capacity is the
+/// seller's stake (≈ the order's rent deposit), NOT the channel capacity; using
+/// it for the wire `channel_capacity_ckb` / APY inflates the yield. Falls back
+/// to the match cell capacity when the funding tx isn't reachable.
+async fn match_channel_capacity(m: &MatchInfo, provider: &dyn ChainProvider) -> u64 {
+  let tx_hash = hex::encode(m.match_args.channel_outpoint.tx_hash);
+  let index = m.match_args.channel_outpoint.index as usize;
+  match tokio::time::timeout(
+    std::time::Duration::from_secs(5),
+    provider.get_transaction(&tx_hash),
+  )
+  .await
+  {
+    Ok(Ok(tx)) => tx
+      .outputs
+      .get(index)
+      .map(|o| o.capacity)
+      .unwrap_or(m.ckb_capacity),
+    _ => m.ckb_capacity,
+  }
+}
+
 async fn match_to_wire(
   m: &MatchInfo,
   tip_block: u64,
+  my_lock_hash: Option<[u8; 32]>,
+  original_stake_ckb: Option<f64>,
   provider: &dyn ChainProvider,
 ) -> LiquidityMatch {
   let detail = get_match_detail(m, tip_block);
@@ -155,18 +199,49 @@ async fn match_to_wire(
       .saturating_sub(detail.match_creation_block);
     creation_ms.saturating_add(blocks.saturating_mul(12_000))
   };
+  // The wire capacity + APY are the channel capacity the order rents — same
+  // basis as orders — so a match reads 8% like its order, not rent/stake.
+  let channel_capacity = match_channel_capacity(m, provider).await;
+  let annual_yield_bps = rent_per_block_to_annual_yield(
+    detail.shannons_per_block,
+    std::cmp::max(channel_capacity, 1),
+  ) * 10_000.0;
+  let deposit_ckb = m.ckb_capacity as f64 / CKB_DECIMAL as f64;
+  // Hesitation window: the buyer may withdraw ALL rent (abandon the order)
+  // only before the window elapses AND before the seller's first extraction —
+  // mirrors the SDK `build_update_match` gate
+  // (`last_extraction_block == 0 && tip − match_creation_block ≤ HESITATION_BLOCKS`).
+  let in_window = m.match_data.last_extraction_block == 0
+    && tip_block.saturating_sub(detail.match_creation_block) <= HESITATION_BLOCKS;
+  let is_buyer = my_lock_hash == Some(m.match_args.order_args.buyer_lock_hash);
+  let is_seller = my_lock_hash == Some(m.match_args.seller_lock_hash);
+  let role = if is_buyer {
+    MatchRole::Buyer
+  } else if is_seller {
+    MatchRole::Seller
+  } else {
+    MatchRole::Other
+  };
   LiquidityMatch {
     outpoint: outpoint_0x(&m.match_outpoint.tx_hash, m.match_outpoint.index),
     channel_outpoint: outpoint_0x(
       &m.match_args.channel_outpoint.tx_hash,
       m.match_args.channel_outpoint.index,
     ),
-    channel_capacity_ckb: detail.remaining_capacity_ckb,
+    fiber_pubkey: hex::encode(m.match_args.order_args.fiber_pubkey.as_bytes()),
+    channel_capacity_ckb: channel_capacity as f64 / CKB_DECIMAL as f64,
     shannons_per_block: detail.shannons_per_block,
-    annual_yield_bps: detail.annual_yield_bps,
+    annual_yield_bps,
     // Same as orders: the stake is the match cell's total on-chain capacity.
-    deposit_ckb: m.ckb_capacity as f64 / CKB_DECIMAL as f64,
-    withdrawable_ckb: 0.0,
+    deposit_ckb,
+    // Original rent pool from the lineage trace — falls back to the current
+    // stake (extraction progress reads 0%) when the trace fails.
+    original_stake_ckb: original_stake_ckb.unwrap_or(deposit_ckb),
+    withdrawable_ckb: if is_buyer && in_window {
+      deposit_ckb
+    } else {
+      0.0
+    },
     xudt_amount: detail.xudt_amount.to_string(),
     created_at_ms: creation_ms,
     expires_at_ms: expires_ms,
@@ -175,6 +250,9 @@ async fn match_to_wire(
     last_extraction_block: detail.last_extraction_block,
     projected_exhaustion_block: detail.projected_exhaustion_block,
     seller_lock_hash: format!("0x{}", detail.seller_lock_hash),
+    match_creation_block: detail.match_creation_block,
+    hesitation_ends_at_ms: creation_ms.saturating_add(HESITATION_BLOCKS.saturating_mul(12_000)),
+    role,
   }
 }
 
@@ -257,14 +335,9 @@ fn build_dashboard(orders: &[OrderInfo], matches: &[MatchInfo], tip_block: u64) 
   // `channel_capacity` (Match cells discard it at match time), so a match-side
   // APY is not derivable on-chain. "Locked capacity" = total escrow held
   // across order + match cells (the CKB the protocol currently holds).
-  let total_orders_capacity_shannons: u64 = orders
-    .iter()
-    .map(|o| o.order_data.channel_capacity)
-    .sum();
-  let total_capacity_locked_shannons: u64 = orders
-    .iter()
-    .map(|o| o.ckb_capacity)
-    .sum::<u64>()
+  let total_orders_capacity_shannons: u64 =
+    orders.iter().map(|o| o.order_data.channel_capacity).sum();
+  let total_capacity_locked_shannons: u64 = orders.iter().map(|o| o.ckb_capacity).sum::<u64>()
     + matches.iter().map(|m| m.ckb_capacity).sum::<u64>();
 
   let avg_shannons: u64 = if orders.is_empty() {
@@ -338,9 +411,16 @@ pub struct RealLiquidityBackend<T: RPC> {
   provider: Arc<dyn ChainProvider>,
   wallet: Arc<dyn SigningWallet>,
   testnet: bool,
+  /// The current fiber node's identity pubkey (hex), shared with the node
+  /// backend — new orders are attributed to it in `OrderArgs.fiber_pubkey`.
+  node_pubkey: Arc<Mutex<Option<String>>>,
   /// Local metadata for orders this wallet published (`rental_days`/`created`
   /// aren't on-chain). In-memory in P4; DB persistence is a later refinement.
   sidecar: Mutex<HashMap<String, SidecarEntry>>,
+  /// Original match stake per match lineage (key = match args hex, value =
+  /// original rent pool in shannons). Immutable once a match exists, so a
+  /// successful lineage walk is cached for the backend's lifetime.
+  original_stake: Mutex<HashMap<String, u64>>,
   /// Personal-order cache (`cached_orders`). `Some` in production so `get_orders`
   /// reads cached cells instead of re-scanning the chain; `None` in tests (always
   /// scan, no persistence).
@@ -365,6 +445,7 @@ impl<T: RPC> RealLiquidityBackend<T> {
     provider: Arc<dyn ChainProvider>,
     wallet: Arc<dyn SigningWallet>,
     testnet: bool,
+    node_pubkey: Arc<Mutex<Option<String>>>,
     db: Option<SqliteConnection>,
   ) -> Self {
     Self {
@@ -372,9 +453,76 @@ impl<T: RPC> RealLiquidityBackend<T> {
       provider,
       wallet,
       testnet,
+      node_pubkey,
       sidecar: Mutex::new(HashMap::new()),
+      original_stake: Mutex::new(HashMap::new()),
       db: db.map(Mutex::new),
     }
+  }
+
+  /// Original rent pool (shannons) of a match — the first match cell's real
+  /// capacity at `order_match` time. Cached per match args (immutable once a
+  /// match exists); a failed trace returns `None` and is retried on a later scan.
+  async fn original_stake_shannons(&self, m: &MatchInfo) -> Option<u64> {
+    let key = hex::encode(m.match_args.to_bytes());
+    if let Some(stake) = self.original_stake.lock().unwrap().get(&key) {
+      return Some(*stake);
+    }
+    let stake = self.walk_original_stake(m).await?;
+    self.original_stake.lock().unwrap().insert(key, stake);
+    Some(stake)
+  }
+
+  /// Walk the match cell's producing-tx lineage back to the `order_match` tx
+  /// and read the original match cell's raw capacity. Each extract/inject tx
+  /// re-creates the match cell with the prior match cell (133-byte args) as an
+  /// input; the origin tx consumes the order cell (65-byte args). The match
+  /// cell's occupied capacity is constant across incarnations (same lock args +
+  /// data), so `original = first_raw − (last_raw − current_ckb_capacity)`.
+  async fn walk_original_stake(&self, m: &MatchInfo) -> Option<u64> {
+    const MAX_HOPS: usize = 200;
+    let match_args_hex = hex::encode(m.match_args.to_bytes());
+    let mut outpoint = (
+      hex::encode(m.match_outpoint.tx_hash),
+      m.match_outpoint.index as usize,
+    );
+    let (mut last_raw, mut first_raw): (Option<u64>, Option<u64>) = (None, None);
+    for _hop in 0..MAX_HOPS {
+      let tx = self.provider.get_transaction(&outpoint.0).await.ok()?;
+      let raw = tx.outputs.get(outpoint.1)?.capacity;
+      last_raw.get_or_insert(raw);
+      let mut stepped = None;
+      // Only the Opticrum-locked input matters — skip any input whose previous
+      // cell can't be fetched or isn't an Opticrum cell (funding/change inputs).
+      for inp in &tx.inputs {
+        let Ok(prev_tx) = self.provider.get_transaction(&inp.previous_tx_hash).await else {
+          continue;
+        };
+        let Some(prev) = prev_tx.outputs.get(inp.previous_index as usize) else {
+          continue;
+        };
+        if prev.lock_args_len == MATCH_ARGS_LEN && prev.lock_args_hex == match_args_hex {
+          stepped = Some((inp.previous_tx_hash.clone(), inp.previous_index as usize));
+          break;
+        }
+        if prev.lock_args_len == ORDER_ARGS_LEN {
+          // Order-cell input → this tx created the match; the output here is
+          // the first (original) match cell.
+          first_raw = Some(raw);
+          break;
+        }
+      }
+      match stepped {
+        Some((hash, index)) => {
+          outpoint = (hash, index);
+        }
+        None => break,
+      }
+    }
+    let first = first_raw?;
+    let last = last_raw?;
+    let occupied = last.saturating_sub(m.ckb_capacity);
+    Some(first.saturating_sub(occupied))
   }
 
   async fn tip_block(&self) -> Result<u64, CommandError> {
@@ -501,7 +649,9 @@ impl<T: RPC> RealLiquidityBackend<T> {
     let (_, sk) = self.signing_identity().ok()?;
     let secp = Secp256k1::new();
     let pk = PublicKey::from_secret_key(&secp, &sk);
-    Some(address::script_lock_hash(&address::lock_arg_from_pubkey(&pk)))
+    Some(address::script_lock_hash(&address::lock_arg_from_pubkey(
+      &pk,
+    )))
   }
 
   /// Narrow order cells to those the wallet owns — `scope` defaults to `'mine'`
@@ -528,8 +678,7 @@ impl<T: RPC> RealLiquidityBackend<T> {
         Some(mine) => matches
           .into_iter()
           .filter(|m| {
-            m.match_args.order_args.buyer_lock_hash == mine
-              || m.match_args.seller_lock_hash == mine
+            m.match_args.order_args.buyer_lock_hash == mine || m.match_args.seller_lock_hash == mine
           })
           .collect(),
         None => Vec::new(),
@@ -541,10 +690,24 @@ impl<T: RPC> RealLiquidityBackend<T> {
 
   /// Broadcast a signed transaction and wait for on-chain confirmation,
   /// returning the `0x`-hex tx hash. All liquidity writes go through here, so
-  /// the command only resolves once the tx is confirmed.
-  async fn broadcast(&self, tx: ckb_jsonrpc_types::Transaction) -> Result<String, CommandError> {
+  /// the command only resolves once the tx is confirmed. Reports the two
+  /// observable phase boundaries (broadcasting → confirming) to the progress
+  /// reporter so the frontend modal can walk its 3-step stepper.
+  async fn broadcast(
+    &self,
+    tx: ckb_jsonrpc_types::Transaction,
+    progress: &dyn TxProgressReporter,
+  ) -> Result<String, CommandError> {
     let json = serde_json::to_string(&tx).map_err(|e| CommandError::internal(e.to_string()))?;
+    progress.report(TxProgress {
+      phase: TxPhase::Broadcasting,
+      tx_hash: None,
+    });
     let hash = self.provider.send_transaction(&hex::encode(json)).await?;
+    progress.report(TxProgress {
+      phase: TxPhase::Confirming,
+      tx_hash: Some(hash.clone()),
+    });
     self
       .provider
       .wait_for_confirmation(&hash, 1, Some(std::time::Duration::from_secs(300)))
@@ -570,7 +733,13 @@ impl<T: RPC> RealLiquidityBackend<T> {
     if info.block_number == 0 {
       return None;
     }
-    Some(self.provider.get_block_timestamp(info.block_number).await.unwrap_or(0))
+    Some(
+      self
+        .provider
+        .get_block_timestamp(info.block_number)
+        .await
+        .unwrap_or(0),
+    )
   }
 }
 
@@ -621,6 +790,13 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
   }
 
   async fn refresh_orders(&self) -> Result<Vec<LiquidityOrder>, CommandError> {
+    // A locked wallet can't derive its lock script, so it can't own cells —
+    // and rewriting the cache here would erase the wallet's orders (they only
+    // reappear after a manual re-scan once it unlocks). Return nothing without
+    // touching the cache, mirroring `get_orders`.
+    if self.wallet_lock_hash().is_none() {
+      return Ok(vec![]);
+    }
     // Re-scan the chain and sync the cache. Failure returns empty without
     // touching the cache (stale data stays readable offline).
     let orders = match self.scan_orders().await {
@@ -640,9 +816,24 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
     let tip = self.tip_or_zero().await;
     let matches = self.scan_matches_or_empty().await;
     let matches = self.own_matches(scope.as_deref(), matches);
+    // The wallet's lock hash determines each match's role (buyer/seller) — for
+    // non-`'mine'` scans it is `None` and every match maps to `Other`.
+    let my_lock = self.wallet_lock_hash();
     let mut out = Vec::with_capacity(matches.len());
     for m in &matches {
-      out.push(match_to_wire(m, tip, self.provider.as_ref()).await);
+      // Original stake via lineage trace (cached per match args). `None` → the
+      // mapper falls back to the current stake (extraction progress reads 0%).
+      let original = self.original_stake_shannons(m).await;
+      out.push(
+        match_to_wire(
+          m,
+          tip,
+          my_lock,
+          original.map(|s| s as f64 / CKB_DECIMAL as f64),
+          self.provider.as_ref(),
+        )
+        .await,
+      );
     }
     Ok(out)
   }
@@ -670,6 +861,7 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
     rent_capacity_shannons: u64,
     rental_days: u32,
     fiber_address: Option<String>,
+    progress: &dyn TxProgressReporter,
   ) -> Result<PublishOrderResult, CommandError> {
     if capacity_shannons == 0 || rent_capacity_shannons == 0 {
       return Err(CommandError::invalid_input(
@@ -683,10 +875,19 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
     let secp = Secp256k1::new();
     let pk = PublicKey::from_secret_key(&secp, &sk);
     let lock_arg = address::lock_arg_from_pubkey(&pk);
-    let order_args = OrderArgs::new(
-      CompressedPubkey::new(pk.serialize()),
-      address::script_lock_hash(&lock_arg),
-    );
+    // The order cell's embedded fiber pubkey is the CURRENT fiber node's
+    // identity — orders created under an older/different node key are flagged
+    // as "legacy" in the UI. Authorization stays with the wallet's buyer lock
+    // hash (built below), so this only affects attribution, not ownership.
+    let node_pubkey_hex = self.node_pubkey.lock().unwrap().clone().ok_or_else(|| {
+      CommandError::NodeNotRunning("fiber node is not running — start it before publishing".into())
+    })?;
+    let node_pk = CompressedPubkey::from_slice(
+      &hex::decode(&node_pubkey_hex)
+        .map_err(|e| CommandError::internal(format!("node pubkey hex: {e}")))?,
+    )
+    .map_err(|e| CommandError::internal(format!("node pubkey parse: {e}")))?;
+    let order_args = OrderArgs::new(node_pk, address::script_lock_hash(&lock_arg));
     let order_data = OrderData::new(0, capacity_shannons, shannons_per_block);
     let sender_lock = self.wallet_lock_ex(&pk);
     let args_bytes = order_args.to_bytes();
@@ -718,7 +919,7 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
 
     // Order cell is the output whose lock args match OrderArgs.
     let order_index = Self::find_output_index(&tx, &args_bytes).unwrap_or(0);
-    let tx_hash = self.broadcast(tx).await?;
+    let tx_hash = self.broadcast(tx, progress).await?;
     let outpoint = format!("0x{}:{}", tx_hash.trim_start_matches("0x"), order_index);
 
     self.sidecar.lock().unwrap().insert(
@@ -734,6 +935,7 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
     let created_at_ms = crate::util::now_ms();
     let new_order = LiquidityOrder {
       outpoint: outpoint.clone(),
+      fiber_pubkey: node_pubkey_hex,
       channel_capacity_ckb: capacity_shannons as f64 / CKB_DECIMAL as f64,
       channel_capacity_shannons: capacity_shannons,
       shannons_per_block,
@@ -757,7 +959,11 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
     })
   }
 
-  async fn cancel_order(&self, outpoint: String) -> Result<TxHashResult, CommandError> {
+  async fn cancel_order(
+    &self,
+    outpoint: String,
+    progress: &dyn TxProgressReporter,
+  ) -> Result<TxHashResult, CommandError> {
     let (addr, sk) = self.signing_identity()?;
     let buyer = self.wallet_address(&addr)?;
     let secp = Secp256k1::new();
@@ -788,7 +994,7 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
     })
     .await?;
 
-    let tx_hash = self.broadcast(tx).await?;
+    let tx_hash = self.broadcast(tx, progress).await?;
     Ok(TxHashResult { tx_hash })
   }
 
@@ -796,12 +1002,13 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
     &self,
     match_outpoint: String,
     amount_shannons: u64,
+    progress: &dyn TxProgressReporter,
   ) -> Result<TxHashResult, CommandError> {
     if amount_shannons == 0 {
       return Err(CommandError::invalid_input("amount must be greater than 0"));
     }
     self
-      .update_match(match_outpoint, amount_shannons as i64)
+      .update_match(match_outpoint, amount_shannons as i64, progress)
       .await
   }
 
@@ -809,18 +1016,20 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
     &self,
     match_outpoint: String,
     amount_shannons: u64,
+    progress: &dyn TxProgressReporter,
   ) -> Result<TxHashResult, CommandError> {
     if amount_shannons == 0 {
       return Err(CommandError::invalid_input("amount must be greater than 0"));
     }
     self
-      .update_match(match_outpoint, -(amount_shannons as i64))
+      .update_match(match_outpoint, -(amount_shannons as i64), progress)
       .await
   }
 
   async fn extract_spent_match(
     &self,
     match_outpoint: String,
+    progress: &dyn TxProgressReporter,
   ) -> Result<ExtractResult, CommandError> {
     let (addr, sk) = self.signing_identity()?;
     let seller = self.wallet_address(&addr)?;
@@ -859,7 +1068,7 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
     })
     .await?;
 
-    let tx_hash = self.broadcast(tx).await?;
+    let tx_hash = self.broadcast(tx, progress).await?;
     Ok(ExtractResult {
       tx_hash,
       returned_ckb,
@@ -873,6 +1082,7 @@ impl<T: RPC + 'static> RealLiquidityBackend<T> {
     &self,
     match_outpoint: String,
     capacity_delta: i64,
+    progress: &dyn TxProgressReporter,
   ) -> Result<TxHashResult, CommandError> {
     let (addr, sk) = self.signing_identity()?;
     let buyer = self.wallet_address(&addr)?;
@@ -886,7 +1096,16 @@ impl<T: RPC + 'static> RealLiquidityBackend<T> {
       .find(|m| outpoint_0x(&m.match_outpoint.tx_hash, m.match_outpoint.index) == match_outpoint)
       .ok_or_else(|| CommandError::invalid_input("match not found on-chain"))?;
     let new_xudt = match_info.xudt.as_ref().map(|x| x.amount).unwrap_or(0);
+    // Protocol: no partial withdrawals — a withdraw is a FULL dump of all rent
+    // (xUDT + unoccupied capacity); an inject passes the caller's delta through.
+    let (new_xudt, capacity_delta) = if capacity_delta < 0 {
+      (0u128, -(match_info.ckb_capacity as i64))
+    } else {
+      (new_xudt, capacity_delta)
+    };
 
+    // Tip is required for the buyer withdrawal-window check (HeaderDep[0]).
+    let tip_block = self.tip_block().await?;
     let rpc = self.rpc.clone();
     let tx = run_blocking(move || {
       let rt = tokio::runtime::Builder::new_current_thread()
@@ -896,7 +1115,7 @@ impl<T: RPC + 'static> RealLiquidityBackend<T> {
       rt.block_on(async {
         let sdk = OpticrumSdk::new(rpc);
         let mut skel = sdk
-          .build_update_match(buyer, match_info, new_xudt, capacity_delta)
+          .build_update_match(buyer, match_info, new_xudt, capacity_delta, tip_block)
           .await
           .map_err(map_sdk_err)?;
         signer::sign_skeleton(&mut skel, &sender_lock, &sk)?;
@@ -905,7 +1124,7 @@ impl<T: RPC + 'static> RealLiquidityBackend<T> {
     })
     .await?;
 
-    let tx_hash = self.broadcast(tx).await?;
+    let tx_hash = self.broadcast(tx, progress).await?;
     Ok(TxHashResult { tx_hash })
   }
 }
@@ -913,8 +1132,10 @@ impl<T: RPC + 'static> RealLiquidityBackend<T> {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::backend::SigningWallet;
-  use crate::chain::chain_provider::{MockChainProvider, TransactionInfo};
+  use crate::backend::{NoopTxProgressReporter, SigningWallet};
+  use crate::chain::chain_provider::{
+    MockChainProvider, TransactionInfo, TxInputInfo, TxOutputInfo,
+  };
   use ckb_cinnabar_calculator::re_exports::secp256k1::SecretKey;
   use opticrum_calculator::types::{CompressedPubkey, MatchArgs, MatchData, OrderArgs, OrderData};
   use opticrum_protocol::OutPoint;
@@ -1007,7 +1228,8 @@ mod tests {
       Arc::new(MockChainProvider::new()),
       Arc::new(MockSigningWallet(MockSigningWallet::test_key())),
       true,
-      None, // tests: no cache — always scan
+      Arc::new(Mutex::new(None)), // no node pubkey in tests
+      None,                       // tests: no cache — always scan
     )
   }
 
@@ -1075,6 +1297,7 @@ mod tests {
       }),
       Arc::new(MockSigningWallet(MockSigningWallet::test_key())),
       true,
+      Arc::new(Mutex::new(None)),
       None,
     );
     // Creation time = the order tx's block timestamp, derived on-chain.
@@ -1145,17 +1368,27 @@ mod tests {
       Arc::new(MockChainProvider::new()),
       Arc::new(LockedSigningWallet),
       true,
+      Arc::new(Mutex::new(None)),
       None,
     );
-    assert_eq!(backend.own_orders(Some("mine"), vec![test_order()]).len(), 0);
-    assert_eq!(backend.own_matches(Some("mine"), vec![test_match(false)]).len(), 0);
+    assert_eq!(
+      backend.own_orders(Some("mine"), vec![test_order()]).len(),
+      0
+    );
+    assert_eq!(
+      backend
+        .own_matches(Some("mine"), vec![test_match(false)])
+        .len(),
+      0
+    );
   }
 
   #[tokio::test]
   async fn match_to_wire_maps_fields() {
     let provider = MockChainProvider::new();
     let m = test_match(false);
-    let w = match_to_wire(&m, 12_000_100, &provider).await;
+    // Wallet lock = the match's buyer lock ([0xaa; 32]).
+    let w = match_to_wire(&m, 12_000_100, Some([0xaa; 32]), Some(500_000.0), &provider).await;
     assert_eq!(w.outpoint, format!("0x{}:1", hex::encode([0x33; 32])));
     assert_eq!(
       w.channel_outpoint,
@@ -1168,6 +1401,244 @@ mod tests {
     // Mock provider → timestamp 0; expires = creation + blocks_elapsed × 12s.
     assert_eq!(w.created_at_ms, 0);
     assert!(w.expires_at_ms > 0);
+    assert_eq!(w.original_stake_ckb, 500_000.0);
+  }
+
+  #[tokio::test]
+  async fn match_to_wire_hesitation_role_and_window() {
+    let provider = MockChainProvider::new();
+    // Buyer inside the window (tip − creation = 100 blocks < 3600) → Buyer
+    // role, the full stake is withdrawable, and the ms deadline is set.
+    let w = match_to_wire(
+      &test_match(false),
+      12_000_100,
+      Some([0xaa; 32]),
+      Some(500_000.0),
+      &provider,
+    )
+    .await;
+    assert_eq!(w.role, MatchRole::Buyer);
+    assert_eq!(w.match_creation_block, 12_000_000);
+    assert_eq!(w.withdrawable_ckb, 500_000.0);
+    assert_eq!(w.hesitation_ends_at_ms, 3_600 * 12_000);
+    assert_eq!(w.original_stake_ckb, 500_000.0);
+
+    // Buyer once the window has passed → no longer withdrawable.
+    let w = match_to_wire(
+      &test_match(false),
+      12_000_000 + 9_999,
+      Some([0xaa; 32]),
+      Some(500_000.0),
+      &provider,
+    )
+    .await;
+    assert_eq!(w.role, MatchRole::Buyer);
+    assert_eq!(w.withdrawable_ckb, 0.0);
+
+    // Wallet is the seller → Seller role, never withdrawable.
+    let w = match_to_wire(
+      &test_match(false),
+      12_000_100,
+      Some([0xbb; 32]),
+      Some(500_000.0),
+      &provider,
+    )
+    .await;
+    assert_eq!(w.role, MatchRole::Seller);
+    assert_eq!(w.withdrawable_ckb, 0.0);
+
+    // Unrelated lock hash → Other.
+    let w = match_to_wire(
+      &test_match(false),
+      12_000_100,
+      Some([0xcc; 32]),
+      Some(500_000.0),
+      &provider,
+    )
+    .await;
+    assert_eq!(w.role, MatchRole::Other);
+    assert_eq!(w.withdrawable_ckb, 0.0);
+  }
+
+  #[tokio::test]
+  async fn walk_original_stake_traces_match_lineage() {
+    // Two-hop lineage: order (tx 0x55…) → first match (tx 0x44…) → current
+    // match (tx 0x33…, = test_match's outpoint, index 1). The match cell's
+    // occupied capacity is constant, so
+    //   original = first_raw − (last_raw − ckb_capacity).
+    let m = test_match(false);
+    let match_args_hex = hex::encode(m.match_args.to_bytes());
+    let order_args_hex = hex::encode(m.match_args.order_args.to_bytes());
+    let occupied = 100_000_000u64; // 1 CKB of occupied capacity
+    let current_raw = m.ckb_capacity + occupied;
+    let original_stake = 49_000_000_000_000u64; // 490_000 CKB
+    let first_raw = original_stake + occupied;
+
+    fn cell(capacity: u64, args: String, args_len: usize) -> TxOutputInfo {
+      TxOutputInfo {
+        capacity,
+        lock_code_hash: String::new(),
+        lock_hash_type: "Type".into(),
+        lock_args_hex: args,
+        lock_args_len: args_len,
+        data_hex: String::new(),
+      }
+    }
+
+    let tx1 = TransactionInfo {
+      tx_hash: "33".repeat(32),
+      block_number: 12_000_100,
+      inputs: vec![TxInputInfo {
+        previous_tx_hash: "44".repeat(32),
+        previous_index: 0,
+      }],
+      outputs: vec![
+        cell(1_000, String::new(), 0),
+        cell(current_raw, match_args_hex.clone(), 133),
+      ],
+    };
+    let tx0 = TransactionInfo {
+      tx_hash: "44".repeat(32),
+      block_number: 12_000_000,
+      inputs: vec![TxInputInfo {
+        previous_tx_hash: "55".repeat(32),
+        previous_index: 0,
+      }],
+      outputs: vec![cell(first_raw, match_args_hex, 133)],
+    };
+    let order_tx = TransactionInfo {
+      tx_hash: "55".repeat(32),
+      block_number: 12_000_000,
+      inputs: Vec::new(),
+      outputs: vec![cell(original_stake, order_args_hex, 65)],
+    };
+
+    struct LineageProvider {
+      tx1: TransactionInfo,
+      tx0: TransactionInfo,
+      order_tx: TransactionInfo,
+    }
+    #[async_trait]
+    impl ChainProvider for LineageProvider {
+      async fn get_tip_block_number(&self) -> Result<u64, CommandError> {
+        Ok(12_000_100)
+      }
+      async fn send_transaction(&self, _tx_hex: &str) -> Result<String, CommandError> {
+        Ok("0x00".into())
+      }
+      async fn get_transaction(&self, tx_hash: &str) -> Result<TransactionInfo, CommandError> {
+        if tx_hash == self.tx1.tx_hash {
+          return Ok(self.tx1.clone());
+        }
+        if tx_hash == self.tx0.tx_hash {
+          return Ok(self.tx0.clone());
+        }
+        if tx_hash == self.order_tx.tx_hash {
+          return Ok(self.order_tx.clone());
+        }
+        Err(CommandError::internal("unknown tx"))
+      }
+      async fn get_block_timestamp(&self, _block_number: u64) -> Result<u64, CommandError> {
+        Ok(0)
+      }
+    }
+
+    let backend = RealLiquidityBackend::new(
+      ckb_cinnabar_calculator::simulation::FakeRpcClient::default(),
+      Arc::new(LineageProvider { tx1, tx0, order_tx }),
+      Arc::new(MockSigningWallet(MockSigningWallet::test_key())),
+      true,
+      Arc::new(Mutex::new(None)),
+      None,
+    );
+    // Trace reaches the original (first) match cell's rent pool.
+    assert_eq!(
+      backend.original_stake_shannons(&m).await,
+      Some(original_stake)
+    );
+    // Second call hits the per-lineage cache.
+    assert_eq!(
+      backend.original_stake_shannons(&m).await,
+      Some(original_stake)
+    );
+  }
+
+  #[tokio::test]
+  async fn match_to_wire_uses_channel_capacity_not_stake_for_apy() {
+    use crate::chain::chain_provider::TxOutputInfo;
+
+    // test_match's channel_outpoint is tx 0x2222… (64 hex), index 0.
+    let funding = "2222".repeat(16);
+    let channel_capacity_shannons = 1_000_000_000_000; // 10,000 CKB channel
+
+    struct FundingCellProvider {
+      funding: String,
+      capacity: u64,
+    }
+    #[async_trait]
+    impl ChainProvider for FundingCellProvider {
+      async fn get_tip_block_number(&self) -> Result<u64, CommandError> {
+        Ok(12_000_100)
+      }
+      async fn send_transaction(&self, _tx_hex: &str) -> Result<String, CommandError> {
+        Ok("0x00".into())
+      }
+      async fn get_transaction(&self, tx_hash: &str) -> Result<TransactionInfo, CommandError> {
+        assert_eq!(
+          tx_hash, self.funding,
+          "lookup must target the channel funding tx"
+        );
+        Ok(TransactionInfo {
+          tx_hash: tx_hash.to_string(),
+          block_number: 1,
+          inputs: Vec::new(),
+          outputs: vec![TxOutputInfo {
+            capacity: self.capacity,
+            lock_code_hash: String::new(),
+            lock_hash_type: "Type".into(),
+            lock_args_hex: String::new(),
+            lock_args_len: 0,
+            data_hex: String::new(),
+          }],
+        })
+      }
+      async fn get_block_timestamp(&self, _block_number: u64) -> Result<u64, CommandError> {
+        Ok(0)
+      }
+    }
+
+    let m = test_match(false);
+    let w = match_to_wire(
+      &m,
+      12_000_100,
+      Some([0xaa; 32]),
+      Some(500_000.0),
+      &FundingCellProvider {
+        funding,
+        capacity: channel_capacity_shannons,
+      },
+    )
+    .await;
+
+    // The wire capacity is the funded channel capacity (10,000 CKB), not the
+    // match cell's stake (500,000 CKB in test_match) — the cell + KPIs must not
+    // read the stake as "通道容量".
+    assert_eq!(w.channel_capacity_ckb, 10_000.0);
+    assert_eq!(w.deposit_ckb, 500_000.0);
+
+    // APY is rent / channel_capacity — the same basis as the order — not
+    // rent / stake (which would inflate 8% → 1000%+).
+    let expected = rent_per_block_to_annual_yield(100_000, channel_capacity_shannons) * 10_000.0;
+    assert!(
+      (w.annual_yield_bps - expected).abs() < 1e-6,
+      "match apy {} bps, want {expected} bps",
+      w.annual_yield_bps
+    );
+    assert!(
+      w.annual_yield_bps < 5_000.0,
+      "apy must not be stake-based (was {} bps)",
+      w.annual_yield_bps
+    );
   }
 
   #[test]
@@ -1223,7 +1694,10 @@ mod tests {
       .unwrap()
       .is_empty());
     // write op on an empty chain: order not found (real path, not a stub)
-    assert!(backend.cancel_order("0x00:0".into()).await.is_err());
+    assert!(backend
+      .cancel_order("0x00:0".into(), &NoopTxProgressReporter)
+      .await
+      .is_err());
   }
 
   #[tokio::test]
@@ -1278,7 +1752,16 @@ mod tests {
     fake.insert_fake_cell(fake_outpoint(), user_cell, Some(fake_header_view(1, 1, 1)));
 
     let provider = Arc::new(MockChainProvider::new());
-    let backend = RealLiquidityBackend::new(fake, provider.clone(), Arc::new(wallet), true, None);
+    // The publish path attributes the new order to the current node pubkey —
+    // feed a fixed one so the assembled OrderArgs stays deterministic.
+    let backend = RealLiquidityBackend::new(
+      fake,
+      provider.clone(),
+      Arc::new(wallet),
+      true,
+      Arc::new(Mutex::new(Some("02".repeat(33)))),
+      None,
+    );
 
     let result = backend
       .publish_order(
@@ -1287,6 +1770,7 @@ mod tests {
         30_000_000_000,
         30,
         Some("/ip4/1.2.3.4/tcp/8115".to_string()),
+        &NoopTxProgressReporter,
       )
       .await
       .expect("publish should build+sign+broadcast");
@@ -1298,6 +1782,44 @@ mod tests {
     let bytes = hex::decode(submitted.first().unwrap()).unwrap();
     let tx: ckb_jsonrpc_types::Transaction = serde_json::from_slice(&bytes).unwrap();
     assert!(!tx.witnesses.is_empty(), "signed transaction has witnesses");
+  }
+
+  #[tokio::test]
+  async fn broadcast_reports_broadcasting_then_confirming() {
+    use ckb_cinnabar_calculator::simulation::FakeRpcClient;
+
+    // A minimal empty tx is enough — MockChainProvider::send_transaction records
+    // the hex and returns a hash without parsing it, and its default
+    // wait_for_confirmation resolves immediately.
+    let tx: ckb_jsonrpc_types::Transaction = serde_json::from_str(
+      r#"{"version":"0x0","cell_deps":[],"header_deps":[],"inputs":[],"outputs":[],"outputs_data":[],"witnesses":[]}"#,
+    )
+    .unwrap();
+
+    struct CapturingReporter(Mutex<Vec<TxPhase>>);
+    impl TxProgressReporter for CapturingReporter {
+      fn report(&self, progress: TxProgress) {
+        self.0.lock().unwrap().push(progress.phase);
+      }
+    }
+
+    let backend = RealLiquidityBackend::new(
+      FakeRpcClient::default(),
+      Arc::new(MockChainProvider::new()),
+      Arc::new(MockSigningWallet(MockSigningWallet::test_key())),
+      true,
+      Arc::new(Mutex::new(Some("02".repeat(33)))),
+      None,
+    );
+    let reporter = CapturingReporter(Mutex::new(Vec::new()));
+
+    let hash = backend.broadcast(tx, &reporter).await.expect("broadcast");
+    assert!(hash.starts_with("0x"));
+    assert_eq!(
+      reporter.0.lock().unwrap().clone(),
+      vec![TxPhase::Broadcasting, TxPhase::Confirming],
+      "broadcast must report the two observable phases in order"
+    );
   }
 }
 

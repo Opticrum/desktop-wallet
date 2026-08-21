@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useLocale } from '../i18n/LocaleContext'
+import { useScrollLock } from '../lib/useScrollLock'
 
 type Section = { title: string; lines: string[] }
 
@@ -32,10 +33,12 @@ export function HelpDialog({ open, onClose }: { open: boolean; onClose: () => vo
   const { t } = useLocale()
   const [tab, setTab] = useState(0)
 
+  useScrollLock(open)
+
   if (!open) return null
 
   return (
-    <div className="modal-backdrop" onClick={onClose} role="presentation">
+    <div className="modal-backdrop" role="presentation">
       <div
         className="modal help-dialog"
         role="dialog"

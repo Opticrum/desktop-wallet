@@ -112,6 +112,10 @@ export type Messages = {
   lmFiberAddressOptional: string
   lmFiberRiskTitle: string
   lmFiberRiskBody: string
+  /** Order/match cell created under a fiber pubkey that differs from the current node. */
+  lmLegacyCell: string
+  lmPubkeyMismatchTitle: string
+  lmPubkeyMismatchBody: string
   lmEstimatedApy: string
   lmPublishOrder: string
   lmOrderPublished: string
@@ -130,7 +134,6 @@ export type Messages = {
   lmMyMatches: string
   lmWithdrawable: string
   lmStakedHint: string
-  lmWithdrawableHint: string
   lmInject: string
   lmWithdraw: string
   lmAdjustTitle: string
@@ -140,6 +143,30 @@ export type Messages = {
   lmExtractDeleteTitle: string
   lmExtractDeleteBody: string
   lmExtractDeleted: string
+
+  // Liquidity — hesitation window (buyer's post-match check period)
+  lmHesitation: string
+  lmHesitationLeft: string
+  lmHesitationEndsAt: string
+  lmHesitationInStatus: string
+  lmHesitationOverStatus: string
+  lmAbandonOrder: string
+  lmAbandonOrderFull: string
+  lmAbandonOrderTitle: string
+  lmAbandonOrderBody: string
+  lmOrderAbandoned: string
+  lmInjectBlockedHesitation: string
+  lmWithdrawExpiredHint: string
+  lmHesitationNotElapsed: string
+  lmPartialWithdrawNotAllowed: string
+  lmSellerActionsHint: string
+
+  // Liquidity — rent-extraction progress (original vs remaining stake)
+  lmExtractionProgress: string
+  lmOriginalStake: string
+  lmExtracted: string
+  lmExtractionLeft: string
+  lmExtractionPct: string
 
   // Help dialog — About Opticrum (protocol / buyer / seller)
   aboutButton: string
@@ -232,7 +259,12 @@ export type Messages = {
   lmWalletLockedHint: string
   lmDwell: string
   lmRemaining: string
-  lmRemainingRent: string
+  /** Match-detail hero label — time remaining until the service term expires. */
+  lmUntilExpiry: string
+  lmExpired: string
+  lmTimeDays: string
+  lmTimeHours: string
+  lmTimeMinutes: string
   lmRentalDaysShort: string
   lmSpent: string
   lmPoolLegendOrder: string
@@ -289,19 +321,29 @@ export type Messages = {
   sendConfirm: string
   sendAddress: string
   sendAmount: string
+  sendAddressRequired: string
+  sendAmountInvalid: string
+  sendAmountMin: string
+  sendAmountExceed: string
   scanToReceive: string
   clickToSend: string
   zoomQr: string
   close: string
   copied: string
 
-  // CKB transaction confirmation modal (waiting → confirmed / failed)
+  // CKB transaction confirmation modal (构造 → 发送上链 → 打包确认 → confirmed / failed)
   ckbTxWaiting: string
   ckbTxWaitingHint: string
   ckbTxConfirmed: string
   ckbTxConfirmedHint: string
   ckbTxFailed: string
   ckbTxHash: string
+  ckbTxStepConstruct: string
+  ckbTxStepBroadcast: string
+  ckbTxStepConfirm: string
+  ckbTxPhaseConstructing: string
+  ckbTxPhaseBroadcasting: string
+  ckbTxPhaseConfirming: string
 
   // Node page — sections + redesigned sidebar
   nodeConnectionsSection: string
@@ -343,12 +385,14 @@ export type Messages = {
   fiberCapInbound: string
   fiberConfirmSend: string
   fiberGenerate: string
+  fiberGenerating: string
   fiberInvoiceReady: string
   fiberInvoiceHint: string
   fiberAmountRequired: string
   fiberOverCap: string
   fiberSentToast: string
   fiberGeneratedToast: string
+  fiberGenerateFailed: string
   fiberDone: string
 
   // Node page — create + delete actions
@@ -367,6 +411,8 @@ export type Messages = {
   nodeFormCancel: string
   nodeFormCreate: string
   nodeCreateToast: string
+  channelOpenLabel: string
+  channelCloseLabel: string
   nodeCloseChannel: string
   nodeRemovePeer: string
   nodeConfirmDeleteTitle: string

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocale } from '../i18n/LocaleContext'
+import { useScrollLock } from '../lib/useScrollLock'
 
 /**
  * Deterministic, dependency-free QR-style placeholder rendered from the
@@ -230,6 +231,8 @@ export function QrModal({
   const { t } = useLocale()
   const [copied, setCopied] = useState(false)
 
+  useScrollLock(open)
+
   useEffect(() => {
     if (!open) return
     setCopied(false)
@@ -256,7 +259,7 @@ export function QrModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose} role="presentation">
+    <div className="modal-backdrop" role="presentation">
       <div
         className="qr-modal"
         role="dialog"

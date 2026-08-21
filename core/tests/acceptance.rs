@@ -54,7 +54,11 @@ async fn real_backend_acceptance() {
 
   // ── wallet: fresh wallet must have no on-chain history ────────────────
   println!("== wallet: get_transactions (fresh) ==");
-  let txs = bundle.wallet.get_transactions(None, None).await.expect("transactions");
+  let txs = bundle
+    .wallet
+    .get_transactions(None, None)
+    .await
+    .expect("transactions");
   println!("  fresh wallet txs={}", txs.len());
   assert!(txs.is_empty(), "a just-created wallet has no transactions");
 

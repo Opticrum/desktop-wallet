@@ -1,12 +1,48 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Channel } from '@tauri-apps/api/core'
 import { useLocale } from '../i18n/LocaleContext'
+import type { Messages } from '../i18n/types'
 import { toCommandError } from '../api/types'
+import type { CkbTxPhase, CkbTxProgress } from '../api/types'
+import { useScrollLock } from '../lib/useScrollLock'
+
+/**
+ * Localized message for a command error `code` — the four hesitation-window
+ * codes get friendly text so a window-boundary race reads clearly; anything
+ * unknown falls back to the backend's raw `message`.
+ */
+function localizeCommandError(t: Messages, code: string, message: string): string {
+  switch (code) {
+    case 'withdraw_window_expired':
+      return t.lmWithdrawExpiredHint
+    case 'inject_during_hesitation':
+      return t.lmInjectBlockedHesitation
+    case 'hesitation_not_elapsed':
+      return t.lmHesitationNotElapsed
+    case 'partial_withdraw_not_allowed':
+      return t.lmPartialWithdrawNotAllowed
+    default:
+      return message
+  }
+}
+
+export type CkbTxWaitingPhase = 'constructing' | CkbTxPhase
 
 export type CkbTxState =
   | { status: 'idle' }
-  | { status: 'waiting'; label: string }
+  | { status: 'waiting'; label: string; phase: CkbTxWaitingPhase }
   | { status: 'confirmed'; label: string; txHash: string }
-  | { status: 'rejected'; label: string; error: string }
+  | { status: 'rejected'; label: string; phase: CkbTxWaitingPhase; error: string }
+
+/**
+ * Progress handle handed to the action — the frontend forwards `channel` to the
+ * IPC call (Rust streams `broadcasting`/`confirming` back), and frontend-driven
+ * flows (channel open/close) call `advance` directly.
+ */
+export interface CkbTxProgressHandle {
+  channel: Channel<CkbTxProgress>
+  advance: (phase: CkbTxPhase) => void
+}
 
 function IconCheck() {
   return (
@@ -58,11 +94,35 @@ async function copyText(value: string): Promise<void> {
   document.body.removeChild(ta)
 }
 
+type StepState = 'done' | 'active' | 'pending' | 'failed'
+
+/** Which of the three steps failed, inferred from the last known phase. */
+const FAILED_STEP: Record<CkbTxWaitingPhase, 0 | 1 | 2> = {
+  constructing: 0,
+  broadcasting: 1,
+  confirming: 2,
+}
+
+/** Per-step state for the 3-step stepper (构造 → 发送上链 → 打包确认). */
+function stepStates(status: 'waiting' | 'confirmed' | 'rejected', phase?: CkbTxWaitingPhase): StepState[] {
+  if (status === 'confirmed') return ['done', 'done', 'done']
+  if (status === 'rejected') {
+    const failed = FAILED_STEP[phase ?? 'constructing']
+    return [0, 1, 2].map((i) => (i === failed ? 'failed' : i < failed ? 'done' : 'pending'))
+  }
+  // waiting — the modal opens on the "constructing" step itself.
+  const p = phase ?? 'constructing'
+  if (p === 'constructing') return ['active', 'pending', 'pending']
+  if (p === 'broadcasting') return ['done', 'active', 'pending']
+  return ['done', 'done', 'active']
+}
+
 /**
- * CKB transaction confirmation modal. Prompts the wait for the tx to confirm
- * on-chain (the underlying command resolves only once it has), then shows the
- * confirmed tx hash (copyable). Non-dismissable while waiting except via the
- * close button / Escape — the operation still completes in the background.
+ * CKB transaction confirmation modal. Walks a 3-step lifecycle —
+ * ① 构造交易 ② 发送上链 ③ 打包确认 — driven by progress events from the backend
+ * (or `advance` calls from frontend-driven flows), then shows the confirmed tx
+ * hash (copyable) or the failure. Non-dismissable while waiting (no close
+ * button, no Escape) — the operation still completes in the background.
  */
 export function CkbTxModal({
   state,
@@ -77,11 +137,14 @@ export function CkbTxModal({
   useEffect(() => {
     if (state.status === 'idle') return
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      // Non-dismissible while waiting — the tx is still being confirmed.
+      if (e.key === 'Escape' && state.status !== 'waiting') onClose()
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [state.status, onClose])
+
+  useScrollLock(state.status !== 'idle')
 
   if (state.status === 'idle') return null
 
@@ -96,30 +159,55 @@ export function CkbTxModal({
     window.setTimeout(() => setCopied(false), 1400)
   }
 
+  const statusText = waiting
+    ? state.phase === 'confirming'
+      ? t.ckbTxPhaseConfirming
+      : state.phase === 'broadcasting'
+        ? t.ckbTxPhaseBroadcasting
+        : t.ckbTxPhaseConstructing
+    : confirmed
+      ? t.ckbTxConfirmed
+      : t.ckbTxFailed
+
+  const steps = stepStates(waiting ? 'waiting' : confirmed ? 'confirmed' : 'rejected', state.status === 'waiting' || state.status === 'rejected' ? state.phase : undefined)
+  const stepLabels = [t.ckbTxStepConstruct, t.ckbTxStepBroadcast, t.ckbTxStepConfirm]
+
   return (
-    <div
-      className="modal-backdrop ckb-tx-backdrop"
-      onClick={waiting ? undefined : onClose}
-      role="presentation"
-    >
+    <div className="modal-backdrop ckb-tx-backdrop" role="presentation">
       <div
         className="modal ckb-tx-modal"
         role="dialog"
         aria-modal="true"
         onClick={(e) => e.stopPropagation()}
       >
-        <button type="button" className="ckb-tx-close" aria-label={t.close} onClick={onClose}>
-          <IconClose />
-        </button>
+        {!waiting && (
+          <button type="button" className="ckb-tx-close" aria-label={t.close} onClick={onClose}>
+            <IconClose />
+          </button>
+        )}
 
-        <div className={`ckb-tx-icon is-${state.status}`}>
-          {waiting ? <span className="ckb-tx-spinner" aria-hidden="true" /> : confirmed ? <IconCheck /> : <IconError />}
-        </div>
+        <div className="ckb-tx-title">{state.label}</div>
 
-        <div className="ckb-tx-title">
-          {waiting ? t.ckbTxWaiting : confirmed ? t.ckbTxConfirmed : t.ckbTxFailed}
-        </div>
-        <div className="ckb-tx-label">{state.label}</div>
+        <ol className="ckb-tx-steps">
+          {steps.map((st, i) => (
+            <li key={i} className={`ckb-tx-step is-${st}`}>
+              <span className="ckb-tx-step-node" aria-hidden>
+                {st === 'done' ? (
+                  <IconCheck />
+                ) : st === 'failed' ? (
+                  <IconError />
+                ) : st === 'active' ? (
+                  <span className="ckb-tx-step-spinner" />
+                ) : (
+                  i + 1
+                )}
+              </span>
+              <span className="ckb-tx-step-label">{stepLabels[i]}</span>
+            </li>
+          ))}
+        </ol>
+
+        <div className={`ckb-tx-status${rejected ? ' is-failed' : ''}`}>{statusText}</div>
 
         {waiting && <div className="ckb-tx-hint">{t.ckbTxWaitingHint}</div>}
 
@@ -154,32 +242,50 @@ export function CkbTxModal({
 }
 
 /**
- * Run a CKB transaction command behind the confirmation modal.
+ * Run a CKB transaction command behind the 3-step confirmation modal.
  *
- * `onConfirmed` fires the moment the command resolves (the backend only
- * resolves once the tx is confirmed on-chain) so the page can refresh.
- * The tx hash is printed to the browser console on confirmation, and shown
- * in the modal. Handles both camelCase (`txHash`) and snake_case (`tx_hash`)
- * result shapes (browser mock vs wire).
+ * Creates a per-invocation Tauri `Channel` and passes `{ channel, advance }` to
+ * the action: Rust events stream `broadcasting` → `confirming` back (liquidity /
+ * wallet flows forward `channel` to the IPC call), and frontend-driven flows
+ * (channel open/close) call `advance` directly. `onConfirmed` fires the moment
+ * the command resolves (the backend only resolves once the tx is confirmed
+ * on-chain) so the page can refresh. The tx hash is printed to the browser
+ * console on confirmation, and shown in the modal. Handles both camelCase
+ * (`txHash`) and snake_case (`tx_hash`) result shapes.
  */
 export function useCkbTx(onConfirmed?: () => void) {
+  const { t } = useLocale()
   const [state, setState] = useState<CkbTxState>({ status: 'idle' })
   const runIdRef = useRef(0)
+  const phaseRef = useRef<CkbTxWaitingPhase>('constructing')
 
   const runCkbTx = useCallback(
-    async (label: string, action: () => Promise<{ txHash?: string; tx_hash?: string } | null>) => {
+    async (
+      label: string,
+      action: (progress: CkbTxProgressHandle) => Promise<{ txHash?: string; tx_hash?: string } | null>,
+    ) => {
       const runId = ++runIdRef.current
-      setState({ status: 'waiting', label })
+      phaseRef.current = 'constructing'
+      setState({ status: 'waiting', label, phase: 'constructing' })
+      const channel = new Channel<CkbTxProgress>()
+      const advance = (phase: CkbTxPhase) => {
+        if (runId !== runIdRef.current) return
+        phaseRef.current = phase
+        setState((prev) => (prev.status === 'waiting' ? { ...prev, phase } : prev))
+      }
+      channel.onmessage = (progress) => {
+        if (progress?.phase) advance(progress.phase)
+      }
       const startedAt = Date.now()
       try {
-        const res = await action()
+        const res = await action({ channel, advance })
         const txHash = res?.txHash ?? res?.tx_hash ?? ''
         if (txHash) {
           console.info(`[opticrum] CKB tx confirmed (${label}): ${txHash}`)
         }
         onConfirmed?.()
         // Keep the waiting state legible even when the backend resolves fast
-        // (e.g. browser mock) so the transition never flashes imperceptibly.
+        // so the transition never flashes imperceptibly.
         const minWait = 700 - (Date.now() - startedAt)
         if (minWait > 0) await new Promise((r) => setTimeout(r, minWait))
         if (runId !== runIdRef.current) return
@@ -189,7 +295,13 @@ export function useCkbTx(onConfirmed?: () => void) {
         }, 1800)
       } catch (e) {
         if (runId !== runIdRef.current) return
-        setState({ status: 'rejected', label, error: toCommandError(e).message })
+        const err = toCommandError(e)
+        setState({
+          status: 'rejected',
+          label,
+          phase: phaseRef.current,
+          error: localizeCommandError(t, err.code, err.message),
+        })
       }
     },
     [onConfirmed],

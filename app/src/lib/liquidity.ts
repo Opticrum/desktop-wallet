@@ -80,6 +80,71 @@ export function matchLife(match: LiquidityMatch, now: number = Date.now()): Matc
   return { pct, label, isExhausted: pct <= 0 }
 }
 
+/**
+ * Phase of a match at a given instant. The hesitation window is a buyer-side
+ * concept: while it's open the buyer may only withdraw ALL rent (abandon the
+ * order) and may NOT inject; once it elapses (or the seller's first extraction
+ * commits the match) withdrawal is forbidden and injection opens up. Mirrors
+ * the contract predicate `last_extraction_block == 0 && tip −
+ * match_creation_block ≤ HESITATION_BLOCKS`, approximated in wall-clock ms via
+ * `hesitationEndsAtMs`.
+ */
+export type MatchPhase = 'hesitating' | 'active' | 'exhausted'
+
+export function matchPhase(match: LiquidityMatch, now: number = Date.now()): MatchPhase {
+  if (matchLife(match, now).isExhausted) return 'exhausted'
+  // The window only constrains the buyer; other roles just see a live match.
+  if (match.role !== 'buyer') return 'active'
+  // First extraction commits the match — the buyer is no longer free to leave.
+  if (match.lastExtractionBlock > 0) return 'active'
+  return now < match.hesitationEndsAtMs ? 'hesitating' : 'active'
+}
+
+/** Milliseconds still left in the hesitation window (0 when not hesitating). */
+export function hesitationRemainingMs(match: LiquidityMatch, now: number = Date.now()): number {
+  return Math.max(0, match.hesitationEndsAtMs - now)
+}
+
+/** Compact h/m countdown: `8h 32m` / `43m` / `0m`. */
+export function formatDurationHm(ms: number): string {
+  const totalMin = Math.max(0, Math.round(ms / 60_000))
+  if (totalMin <= 0) return '0m'
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
+}
+
+/** Discrete tier color for a hesitating match cell (pending buyer decision). */
+export function hesitationTierColor(): string {
+  return 'var(--violet)'
+}
+
+// ── extraction progress (capacity-based, reflects on-chain extractions) ─────
+
+/** Rent-extraction progress of a match — the original rent pool (traced back
+ *  on-chain) vs the current remaining pool (`depositCkb`). Time-based
+ *  `matchLife` stays the rental-term projection; this is the actual funds
+ *  drained by seller extractions. */
+export type ExtractionProgress = {
+  /** Original rent pool at match creation (CKB). */
+  originalCkb: number
+  /** Current remaining rent pool (`depositCkb`, CKB). */
+  remainingCkb: number
+  /** `max(0, original − remaining)` — rent swept so far (buyer injections are
+   *  not attributed, so this clamps at 0 rather than going negative). */
+  extractedCkb: number
+  /** 0–100: extracted as a fraction of the original stake. */
+  pct: number
+}
+
+export function extractionProgress(match: LiquidityMatch): ExtractionProgress {
+  const original = match.originalStakeCkb
+  const remaining = match.depositCkb
+  const extracted = Math.max(0, original - remaining)
+  const pct = original > 0 ? Math.round(Math.min(100, (extracted / original) * 100)) : 0
+  return { originalCkb: original, remainingCkb: remaining, extractedCkb: extracted, pct }
+}
+
 export type InboundSummary = {
   /** Total inbound capacity secured from active (non-exhausted) matches. */
   totalInboundCkb: number
@@ -225,6 +290,14 @@ export function truncateOutpoint(outpoint: string): string {
   return outpoint.slice(0, 10) + '…' + outpoint.slice(-6)
 }
 
+/** Truncate a 66-hex fiber pubkey in the middle: `02ab91f4c5d…e3a9f8b6c1`.
+ *  Empty (stale cache row from before the field existed) → `—`. */
+export function truncatePubkey(pubkey: string): string {
+  if (!pubkey) return '—'
+  if (pubkey.length <= 16) return pubkey
+  return pubkey.slice(0, 10) + '…' + pubkey.slice(-6)
+}
+
 /** Continuous green → yellow → red life color, driven by remaining lifetime pct. */
 export function lifeColor(pct: number): string {
   const t = Math.max(0, Math.min(1, pct / 100))
@@ -273,14 +346,27 @@ export type PoolCellData = {
   /** Hours since creation — order cells show this as dwell time. */
   dwellH: number
   life: MatchLife | null
+  /** Match lifecycle phase (orders are always `'active'`). */
+  phase: MatchPhase
+  /** Rent-extraction progress — matches only; `null` for orders. */
+  extraction: ExtractionProgress | null
+  /** True when the cell's embedded fiber pubkey ≠ the current node's — the
+   *  order was created under an older/different node identity. */
+  fiberKeyMismatch: boolean
   target: SheetTarget
 }
+
+/** Cell pubkey vs current node pubkey — only mismatches when the node pubkey
+ *  is known (node down → unknown, not a mismatch). */
+const pubkeyMismatch = (cellPubkey: string, nodeFiberPubkey?: string) =>
+  !!nodeFiberPubkey && cellPubkey !== nodeFiberPubkey
 
 /** Cells shown in the pool for one tab (cancelled orders are spent cells — hidden). */
 export function buildPoolCells(
   orders: LiquidityOrder[],
   matches: LiquidityMatch[],
   mode: 'orders' | 'matches',
+  nodeFiberPubkey?: string,
 ): PoolCellData[] {
   if (mode === 'orders') {
     return orders
@@ -293,6 +379,9 @@ export function buildPoolCells(
         rentalDays: o.rentalDays,
         dwellH: dwellHours(o.createdAtMs ?? 0),
         life: null,
+        phase: 'active' as const,
+        extraction: null,
+        fiberKeyMismatch: pubkeyMismatch(o.fiberPubkey, nodeFiberPubkey),
         target: { kind: 'order' as const, item: o },
       }))
   }
@@ -304,6 +393,9 @@ export function buildPoolCells(
     rentalDays: rentalDaysForMatch(m),
     dwellH: 0,
     life: matchLife(m),
+    phase: matchPhase(m),
+    extraction: extractionProgress(m),
+    fiberKeyMismatch: pubkeyMismatch(m.fiberPubkey, nodeFiberPubkey),
     target: { kind: 'match' as const, item: m },
   }))
 }

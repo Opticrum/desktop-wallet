@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useScrollLock } from '../lib/useScrollLock'
 
 type ConfirmModalProps = {
   open: boolean
@@ -30,12 +31,13 @@ export function ConfirmModal({
     return () => document.removeEventListener('keydown', onKey)
   }, [open, onCancel])
 
+  useScrollLock(open)
+
   if (!open) return null
 
   return (
     <div
       className="modal-backdrop"
-      onClick={onCancel}
       role="dialog"
       aria-modal="true"
       aria-label={title}

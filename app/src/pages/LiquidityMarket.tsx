@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useScrollLock } from '../lib/useScrollLock'
 import { useLocale } from '../i18n/LocaleContext'
 import { useNode } from '../node/NodeContext'
 import { liquidity, wallet } from '../api/client'
@@ -22,6 +23,9 @@ import { ConfirmModal } from '../components/ConfirmModal'
 import { Toast } from '../components/Toast'
 
 // ── Helpers ───────────────────────────────────────────────────────────────
+
+/** Background auto-refresh cadence for the market — same rhythm as the wallet. */
+const AUTOREFRESH_MS = 15_000
 
 /** Value-only APY (no unit suffix) — for labels that already carry a unit. */
 function formatBpsValue(bps: number): string {
@@ -63,6 +67,8 @@ function BuyOrderModal({ open, onClose, onPublish, disabled }: BuyOrderModalProp
   const [days, setDays] = useState('30')
   const [fiberAddress, setFiberAddress] = useState('')
 
+  useScrollLock(open)
+
   if (!open) return null
 
   const capacityNum = Number(capacity.replace(/,/g, '')) || 0
@@ -90,7 +96,7 @@ function BuyOrderModal({ open, onClose, onPublish, disabled }: BuyOrderModalProp
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose} role="presentation">
+    <div className="modal-backdrop" role="presentation">
       <div className="modal" role="dialog" aria-modal="true" aria-label={t.lmNewOrder} onClick={(e) => e.stopPropagation()}>
         <div className="modal-title">{t.lmNewOrder}</div>
         <div className="modal-body">
@@ -162,40 +168,39 @@ function BuyOrderModal({ open, onClose, onPublish, disabled }: BuyOrderModalProp
   )
 }
 
-// ── Adjust deposit modal (inject / withdraw) ──────────────────────────────
-
-type AdjustMode = 'inject' | 'withdraw'
+// ── Adjust deposit modal (inject only — withdrawal is the buyer's full-dump
+//    abandon during the hesitation window, handled by its own confirm flow) ──
 
 type AdjustDepositModalProps = {
   open: boolean
-  mode: AdjustMode
   match: LiquidityMatch | null
-  /** Node is down/starting — 出入金 is inert. */
+  /** Node is down/starting — 注入 is inert. */
   disabled?: boolean
   onClose: () => void
-  onConfirm: (match: LiquidityMatch, mode: AdjustMode, amount: number) => void
+  onConfirm: (match: LiquidityMatch, amount: number) => void
 }
 
-function AdjustDepositModal({ open, mode, match, disabled, onClose, onConfirm }: AdjustDepositModalProps) {
+function AdjustDepositModal({ open, match, disabled, onClose, onConfirm }: AdjustDepositModalProps) {
   const { t } = useLocale()
   const [amount, setAmount] = useState('')
+
+  useScrollLock(open)
 
   if (!open || !match) return null
 
   const amountNum = Number(amount.replace(/,/g, '')) || 0
-  const cap = mode === 'withdraw' ? match.withdrawableCkb : Number.POSITIVE_INFINITY
-  const valid = amountNum > 0 && amountNum <= cap
+  const valid = amountNum > 0
 
   const handleConfirm = () => {
     if (!valid) return
-    onConfirm(match, mode, amountNum)
+    onConfirm(match, amountNum)
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose} role="presentation">
+    <div className="modal-backdrop" role="presentation">
       <div className="modal" role="dialog" aria-modal="true" aria-label={t.lmAdjustTitle} onClick={(e) => e.stopPropagation()}>
         <div className="modal-title">
-          {t.lmAdjustTitle} · {mode === 'inject' ? t.lmInject : t.lmWithdraw}
+          {t.lmAdjustTitle} · {t.lmInject}
         </div>
         <div className="modal-body">
           <div className="lm-form-field">
@@ -204,7 +209,6 @@ function AdjustDepositModal({ open, mode, match, disabled, onClose, onConfirm }:
           </div>
           <div className="lm-form-hint">
             {t.lmStakedHint.replace('{amount}', formatCkb(match.depositCkb))}
-            {mode === 'withdraw' && ` · ${t.lmWithdrawableHint.replace('{amount}', formatCkb(match.withdrawableCkb))}`}
           </div>
         </div>
         <div className="modal-actions">
@@ -215,7 +219,7 @@ function AdjustDepositModal({ open, mode, match, disabled, onClose, onConfirm }:
             title={disabled ? t.nodeNotRunning : undefined}
             onClick={handleConfirm}
           >
-            {mode === 'inject' ? t.lmInject : t.lmWithdraw}
+            {t.lmInject}
           </button>
         </div>
       </div>
@@ -227,7 +231,7 @@ function AdjustDepositModal({ open, mode, match, disabled, onClose, onConfirm }:
 
 export function LiquidityMarket() {
   const { t } = useLocale()
-  const { chain, running, starting } = useNode()
+  const { chain, running, starting, fiberPubkey } = useNode()
 
   // Every on-chain action (发布/撤销/注入/抽离/提取) needs the node up.
   const nodeReady = running && !starting
@@ -259,33 +263,67 @@ export function LiquidityMarket() {
   const [poolTab, setPoolTab] = useState<'orders' | 'matches'>('orders')
 
   const [buyOpen, setBuyOpen] = useState(false)
-  const [adjust, setAdjust] = useState<{ match: LiquidityMatch; mode: AdjustMode } | null>(null)
+  const [adjust, setAdjust] = useState<LiquidityMatch | null>(null)
   const [cancelTarget, setCancelTarget] = useState<LiquidityOrder | null>(null)
   const [extractTarget, setExtractTarget] = useState<LiquidityMatch | null>(null)
+  // Buyer abandon during the hesitation window — withdraws ALL rent.
+  const [abandonTarget, setAbandonTarget] = useState<LiquidityMatch | null>(null)
   // Global whole-chain market overview — `null` until the first load; a loaded
   // all-zero value (node offline) still renders real numbers.
   const [dashboard, setDashboard] = useState<MappedDashboard | null>(null)
 
-  const reload = useCallback(async () => {
-    try {
-      const [o, m, d] = await Promise.all([
-        liquidity.getOrders(),
-        liquidity.getMatches(),
-        // Whole-chain scan — best-effort so a scan failure can't sink the
-        // personal orders/matches update.
-        liquidity.getDashboard().catch(() => null),
-      ])
-      setOrders(o)
-      setMatches(m)
-      if (d) setDashboard(mapDashboardData(d))
-    } catch {
-      /* mock — best-effort */
-    }
-  }, [])
+  // Shared market fetch. `rescan` re-scans personal orders from the chain (the
+  // manual button + background auto-refresh) so a matched/cancelled order leaves
+  // the pool; otherwise reads the local cache (mount + post-tx reload). While
+  // the wallet is locked a chain re-scan would rewrite the personal-order cache
+  // empty, so it falls back to the cache — which the backend safely returns
+  // empty without touching.
+  const fetchMarket = useCallback(
+    async (rescan: boolean) => {
+      try {
+        const [o, m, d] = await Promise.all([
+          walletLocked || !rescan ? liquidity.getOrders() : liquidity.refreshOrders(),
+          liquidity.getMatches(),
+          // Whole-chain scan — best-effort so a scan failure can't sink the
+          // personal orders/matches update.
+          liquidity.getDashboard().catch(() => null),
+        ])
+        setOrders(o)
+        setMatches(m)
+        if (d) setDashboard(mapDashboardData(d))
+      } catch {
+        /* best-effort */
+      }
+    },
+    [walletLocked],
+  )
+
+  const reload = useCallback(() => fetchMarket(false), [fetchMarket])
 
   useEffect(() => {
     reload()
   }, [reload])
+
+  // Background auto-refresh — every tick re-scans personal orders from the chain
+  // (cache reads would keep matched/cancelled orders ghosted), refreshes matches
+  // + the whole-chain dashboard, and re-renders. A tick is skipped while a
+  // refresh is still in flight or the window is hidden (minimized).
+  const pollInFlightRef = useRef(false)
+  useEffect(() => {
+    const poll = async () => {
+      if (pollInFlightRef.current || document.hidden) return
+      pollInFlightRef.current = true
+      try {
+        await fetchMarket(true)
+      } catch {
+        /* background — best-effort */
+      } finally {
+        pollInFlightRef.current = false
+      }
+    }
+    const id = window.setInterval(poll, AUTOREFRESH_MS)
+    return () => window.clearInterval(id)
+  }, [fetchMarket])
 
   // On the lock→unlock transition, re-fetch — while locked the backend returns
   // no orders, so fresh data arrives once the wallet can filter again.
@@ -296,29 +334,20 @@ export function LiquidityMarket() {
     if (wasLocked && !walletLocked) reload()
   }, [walletLocked, reload])
 
-  // Manual refresh — the only time personal orders are re-scanned from the chain
-  // (normal loads read the local cache).
+  // Manual refresh — immediate chain re-scan with a spinning button (the
+  // background auto-refresh re-scans on the same cadence, just silently).
   const [refreshing, setRefreshing] = useState(false)
   const handleRefresh = async () => {
     setRefreshing(true)
     try {
-      const [o, m, d] = await Promise.all([
-        liquidity.refreshOrders(),
-        liquidity.getMatches(),
-        liquidity.getDashboard().catch(() => null),
-      ])
-      setOrders(o)
-      setMatches(m)
-      if (d) setDashboard(mapDashboardData(d))
-    } catch {
-      /* mock — best-effort */
+      await fetchMarket(true)
     } finally {
       setRefreshing(false)
     }
   }
 
-  // Manual refresh — re-scans personal orders from the chain (normal loads read
-  // the local cache). Rendered by the cell pool at its top-left.
+  // Manual refresh — immediate chain re-scan (the background auto-refresh does
+  // the same silently). Rendered by the cell pool at its top-left.
   const refreshButton = (
     <button
       type="button"
@@ -375,41 +404,55 @@ export function LiquidityMarket() {
   const handlePublish = async (v: PublishValues) => {
     if (!nodeReady) return
     setBuyOpen(false)
-    await runCkbTx(t.lmPublishOrder, async () => {
-      const res = await liquidity.publishOrder({
-        capacityShannons: Math.round(v.capacityCkb * 1e8),
-        shannonsPerBlock: v.shannonsPerBlock,
-        rentCapacityShannons: Math.round(v.depositCkb * 1e8),
-        rentalDays: v.rentalDays,
-        fiberAddress: v.fiberAddress || undefined,
-      })
+    await runCkbTx(t.lmPublishOrder, async ({ channel }) => {
+      const res = await liquidity.publishOrder(
+        {
+          capacityShannons: Math.round(v.capacityCkb * 1e8),
+          shannonsPerBlock: v.shannonsPerBlock,
+          rentCapacityShannons: Math.round(v.depositCkb * 1e8),
+          rentalDays: v.rentalDays,
+          fiberAddress: v.fiberAddress || undefined,
+        },
+        channel,
+      )
       setToast(t.lmOrderPublished)
       return res
     })
   }
 
-  const handleAdjust = async (match: LiquidityMatch, mode: AdjustMode, amount: number) => {
+  const handleAdjust = async (match: LiquidityMatch, amount: number) => {
     if (!nodeReady) return
     setAdjust(null)
     const shannons = Math.round(amount * 1e8)
-    await runCkbTx(t.lmAdjustTitle, async () => {
-      const res =
-        mode === 'inject'
-          ? await liquidity.injectDeposit(match.outpoint, shannons)
-          : await liquidity.withdrawDeposit(match.outpoint, shannons)
-      // Optimistically apply the delta after confirmation.
+    await runCkbTx(t.lmAdjustTitle, async ({ channel }) => {
+      const res = await liquidity.injectDeposit(match.outpoint, shannons, channel)
+      // Optimistically apply the delta after confirmation (reload pulls truth).
       setMatches((prev) =>
-        prev.map((m) => {
-          if (m.outpoint !== match.outpoint) return m
-          const delta = mode === 'inject' ? amount : -amount
-          return {
-            ...m,
-            depositCkb: Math.max(0, m.depositCkb + delta),
-            withdrawableCkb: Math.max(0, m.withdrawableCkb + delta),
-          }
-        }),
+        prev.map((m) =>
+          m.outpoint === match.outpoint
+            ? { ...m, depositCkb: Math.max(0, m.depositCkb + amount) }
+            : m,
+        ),
       )
       setToast(t.lmDepositAdjusted)
+      return res
+    })
+  }
+
+  // Buyer abandon during the hesitation window — withdraws ALL rent (a full
+  // dump), which spends the match cell. The backend ignores the amount and
+  // dumps everything; we pass the stake so the semantics stay explicit.
+  const handleAbandon = async () => {
+    if (!abandonTarget || !nodeReady) return
+    const outpoint = abandonTarget.outpoint
+    const amount = abandonTarget.depositCkb
+    setAbandonTarget(null)
+    await runCkbTx(t.lmAbandonOrderTitle, async ({ channel }) => {
+      const res = await liquidity.withdrawDeposit(outpoint, Math.round(amount * 1e8), channel)
+      // The full dump spends the match cell — it leaves the pool immediately.
+      setMatches((prev) => prev.filter((m) => m.outpoint !== outpoint))
+      setActive((prev) => (prev?.kind === 'match' && prev.item.outpoint === outpoint ? null : prev))
+      setToast(t.lmOrderAbandoned.replace('{amount}', formatCkb(amount)))
       return res
     })
   }
@@ -417,9 +460,11 @@ export function LiquidityMarket() {
   const handleCancelOrder = async () => {
     if (!cancelTarget || !nodeReady) return
     const outpoint = cancelTarget.outpoint
+    // Close the confirm dialog immediately — the waiting modal takes over.
+    setCancelTarget(null)
     try {
-      await runCkbTx(t.lmCancelOrderTitle, async () => {
-        const res = await liquidity.cancelOrder(outpoint)
+      await runCkbTx(t.lmCancelOrderTitle, async ({ channel }) => {
+        const res = await liquidity.cancelOrder(outpoint, channel)
         setOrders((prev) =>
           prev.map((o) => (o.outpoint === outpoint ? { ...o, status: 'cancelled' as const } : o)),
         )
@@ -427,9 +472,9 @@ export function LiquidityMarket() {
         return res
       })
     } finally {
-      // Release the selection so the cell is de-highlighted, its persistent
-      // tooltip closes, and every other cell becomes clickable again.
-      setCancelTarget(null)
+      // Release the selection once the operation settles so the cell is
+      // de-highlighted, its persistent tooltip closes, and every other cell
+      // becomes clickable again.
       setActive(null)
     }
   }
@@ -439,8 +484,8 @@ export function LiquidityMarket() {
     const outpoint = extractTarget.outpoint
     let returned = extractTarget.depositCkb
     setExtractTarget(null)
-    await runCkbTx(t.lmExtractDeleteTitle, async () => {
-      const res = await liquidity.extractSpentMatch(outpoint)
+    await runCkbTx(t.lmExtractDeleteTitle, async ({ channel }) => {
+      const res = await liquidity.extractSpentMatch(outpoint, channel)
       returned = res.returnedCkb
       setMatches((prev) => prev.filter((m) => m.outpoint !== outpoint))
       setActive((prev) => (prev?.kind === 'match' && prev.item.outpoint === outpoint ? null : prev))
@@ -546,6 +591,7 @@ export function LiquidityMarket() {
             onSelect={setActive}
             refreshButton={refreshButton}
             disabled={walletLocked}
+            nodeFiberPubkey={fiberPubkey}
           />
         </div>
 
@@ -557,11 +603,12 @@ export function LiquidityMarket() {
               orders={orders}
               matches={matches}
               disabled={!nodeReady}
+              nodeFiberPubkey={fiberPubkey}
               onClose={() => setActive(null)}
               onCancelOrder={setCancelTarget}
-              onInject={(m) => setAdjust({ match: m, mode: 'inject' })}
-              onWithdraw={(m) => setAdjust({ match: m, mode: 'withdraw' })}
+              onInject={setAdjust}
               onExtract={setExtractTarget}
+              onAbandon={setAbandonTarget}
             />
           ) : (
             <>
@@ -657,8 +704,7 @@ export function LiquidityMarket() {
       <AdjustDepositModal
         open={adjust !== null}
         disabled={!nodeReady}
-        mode={adjust?.mode ?? 'inject'}
-        match={adjust?.match ?? null}
+        match={adjust ?? null}
         onClose={() => setAdjust(null)}
         onConfirm={handleAdjust}
       />
@@ -670,6 +716,16 @@ export function LiquidityMarket() {
         cancelLabel={t.nodeDeleteCancel}
         onCancel={() => setCancelTarget(null)}
         onConfirm={handleCancelOrder}
+      />
+      <ConfirmModal
+        open={abandonTarget !== null}
+        title={t.lmAbandonOrderTitle}
+        body={t.lmAbandonOrderBody.replace('{amount}', formatCkb(abandonTarget?.depositCkb ?? 0))}
+        confirmLabel={t.lmAbandonOrder}
+        cancelLabel={t.nodeDeleteCancel}
+        danger
+        onCancel={() => setAbandonTarget(null)}
+        onConfirm={handleAbandon}
       />
       <ConfirmModal
         open={extractTarget !== null}

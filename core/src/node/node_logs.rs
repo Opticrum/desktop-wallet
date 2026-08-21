@@ -123,11 +123,11 @@ pub fn install_log_capture() -> &'static Arc<NodeLogBuffer> {
   static BUF: OnceLock<Arc<NodeLogBuffer>> = OnceLock::new();
   static ONCE: std::sync::Once = std::sync::Once::new();
   ONCE.call_once(|| {
-    let buffer = BUF.get_or_init(|| Arc::new(NodeLogBuffer::default())).clone();
+    let buffer = BUF
+      .get_or_init(|| Arc::new(NodeLogBuffer::default()))
+      .clone();
     let layer = NodeLogLayer { buffer };
-    let subscriber = registry().with(
-      tracing_subscriber::filter::LevelFilter::INFO.and_then(layer),
-    );
+    let subscriber = registry().with(tracing_subscriber::filter::LevelFilter::INFO.and_then(layer));
     let _ = tracing::subscriber::set_global_default(subscriber);
   });
   BUF.get_or_init(|| Arc::new(NodeLogBuffer::default()))
@@ -170,7 +170,9 @@ mod tests {
     tracing::info!("hello node log capture");
     let logs = buf.drain(None, None, None);
     assert!(
-      logs.iter().any(|l| l.msg.contains("hello node log capture")),
+      logs
+        .iter()
+        .any(|l| l.msg.contains("hello node log capture")),
       "tracing INFO events must reach the ring buffer"
     );
   }

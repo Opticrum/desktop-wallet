@@ -4,6 +4,7 @@ import { useNode } from '../../node/NodeContext'
 import { node } from '../../api/client'
 import type { NodeConfig, ScriptCellDep, WatchtowerConfig } from '../../api/types'
 import { defaultNodeConfig, detectChainFromRpc, serializeConfigYaml } from '../../lib/config'
+import { useScrollLock } from '../../lib/useScrollLock'
 import { ConfigFormContext, type ConfigFormApi, type DetectState } from './ConfigFormContext'
 import { IconClose } from './configFields'
 import {
@@ -71,6 +72,8 @@ export function NodeConfigModal({
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [open, onClose])
+
+  useScrollLock(open)
 
   const yaml = useMemo(() => serializeConfigYaml(config), [config])
   const yamlBytes = new Blob([yaml]).size
@@ -229,7 +232,7 @@ export function NodeConfigModal({
 
   return (
     <ConfigFormContext.Provider value={api}>
-      <div className="modal-backdrop" onClick={onClose} role="presentation">
+      <div className="modal-backdrop" role="presentation">
         <div
           className="config-modal"
           role="dialog"

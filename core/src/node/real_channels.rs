@@ -14,9 +14,9 @@ use fiber_json_types::channel::{
 };
 use fiber_json_types::graph::{GraphNodesParams, GraphNodesResult};
 use fiber_json_types::peer::{ListPeersResult, PeerInfo as FiberPeerInfo};
-use std::collections::HashMap;
 use molecule::prelude::Entity;
 use opticrum_protocol::OutPoint as ProtocolOutPoint;
+use std::collections::HashMap;
 
 use crate::backend::traits::ChannelsBackend;
 use crate::node::rpc_client::{FiberRpcExt, RpcClient};
@@ -40,6 +40,13 @@ pub trait FiberChannelApi: Send + Sync {
     address: Option<&str>,
   ) -> Result<String, CommandError>;
   async fn shutdown_channel(&self, channel_id: &str, force: bool) -> Result<(), CommandError>;
+  /// Generate a signed invoice for `amount_shannons`, paying into this node.
+  /// Returns the bech32m invoice address (`fibt`/`fibb`-prefixed).
+  async fn create_invoice(
+    &self,
+    amount_shannons: u64,
+    chain: Chain,
+  ) -> Result<String, CommandError>;
 }
 
 /// Real impl over the fiber JSON-RPC client.
@@ -108,6 +115,32 @@ impl FiberChannelApi for RealFiberChannels {
     let params = serde_json::json!({ "channel_id": channel_id, "force": force });
     let _: serde_json::Value = self.client.call_fiber("shutdown_channel", &params).await?;
     Ok(())
+  }
+
+  async fn create_invoice(
+    &self,
+    amount_shannons: u64,
+    chain: Chain,
+  ) -> Result<String, CommandError> {
+    use fiber_json_types::{Currency, InvoiceResult, NewInvoiceParams};
+    let currency = match chain {
+      Chain::Mainnet => Currency::Fibb,
+      Chain::Testnet => Currency::Fibt,
+    };
+    let params = NewInvoiceParams {
+      amount: amount_shannons as u128,
+      currency,
+      // Pin the invoice's `final_tlc_expiry_delta` to fiber's default (24 h).
+      // Without it `new_invoice` falls back to `MIN_TLC_EXPIRY_DELTA`, which is
+      // build-mode dependent (2 s in debug, 160 min in release) — an invoice
+      // created by a debug node is rejected by a release node's `send_payment`
+      // ("invalid final_tlc_expiry_delta, expect between 9600000 and
+      // 1209600000"). 86_400_000 ms sits inside the valid range either way.
+      final_expiry_delta: Some(24 * 60 * 60 * 1000),
+      ..Default::default()
+    };
+    let result: InvoiceResult = self.client.call_fiber("new_invoice", &params).await?;
+    Ok(result.invoice_address)
   }
 }
 
@@ -182,6 +215,18 @@ impl FiberChannelApi for MockFiberChannels {
   }
   async fn shutdown_channel(&self, _channel_id: &str, _force: bool) -> Result<(), CommandError> {
     Ok(())
+  }
+  async fn create_invoice(
+    &self,
+    amount_shannons: u64,
+    chain: Chain,
+  ) -> Result<String, CommandError> {
+    let prefix = if chain == Chain::Mainnet {
+      "fibb"
+    } else {
+      "fibt"
+    };
+    Ok(format!("{prefix}{amount_shannons}1mockinvoicedata"))
   }
 }
 
@@ -331,7 +376,11 @@ impl ChannelsBackend for RealChannelsBackend {
         .collect(),
       Err(_) => HashMap::new(),
     };
-    Ok(build_channel_list(&peers.peers, &channels.channels, &versions))
+    Ok(build_channel_list(
+      &peers.peers,
+      &channels.channels,
+      &versions,
+    ))
   }
 
   async fn connect_peer(
@@ -379,6 +428,14 @@ impl ChannelsBackend for RealChannelsBackend {
 
   async fn close_channel(&self, channel_id: String, force: bool) -> Result<(), CommandError> {
     self.fiber.shutdown_channel(&channel_id, force).await
+  }
+
+  async fn create_invoice(
+    &self,
+    amount_shannons: u64,
+    chain: Chain,
+  ) -> Result<String, CommandError> {
+    self.fiber.create_invoice(amount_shannons, chain).await
   }
 }
 
@@ -485,8 +542,7 @@ mod tests {
     // the still-open ones (incl. ShuttingDown → "closing") surface.
     assert_eq!(list.nodes.len(), 1);
     assert_eq!(list.nodes[0].channels.len(), 2);
-    assert!(list
-      .nodes[0]
+    assert!(list.nodes[0]
       .channels
       .iter()
       .any(|c| c.state == "ShuttingDown"));

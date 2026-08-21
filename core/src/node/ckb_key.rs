@@ -36,12 +36,19 @@ pub fn ensure_ckb_key(ckb_base_dir: &Path, wallet: &dyn SigningWallet) -> Result
   rand::thread_rng().fill_bytes(&mut password);
   let password_hex = hex::encode(password);
 
-  fnn::utils::encrypt_decrypt_file::encrypt_to_file(&key_path, &sk.secret_bytes(), password_hex.as_bytes())
-    .map_err(|e| CommandError::internal(format!("encrypt node key: {e}")))?;
+  fnn::utils::encrypt_decrypt_file::encrypt_to_file(
+    &key_path,
+    &sk.secret_bytes(),
+    password_hex.as_bytes(),
+  )
+  .map_err(|e| CommandError::internal(format!("encrypt node key: {e}")))?;
   let pw_path = ckb_base_dir.join("key.password");
   std::fs::write(&pw_path, password_hex.as_bytes()).map_err(|e| CommandError::io(e.to_string()))?;
   // Restrict the password file to the current user.
-  let _ = std::fs::set_permissions(&pw_path, std::os::unix::fs::PermissionsExt::from_mode(0o600));
+  let _ = std::fs::set_permissions(
+    &pw_path,
+    std::os::unix::fs::PermissionsExt::from_mode(0o600),
+  );
   Ok(())
 }
 
@@ -68,7 +75,10 @@ mod tests {
     fn signing_identity(&self) -> Option<(String, SecretKey)> {
       let secp = Secp256k1::new();
       let pk = PublicKey::from_secret_key(&secp, &self.0);
-      Some((crate::wallet::address::ckb_address_from_pubkey(&pk, true), self.0))
+      Some((
+        crate::wallet::address::ckb_address_from_pubkey(&pk, true),
+        self.0,
+      ))
     }
   }
 

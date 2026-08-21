@@ -6,14 +6,20 @@ import {
   daysLeft,
   dwellHours,
   dwellTierColor,
+  extractionProgress,
   formatApyShort,
   formatBps,
   formatCkb,
   formatCompact,
+  formatDurationHm,
   formatTimestamp,
+  hesitationRemainingMs,
+  hesitationTierColor,
   lifeTierColor,
   matchLife,
+  matchPhase,
   rentalDaysForMatch,
+  truncatePubkey,
   type LiquidityMatch,
   type LiquidityOrder,
   type PoolCellData,
@@ -150,7 +156,15 @@ function stepSim(sims: SimCell[], w: number, h: number, dt: number, frozenKey: s
 
 // ── Hover tooltip content (relatively detailed cell info) ──────────────────
 
-function OrderTooltipContent({ order, sharePct }: { order: LiquidityOrder; sharePct: number }) {
+function OrderTooltipContent({
+  order,
+  sharePct,
+  fiberKeyMismatch,
+}: {
+  order: LiquidityOrder
+  sharePct: number
+  fiberKeyMismatch: boolean
+}) {
   const { t } = useLocale()
   return (
     <>
@@ -191,17 +205,32 @@ function OrderTooltipContent({ order, sharePct }: { order: LiquidityOrder; share
           <span>{t.mgCreatedAt}</span>
           <strong>{formatTimestamp(order.createdAtMs ?? 0)}</strong>
         </div>
+        <div className="lm-tooltip-row">
+          <span>{t.fiberPubkey}</span>
+          <strong className="mono">{truncatePubkey(order.fiberPubkey)}</strong>
+        </div>
+        {fiberKeyMismatch && <div className="lm-tooltip-warn">{t.lmPubkeyMismatchTitle}</div>}
       </div>
     </>
   )
 }
 
-function MatchTooltipContent({ match }: { match: LiquidityMatch }) {
+function MatchTooltipContent({ match, fiberKeyMismatch }: { match: LiquidityMatch; fiberKeyMismatch: boolean }) {
   const { t } = useLocale()
   const life = matchLife(match)
+  const hesitating = matchPhase(match) === 'hesitating'
+  const extraction = extractionProgress(match)
   return (
     <>
       <div className="lm-tooltip-body">
+        {hesitating && (
+          <div className="lm-tooltip-row lm-tooltip-hesitation">
+            <span>{t.lmHesitation}</span>
+            <strong>
+              {t.lmHesitationLeft.replace('{time}', formatDurationHm(hesitationRemainingMs(match)))}
+            </strong>
+          </div>
+        )}
         <div className="lm-tooltip-row">
           <span>{t.matchCapacity}</span>
           <strong>
@@ -220,6 +249,14 @@ function MatchTooltipContent({ match }: { match: LiquidityMatch }) {
             {formatCkb(match.depositCkb)} {t.unitCkb}
           </strong>
         </div>
+        {extraction.pct > 0 && (
+          <div className="lm-tooltip-row lm-tooltip-extract">
+            <span>{t.lmExtractionProgress}</span>
+            <strong>
+              {t.lmExtractionPct.replace('{pct}', String(extraction.pct))} · {formatCkb(extraction.extractedCkb)} {t.unitCkb}
+            </strong>
+          </div>
+        )}
         <div className="lm-tooltip-row">
           <span>{t.lmWithdrawable}</span>
           <strong>
@@ -242,6 +279,11 @@ function MatchTooltipContent({ match }: { match: LiquidityMatch }) {
           <span>{t.mgExpiresAt}</span>
           <strong>{formatTimestamp(match.expiresAtMs)}</strong>
         </div>
+        <div className="lm-tooltip-row">
+          <span>{t.fiberPubkey}</span>
+          <strong className="mono">{truncatePubkey(match.fiberPubkey)}</strong>
+        </div>
+        {fiberKeyMismatch && <div className="lm-tooltip-warn">{t.lmPubkeyMismatchTitle}</div>}
       </div>
     </>
   )
@@ -295,8 +337,10 @@ function OverviewChart({
       return {
         key: m.outpoint,
         value: 1,
-        color:
-          label === 'healthy'
+        // A hesitating match reads violet in the ring too (pending decision).
+        color: matchPhase(m) === 'hesitating'
+          ? 'var(--violet)'
+          : label === 'healthy'
             ? 'var(--ok)'
             : label === 'warning'
               ? 'var(--warn)'
@@ -378,6 +422,9 @@ export type LiquidityCellFieldProps = {
   refreshButton?: ReactNode
   /** Wallet locked — the cell drift freezes and the pool dims with a hint. */
   disabled?: boolean
+  /** The current fiber node's identity pubkey — cells whose embedded pubkey
+   *  differs are flagged as created under an older/different node. */
+  nodeFiberPubkey?: string
 }
 
 export function LiquidityCellField({
@@ -388,6 +435,7 @@ export function LiquidityCellField({
   onSelect,
   refreshButton,
   disabled = false,
+  nodeFiberPubkey,
 }: LiquidityCellFieldProps) {
   const { t } = useLocale()
 
@@ -399,7 +447,10 @@ export function LiquidityCellField({
     return () => window.clearInterval(id)
   }, [])
 
-  const cells = useMemo(() => buildPoolCells(orders, matches, mode), [orders, matches, mode, tick])
+  const cells = useMemo(
+    () => buildPoolCells(orders, matches, mode, nodeFiberPubkey),
+    [orders, matches, mode, nodeFiberPubkey, tick],
+  )
   const maxCap = useMemo(() => Math.max(0, ...cells.map((c) => c.capacityCkb)), [cells])
   // Sum of all active orders' channel demand — drives the pie share % on hover.
   const totalDemand = useMemo(
@@ -445,6 +496,37 @@ export function LiquidityCellField({
       })
     }
   }, [selected, cells])
+
+  // Re-anchor the fixed-position tooltips while the page scrolls. The hovered /
+  // selected cell is frozen by the physics loop, so scrolling is its only
+  // movement — re-reading its live `getBoundingClientRect()` (viewport-relative)
+  // keeps the tooltip glued to the cell instead of stuck where it first appeared.
+  useEffect(() => {
+    const reanchor = () => {
+      const recompute = (s: HoverState | null): HoverState | null => {
+        if (!s) return s
+        const el = cellEls.current.get(s.key)
+        if (!el) return s
+        const r = el.getBoundingClientRect()
+        const x = Math.max(16, Math.min(r.left + r.width / 2, window.innerWidth - 16))
+        const below = r.top < 200
+        const y = below ? r.bottom : r.top
+        // Skip no-op updates so a scroll that doesn't move this cell (e.g. the
+        // right aside) doesn't re-render the pool on every wheel tick.
+        if (x === s.x && y === s.y && below === s.below) return s
+        return { ...s, x, y, below }
+      }
+      setHovered(recompute)
+      setSelectedTooltip(recompute)
+    }
+    // Capture phase catches scrolls from any nested container, not just the window.
+    window.addEventListener('scroll', reanchor, true)
+    window.addEventListener('resize', reanchor)
+    return () => {
+      window.removeEventListener('scroll', reanchor, true)
+      window.removeEventListener('resize', reanchor)
+    }
+  }, [])
 
   // Physics loop + wall bounds. Rebuilt per tab (mode): this tab's cell
   // positions are saved to `savedPositions` before teardown and restored on the
@@ -660,13 +742,18 @@ export function LiquidityCellField({
             const d = cellDiameter(c.capacityCkb, maxCap)
             // Gauge dial: match = remaining life %; order = dwell progress toward 7 days.
             const gauge = c.kind === 'match' ? (c.life?.pct ?? 0) : Math.min(100, (c.dwellH / 168) * 100)
+            // A hesitating match tints violet (pending buyer decision) instead
+            // of the green→red life tier — it is nearly always "healthy" anyway.
+            const hesitating = c.kind === 'match' && c.phase === 'hesitating'
             const style = {
               width: d,
               height: d,
               '--cell-d': `${d}px`,
-              '--tier': c.kind === 'match'
-                ? (c.life ? lifeTierColor(c.life.pct) : 'var(--cell-accent)')
-                : dwellTierColor(c.dwellH),
+              '--tier': hesitating
+                ? hesitationTierColor()
+                : c.kind === 'match'
+                  ? (c.life ? lifeTierColor(c.life.pct) : 'var(--cell-accent)')
+                  : dwellTierColor(c.dwellH),
               '--gauge': gauge,
             } as CSSProperties
             const frozen = hovered?.key === c.key
@@ -681,7 +768,7 @@ export function LiquidityCellField({
                   else cellEls.current.delete(c.key)
                 }}
                 type="button"
-                className={`cell cell-${c.kind} ${c.life?.isExhausted ? 'is-exhausted' : ''} ${frozen ? 'is-frozen' : ''} ${selected === c.key ? 'is-selected' : ''} ${dimmed ? 'is-dimmed' : ''}`}
+                className={`cell cell-${c.kind} ${c.life?.isExhausted ? 'is-exhausted' : ''} ${hesitating ? 'is-hesitating' : ''} ${frozen ? 'is-frozen' : ''} ${selected === c.key ? 'is-selected' : ''} ${dimmed ? 'is-dimmed' : ''}`}
                 style={style}
                 onClick={() => {
                   // Clicking the open cell again closes the tooltip + detail
@@ -714,7 +801,11 @@ export function LiquidityCellField({
                   ` · ${t.lmDemand} ${formatCkb(c.capacityCkb)} CKB` +
                   (c.kind === 'order'
                     ? ` · ${t.lmRentalDays.replace('{days}', String(c.rentalDays ?? '—'))} · ${t.lmDwell} ${Math.round(c.dwellH)}h`
-                    : ` · ${t.lmRemaining} ${c.life ? c.life.pct : 0}%`)
+                    : ` · ${t.lmRemaining} ${c.life ? c.life.pct : 0}%`) +
+                  (hesitating
+                    ? ` · ${t.lmHesitation} ${formatDurationHm(hesitationRemainingMs(c.target.item as LiquidityMatch))}`
+                    : '') +
+                  (c.fiberKeyMismatch ? ` · ${t.lmLegacyCell}` : '')
                 }
               >
                 {c.kind === 'match' && (
@@ -764,6 +855,29 @@ export function LiquidityCellField({
                     </>
                   ) : null}
                 </span>
+                {c.kind === 'match' && hesitating && (
+                  <span className="cell-hesitation-badge">
+                    <svg className="cell-hesitation-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M12 7v5l3.5 2" />
+                    </svg>
+                    {t.lmHesitation} {formatDurationHm(hesitationRemainingMs(c.target.item as LiquidityMatch))}
+                  </span>
+                )}
+                {c.kind === 'match' && c.extraction && c.extraction.pct > 0 && (
+                  <span
+                    className="cell-extract-badge"
+                    title={t.lmExtractionPct.replace('{pct}', String(c.extraction.pct))}
+                  >
+                    <span className="cell-extract-track">
+                      <span
+                        className="cell-extract-fill"
+                        style={{ width: `${c.extraction.pct}%` }}
+                      />
+                    </span>
+                    {t.lmExtractionPct.replace('{pct}', String(c.extraction.pct))}
+                  </span>
+                )}
                 {c.kind === 'order' && (
                   <span className="cell-rental-badge">
                     {t.lmRentalTerm} {t.lmRentalDaysShort.replace('{days}', String(c.rentalDays ?? '—'))}
@@ -772,6 +886,11 @@ export function LiquidityCellField({
                 {c.kind === 'order' && (
                   <span className="cell-apy-badge">
                     {t.lmApyLabel} {formatApyShort(c.apyBps)}%
+                  </span>
+                )}
+                {c.fiberKeyMismatch && (
+                  <span className="cell-legacy-badge" title={t.lmPubkeyMismatchTitle}>
+                    !
                   </span>
                 )}
               </button>
@@ -789,9 +908,16 @@ export function LiquidityCellField({
           style={{ left: tooltip.x, top: tooltip.y }}
         >
           {tooltip.data.kind === 'order' ? (
-            <OrderTooltipContent order={tooltip.data.target.item as LiquidityOrder} sharePct={hoveredOrderShare} />
+            <OrderTooltipContent
+              order={tooltip.data.target.item as LiquidityOrder}
+              sharePct={hoveredOrderShare}
+              fiberKeyMismatch={tooltip.data.fiberKeyMismatch}
+            />
           ) : (
-            <MatchTooltipContent match={tooltip.data.target.item as LiquidityMatch} />
+            <MatchTooltipContent
+              match={tooltip.data.target.item as LiquidityMatch}
+              fiberKeyMismatch={tooltip.data.fiberKeyMismatch}
+            />
           )}
         </div>
       )}

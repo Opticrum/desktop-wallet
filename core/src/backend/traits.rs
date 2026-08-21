@@ -10,11 +10,12 @@
 
 use async_trait::async_trait;
 
+use super::TxProgressReporter;
 use crate::wire::{
-  ChannelList, CommandError, ConnectPeerResult, CreateWalletResult, DashboardData, ExtractResult,
-  LiquidityMatch, LiquidityOrder, LogLevel, MatchDeadline, NodeConfig, NodeLog, NodeRuntime,
-  OpenChannelResult, PublishOrderResult, SaveConfigResult, TxHashResult, WalletAddress,
-  WalletStatus, WalletSummary, WalletTx,
+  Chain, ChannelList, CommandError, ConnectPeerResult, CreateWalletResult, DashboardData,
+  ExtractResult, LiquidityMatch, LiquidityOrder, LogLevel, MatchDeadline, NodeConfig, NodeLog,
+  NodeRuntime, OpenChannelResult, PublishOrderResult, SaveConfigResult, TxHashResult,
+  WalletAddress, WalletStatus, WalletSummary, WalletTx,
 };
 
 #[async_trait]
@@ -58,6 +59,7 @@ pub trait WalletBackend: Send + Sync {
     &self,
     address: String,
     amount_shannons: u64,
+    progress: &dyn TxProgressReporter,
   ) -> Result<TxHashResult, CommandError>;
 }
 
@@ -94,6 +96,12 @@ pub trait ChannelsBackend: Send + Sync {
     fee_rate_ppm: Option<u64>,
   ) -> Result<OpenChannelResult, CommandError>;
   async fn close_channel(&self, channel_id: String, force: bool) -> Result<(), CommandError>;
+  /// Generate a signed invoice for `amount_shannons` (pays into this node).
+  async fn create_invoice(
+    &self,
+    amount_shannons: u64,
+    chain: Chain,
+  ) -> Result<String, CommandError>;
 }
 
 #[async_trait]
@@ -114,20 +122,28 @@ pub trait LiquidityBackend: Send + Sync {
     rent_capacity_shannons: u64,
     rental_days: u32,
     fiber_address: Option<String>,
+    progress: &dyn TxProgressReporter,
   ) -> Result<PublishOrderResult, CommandError>;
-  async fn cancel_order(&self, outpoint: String) -> Result<TxHashResult, CommandError>;
+  async fn cancel_order(
+    &self,
+    outpoint: String,
+    progress: &dyn TxProgressReporter,
+  ) -> Result<TxHashResult, CommandError>;
   async fn inject_deposit(
     &self,
     match_outpoint: String,
     amount_shannons: u64,
+    progress: &dyn TxProgressReporter,
   ) -> Result<TxHashResult, CommandError>;
   async fn withdraw_deposit(
     &self,
     match_outpoint: String,
     amount_shannons: u64,
+    progress: &dyn TxProgressReporter,
   ) -> Result<TxHashResult, CommandError>;
   async fn extract_spent_match(
     &self,
     match_outpoint: String,
+    progress: &dyn TxProgressReporter,
   ) -> Result<ExtractResult, CommandError>;
 }

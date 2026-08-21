@@ -66,8 +66,9 @@ pub struct RealNodeBackend {
   /// start — this is what goes in `/p2p/<node_id>`, NOT the secp256k1 pubkey.
   node_id: Mutex<Option<String>>,
   /// The fiber node's secp256k1 identity pubkey (66-hex), captured on start so
-  /// it survives the node stopping.
-  node_pubkey: Mutex<Option<String>>,
+  /// it survives the node stopping. Shared with the liquidity backend so new
+  /// orders are attributed to the current node's identity.
+  node_pubkey: Arc<Mutex<Option<String>>>,
   /// When the embedded node was (last) started — the uptime anchor. Cleared on
   /// stop, so a stopped node reports `started_at_ms: None`, `uptime_hours: 0`.
   started_at: Mutex<Option<SystemTime>>,
@@ -80,6 +81,7 @@ impl RealNodeBackend {
     base_dir: PathBuf,
     wallet: Arc<dyn SigningWallet>,
     config: Arc<Mutex<NodeConfig>>,
+    node_pubkey: Arc<Mutex<Option<String>>>,
   ) -> Self {
     Self {
       fiber,
@@ -90,7 +92,7 @@ impl RealNodeBackend {
       base_dir,
       starting: AtomicBool::new(false),
       node_id: Mutex::new(None),
-      node_pubkey: Mutex::new(None),
+      node_pubkey,
       started_at: Mutex::new(None),
     }
   }
@@ -121,8 +123,16 @@ impl RealNodeBackend {
           } else {
             i.addresses.iter().map(|a| with_p2p(a, &node_id)).collect()
           };
-          let fiber_addr = if node_id.is_empty() { None } else { addrs.first().cloned() };
-          let addresses = if node_id.is_empty() { Vec::new() } else { addrs };
+          let fiber_addr = if node_id.is_empty() {
+            None
+          } else {
+            addrs.first().cloned()
+          };
+          let addresses = if node_id.is_empty() {
+            Vec::new()
+          } else {
+            addrs
+          };
           (
             i.node_name
               .clone()
@@ -141,8 +151,16 @@ impl RealNodeBackend {
           // Before the node has initialized (no peer id captured yet) there is
           // no real address to show — stay empty until the node brings one up.
           let addr = with_p2p(&config.fiber.listening_addr, &node_id);
-          let fiber_addr = if node_id.is_empty() { None } else { Some(addr.clone()) };
-          let addresses = if node_id.is_empty() { Vec::new() } else { vec![addr] };
+          let fiber_addr = if node_id.is_empty() {
+            None
+          } else {
+            Some(addr.clone())
+          };
+          let addresses = if node_id.is_empty() {
+            Vec::new()
+          } else {
+            vec![addr]
+          };
           (
             Some(config.fiber.announced_node_name.clone()),
             fiber_pubkey.clone(),
@@ -163,8 +181,11 @@ impl RealNodeBackend {
       match *self.started_at.lock().unwrap() {
         Some(t) => {
           let started_ms = t.duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
-          let elapsed_hours =
-            SystemTime::now().duration_since(t).unwrap_or_default().as_secs() as u32 / 3600;
+          let elapsed_hours = SystemTime::now()
+            .duration_since(t)
+            .unwrap_or_default()
+            .as_secs() as u32
+            / 3600;
           (Some(started_ms), elapsed_hours)
         }
         None => (None, 0),
@@ -325,11 +346,19 @@ mod tests {
     }
     fn signing_identity(
       &self,
-    ) -> Option<(String, ckb_cinnabar_calculator::re_exports::secp256k1::SecretKey)> {
-      let sk = ckb_cinnabar_calculator::re_exports::secp256k1::SecretKey::from_slice(&[7u8; 32]).unwrap();
+    ) -> Option<(
+      String,
+      ckb_cinnabar_calculator::re_exports::secp256k1::SecretKey,
+    )> {
+      let sk =
+        ckb_cinnabar_calculator::re_exports::secp256k1::SecretKey::from_slice(&[7u8; 32]).unwrap();
       let secp = ckb_cinnabar_calculator::re_exports::secp256k1::Secp256k1::new();
-      let pk = ckb_cinnabar_calculator::re_exports::secp256k1::PublicKey::from_secret_key(&secp, &sk);
-      Some((crate::wallet::address::ckb_address_from_pubkey(&pk, true), sk))
+      let pk =
+        ckb_cinnabar_calculator::re_exports::secp256k1::PublicKey::from_secret_key(&secp, &sk);
+      Some((
+        crate::wallet::address::ckb_address_from_pubkey(&pk, true),
+        sk,
+      ))
     }
   }
 
@@ -344,6 +373,7 @@ mod tests {
         dir.path().join("fiber-node"),
         Arc::new(TestWallet),
         config,
+        Arc::new(Mutex::new(None)),
       ),
       dir,
     )
@@ -360,7 +390,10 @@ mod tests {
     // the node brings it up. The pubkey field is the secp256k1 identity.
     assert_eq!(r.fiber_addr, None, "fiber address stays empty before init");
     assert!(r.addresses.is_empty());
-    assert_eq!(r.fiber_pubkey, "02ab91f4c5d27b8e6a1f4d3c9a72e881f0c5b7d4e3a9f8b6c1d2e5f4a3b7c9d1");
+    assert_eq!(
+      r.fiber_pubkey,
+      "02ab91f4c5d27b8e6a1f4d3c9a72e881f0c5b7d4e3a9f8b6c1d2e5f4a3b7c9d1"
+    );
   }
 
   #[tokio::test]
@@ -368,7 +401,8 @@ mod tests {
     let (backend, _dir) = test_backend(Arc::new(MockFiberApi::new(None)));
     // Simulate the node having started — the `Qm…` peer id is captured from
     // fiber-lib and must appear in the `/p2p/` of the address.
-    *backend.node_id.lock().unwrap() = Some("QmQQjPLhizrXjgcmX7mDqrrCzC5FeHwPxgJP1qRGBsZJJr".to_string());
+    *backend.node_id.lock().unwrap() =
+      Some("QmQQjPLhizrXjgcmX7mDqrrCzC5FeHwPxgJP1qRGBsZJJr".to_string());
     let r = backend.get_runtime().await.unwrap();
     assert_eq!(
       r.fiber_addr.as_deref(),
@@ -388,10 +422,18 @@ mod tests {
       dir.path().join("node-config.json"),
       dir.path().join("fiber-node"),
       Arc::new(TestWallet),
-      Arc::new(Mutex::new(load_config(&dir.path().join("node-config.json")))),
+      Arc::new(Mutex::new(load_config(
+        &dir.path().join("node-config.json"),
+      ))),
+      Arc::new(Mutex::new(None)),
     );
     assert_eq!(
-      reloaded.get_config().await.unwrap().fiber.announced_node_name,
+      reloaded
+        .get_config()
+        .await
+        .unwrap()
+        .fiber
+        .announced_node_name,
       "renamed"
     );
   }
@@ -418,7 +460,10 @@ mod tests {
       Some(SystemTime::now() - std::time::Duration::from_secs(3700));
     let r = backend.runtime_from_info(Some(&sample_info()), true, false);
     assert_eq!(r.uptime_hours, 1);
-    assert!(r.started_at_ms.is_some(), "start anchor reported while running");
+    assert!(
+      r.started_at_ms.is_some(),
+      "start anchor reported while running"
+    );
     // Stopped (anchor cleared) → no uptime and no start anchor.
     *backend.started_at.lock().unwrap() = None;
     let r = backend.runtime_from_info(Some(&sample_info()), false, false);

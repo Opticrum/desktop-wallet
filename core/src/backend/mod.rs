@@ -10,7 +10,7 @@ pub mod traits;
 
 use std::sync::{Arc, Mutex};
 
-use crate::wire::{Chain, CommandError};
+use crate::wire::{Chain, CommandError, TxProgress};
 
 pub use traits::{ChannelsBackend, LiquidityBackend, NodeBackend, WalletBackend};
 
@@ -38,6 +38,22 @@ impl Default for BackendConfig {
       network: Chain::Testnet,
     }
   }
+}
+
+/// Receives transaction lifecycle progress (broadcasting → confirming) for the
+/// frontend's transaction-confirmation modal. The Tauri command layer implements
+/// this over a per-invocation `tauri::ipc::Channel`; tests and mock callers use
+/// the no-op default. Kept Tauri-free so the core stays a pure library.
+pub trait TxProgressReporter: Send + Sync {
+  fn report(&self, progress: TxProgress);
+}
+
+/// No-op progress reporter — for callers with no UI to feed.
+#[derive(Debug, Default)]
+pub struct NoopTxProgressReporter;
+
+impl TxProgressReporter for NoopTxProgressReporter {
+  fn report(&self, _progress: TxProgress) {}
 }
 
 /// Internal seam — the wallet's signing identity, shared with the liquidity
@@ -97,6 +113,9 @@ impl BackendBundle {
     let node_config = Arc::new(Mutex::new(crate::node::real_node::load_config(
       std::path::Path::new(&cfg.node_config_path),
     )));
+    // The fiber node's identity pubkey, shared between the node backend (writes
+    // it on start) and the liquidity backend (attributes new orders to it).
+    let node_pubkey = Arc::new(Mutex::new(None::<String>));
 
     let wallet = Arc::new(crate::backend::real::RealWalletBackend::new(
       rpc.clone(),
@@ -112,6 +131,7 @@ impl BackendBundle {
       provider.clone(),
       wallet.clone(),
       testnet,
+      node_pubkey.clone(),
       // Separate connection for the personal-order cache (SQLite is cheap).
       Some(db::init_db(&cfg.database_url)?),
     ));
@@ -137,6 +157,7 @@ impl BackendBundle {
       node_base_dir,
       wallet.clone(),
       node_config,
+      node_pubkey,
     ));
     let channels = Arc::new(RealChannelsBackend::new(Arc::new(
       crate::node::real_channels::RealFiberChannels::new(fiber_client),

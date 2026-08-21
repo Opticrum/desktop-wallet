@@ -26,6 +26,28 @@ impl std::fmt::Display for Chain {
   }
 }
 
+/// Phase of a broadcast CKB transaction, reported by the backend to the
+/// frontend's transaction-confirmation modal (构造 → 发送上链 → 打包确认).
+/// Only the two observable phase boundaries are reported — the modal opens on
+/// the "constructing" step itself and completes the last step from the command
+/// resolving.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TxPhase {
+  /// About to submit the signed transaction to the CKB node's mempool.
+  Broadcasting,
+  /// The tx is broadcast; waiting for it to be packaged and confirmed on-chain.
+  Confirming,
+}
+
+/// Progress payload pushed over the per-invocation Tauri channel.
+#[derive(Debug, Clone, Serialize)]
+pub struct TxProgress {
+  pub phase: TxPhase,
+  /// Tx hash once the broadcast RPC has returned it (`None` for `Broadcasting`).
+  pub tx_hash: Option<String>,
+}
+
 /// Wire watchtower mode — migrated from the old mock `'local' | 'remote'`.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -43,6 +65,17 @@ pub enum MatchHealth {
   Warning,
   Critical,
   Exhausted,
+}
+
+/// The wallet's party on a match — gates which actions the UI may offer
+/// (inject/withdraw are buyer-side; extraction is seller-side). `Other` when
+/// the wallet is neither party (non-`'mine'` scans).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MatchRole {
+  Buyer,
+  Seller,
+  Other,
 }
 
 /// Log level — normalized to INFO / WARN / ERROR.
@@ -318,6 +351,13 @@ pub struct Channel {
 #[serde(rename_all = "camelCase")]
 pub struct LiquidityOrder {
   pub outpoint: String,
+  /// The 33-byte fiber pubkey embedded in the order cell's lock args — the
+  /// node identity the order was created under. Mismatches the current node's
+  /// `fiber_pubkey` when the order predates a node key change (frontend flags it).
+  /// `#[serde(default)]` so cache rows written before this field existed load
+  /// with an empty pubkey instead of failing to deserialize.
+  #[serde(default)]
+  pub fiber_pubkey: String,
   pub channel_capacity_ckb: f64,
   pub channel_capacity_shannons: u64,
   pub shannons_per_block: u64,
@@ -337,11 +377,24 @@ pub struct LiquidityOrder {
 pub struct LiquidityMatch {
   pub outpoint: String,
   pub channel_outpoint: String,
-  /// Remaining capacity — 0 when exhausted.
+  /// The fiber pubkey of the underlying order cell this match derives from.
+  #[serde(default)]
+  pub fiber_pubkey: String,
+  /// The capacity of the funded Fiber channel (constant across the match's
+  /// life — the yield basis). NOT the remaining stake.
   pub channel_capacity_ckb: f64,
   pub shannons_per_block: u64,
   pub annual_yield_bps: f64,
+  /// Current remaining rent pool (`MatchInfo.ckb_capacity / 1e8`) — shrinks on
+  /// each seller extraction.
   pub deposit_ckb: f64,
+  /// Original rent pool at match creation (`walk_original_stake`, CKB).
+  /// Recovered by tracing the producing-tx lineage back to the `order_match`
+  /// tx; falls back to the current stake when the trace fails.
+  pub original_stake_ckb: f64,
+  /// Buyer-withdrawable CKB. Non-zero only while the wallet is the buyer AND
+  /// inside the hesitation window — there it equals the full stake (a withdraw
+  /// is always a full dump); otherwise `0.0`.
   pub withdrawable_ckb: f64,
   pub xudt_amount: String,
   pub created_at_ms: u64,
@@ -352,6 +405,15 @@ pub struct LiquidityMatch {
   pub last_extraction_block: u64,
   pub projected_exhaustion_block: u64,
   pub seller_lock_hash: String,
+  /// The match cell's producing block — the hesitation-window anchor
+  /// (`MatchInfo.match_current_block`).
+  pub match_creation_block: u64,
+  /// Buyer full-withdrawal deadline: `created_at_ms + HESITATION_BLOCKS × 12s`
+  /// (same 12s/block convention as `expires_at_ms`). Only meaningful while
+  /// `last_extraction_block == 0`.
+  pub hesitation_ends_at_ms: u64,
+  /// Which party this wallet is on the match — gates inject/withdraw UX.
+  pub role: MatchRole,
 }
 
 // ── SDK-native aggregates (snake_case, no rename_all) ────────────────────────
@@ -492,6 +554,14 @@ pub enum CommandError {
   AlreadyExhausted(String),
   NotExhausted(String),
   NotAuthorized(String),
+  /// Buyer tried to withdraw after the hesitation window (or first extraction).
+  WithdrawWindowExpired(String),
+  /// Seller tried to extract before the hesitation window elapses.
+  HesitationNotElapsed(String),
+  /// Buyer tried a partial withdrawal — the protocol only allows a full dump.
+  PartialWithdrawNotAllowed(String),
+  /// Buyer tried to inject funds inside the hesitation window.
+  InjectDuringHesitation(String),
   WalletLocked(String),
   NodeNotRunning(String),
   Node(String),
@@ -539,6 +609,10 @@ impl std::fmt::Display for CommandError {
       CommandError::AlreadyExhausted(m) => ("already_exhausted", m),
       CommandError::NotExhausted(m) => ("not_exhausted", m),
       CommandError::NotAuthorized(m) => ("not_authorized", m),
+      CommandError::WithdrawWindowExpired(m) => ("withdraw_window_expired", m),
+      CommandError::HesitationNotElapsed(m) => ("hesitation_not_elapsed", m),
+      CommandError::PartialWithdrawNotAllowed(m) => ("partial_withdraw_not_allowed", m),
+      CommandError::InjectDuringHesitation(m) => ("inject_during_hesitation", m),
       CommandError::WalletLocked(m) => ("wallet_locked", m),
       CommandError::NodeNotRunning(m) => ("node_not_running", m),
       CommandError::Node(m) => ("node", m),

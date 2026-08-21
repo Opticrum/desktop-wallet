@@ -6,6 +6,7 @@ import { toCommandError } from '../api/types'
 import { addressShort, typeCounts, TX_TYPE_ORDER } from '../lib/wallet'
 import { commandErrorText } from '../lib/errors'
 import { BottomDrawer } from './BottomDrawer'
+import { CkbTxModal, useCkbTx } from './CkbTxModal'
 import { QrIcon, QrModal } from './QrModal'
 import { SendDetail } from '../pages/SendDetail'
 import { TransactionTable, txLabel } from './TransactionTable'
@@ -65,6 +66,21 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
       setRefreshing(false)
     })
   }, [])
+
+  // CKB transfer — runs behind the 3-step confirmation modal and reloads the
+  // wallet once confirmed on-chain.
+  const { ckbTxState, runCkbTx, closeCkbTx } = useCkbTx(refresh)
+
+  const handleSend = useCallback(
+    async (address: string, amountCkb: number) => {
+      setSendOpen(false)
+      await runCkbTx(t.send, async ({ channel }) => {
+        const res = await wallet.sendCkb(address, Math.round(amountCkb * 1e8), channel)
+        return res
+      })
+    },
+    [runCkbTx, t.send],
+  )
 
   useEffect(() => {
     refresh()
@@ -280,7 +296,11 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
         open={sendOpen}
         onClose={() => setSendOpen(false)}
         addressShort={addressShort(summary?.address ?? '')}
+        availableCkb={availableCkb}
+        busy={ckbTxState.status !== 'idle'}
+        onSubmit={handleSend}
       />
+      <CkbTxModal state={ckbTxState} onClose={closeCkbTx} />
       <QrModal open={qrOpen} onClose={() => setQrOpen(false)} address={summary?.address ?? ''} />
       {refreshing && (
         <div className="wallet-refreshing" role="status">

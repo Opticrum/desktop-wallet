@@ -79,7 +79,9 @@ impl EmbeddedNode {
       genesis.clone(),
       fiber_config.scripts.clone(),
       ckb_config.udt_whitelist.clone().unwrap_or_default(),
-      Some(fnn::ckb::contracts::TypeIDResolver::new(ckb_config.rpc_url.clone())),
+      Some(fnn::ckb::contracts::TypeIDResolver::new(
+        ckb_config.rpc_url.clone(),
+      )),
     )
     .await
     {
@@ -178,17 +180,14 @@ impl EmbeddedNode {
       let interval = fiber_config
         .watchtower_check_interval_seconds
         .unwrap_or(fnn::watchtower::DEFAULT_WATCHTOWER_CHECK_INTERVAL_SECONDS);
-      watchtower_actor.send_interval(
-        std::time::Duration::from_secs(interval),
-        || fnn::watchtower::WatchtowerMessage::PeriodicCheck,
-      );
+      watchtower_actor.send_interval(std::time::Duration::from_secs(interval), || {
+        fnn::watchtower::WatchtowerMessage::PeriodicCheck
+      });
     }
 
     // Drain network events (the watchtower-forwarding loop is a no-op drain in
     // v1 so the 4000-deep channel never fills).
-    tracker.spawn(async move {
-      while event_receiver.recv().await.is_some() {}
-    });
+    tracker.spawn(async move { while event_receiver.recv().await.is_some() {} });
 
     // RPC server.
     let rpc_handle = {

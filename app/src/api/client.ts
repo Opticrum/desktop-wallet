@@ -2,10 +2,12 @@
 // `docs/ipc/ipc-api.md` §4. Write params are CKB amounts converted to shannons
 // by the caller (design decision #2: the frontend does CKB → shannons ×1e8).
 
+import { Channel } from '@tauri-apps/api/core'
 import { call } from './transport'
 import type {
   Chain,
   ChannelList,
+  CkbTxProgress,
   DashboardData,
   FnnCliStatus,
   LiquidityMatch,
@@ -45,8 +47,8 @@ export const wallet = {
   importPrivateKey: (privateKeyHex: string, password: string, label: string) =>
     call<WalletSummary>('wallet.import_private_key', { privateKeyHex, password, label }),
   deriveAddresses: (count: number) => call<string[]>('wallet.derive_addresses', { count }),
-  sendCkb: (address: string, amountShannons: number) =>
-    call<{ txHash: string }>('wallet.send_ckb', { address, amountShannons }),
+  sendCkb: (address: string, amountShannons: number, progress?: Channel<CkbTxProgress>) =>
+    call<{ txHash: string }>('wallet.send_ckb', { address, amountShannons }, progress),
 }
 
 // ── node ──────────────────────────────────────────────────────────────────
@@ -86,6 +88,9 @@ export const channels = {
     }),
   closeChannel: (channelId: string, force: boolean) =>
     call<void>('channels.close_channel', { channelId, force }),
+  /** Generate a signed invoice (pays into this node) — `chain` drives the HRP. */
+  createInvoice: (amountShannons: number, chain: Chain) =>
+    call<string>('channels.create_invoice', { amountShannons, chain }),
 }
 
 // ── liquidity ─────────────────────────────────────────────────────────────
@@ -102,22 +107,36 @@ export const liquidity = {
   /** SDK aggregate (snake_case) — sorted by urgency in Rust; the frontend does not re-sort. */
   getMatchesNearExhaustion: (blocksThreshold: number) =>
     call<MatchDeadline[]>('liquidity.get_matches_near_exhaustion', { blocksThreshold }),
-  publishOrder: (params: {
-    capacityShannons: number
-    shannonsPerBlock: number
-    rentCapacityShannons: number
-    rentalDays: number
-    fiberAddress?: string
-  }) => call<{ orderOutpoint: string; txHash: string }>('liquidity.publish_order', params),
-  cancelOrder: (outpoint: string) => call<{ txHash: string }>('liquidity.cancel_order', { outpoint }),
-  injectDeposit: (matchOutpoint: string, amountShannons: number) =>
-    call<{ txHash: string }>('liquidity.inject_deposit', { matchOutpoint, amountShannons }),
-  withdrawDeposit: (matchOutpoint: string, amountShannons: number) =>
-    call<{ txHash: string }>('liquidity.withdraw_deposit', { matchOutpoint, amountShannons }),
-  extractSpentMatch: (matchOutpoint: string) =>
-    call<{ txHash: string; returnedCkb: number }>('liquidity.extract_spent_match', {
-      matchOutpoint,
-    }),
+  publishOrder: (
+    params: {
+      capacityShannons: number
+      shannonsPerBlock: number
+      rentCapacityShannons: number
+      rentalDays: number
+      fiberAddress?: string
+    },
+    progress?: Channel<CkbTxProgress>,
+  ) =>
+    call<{ orderOutpoint: string; txHash: string }>('liquidity.publish_order', params, progress),
+  cancelOrder: (outpoint: string, progress?: Channel<CkbTxProgress>) =>
+    call<{ txHash: string }>('liquidity.cancel_order', { outpoint }, progress),
+  injectDeposit: (
+    matchOutpoint: string,
+    amountShannons: number,
+    progress?: Channel<CkbTxProgress>,
+  ) => call<{ txHash: string }>('liquidity.inject_deposit', { matchOutpoint, amountShannons }, progress),
+  withdrawDeposit: (
+    matchOutpoint: string,
+    amountShannons: number,
+    progress?: Channel<CkbTxProgress>,
+  ) =>
+    call<{ txHash: string }>('liquidity.withdraw_deposit', { matchOutpoint, amountShannons }, progress),
+  extractSpentMatch: (matchOutpoint: string, progress?: Channel<CkbTxProgress>) =>
+    call<{ txHash: string; returnedCkb: number }>(
+      'liquidity.extract_spent_match',
+      { matchOutpoint },
+      progress,
+    ),
 }
 
 // ── app (host / tray) ────────────────────────────────────────────────────────

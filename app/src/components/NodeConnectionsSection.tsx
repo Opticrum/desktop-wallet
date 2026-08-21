@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ConfirmModal } from './ConfirmModal'
+import { CkbTxModal, useCkbTx } from './CkbTxModal'
 import { CopyableText } from './CopyableText'
 import { useLocale } from '../i18n/LocaleContext'
 import { channels } from '../api/client'
@@ -33,6 +34,48 @@ const midTruncate = (s: string, max: number) => {
   const head = Math.floor((max - 1) / 2)
   const tail = max - 1 - head
   return `${s.slice(0, head)}…${s.slice(-tail)}`
+}
+
+/** Brief dwell so the "broadcast" step is legible before the confirm step. */
+const CHANNEL_STEP_DWELL_MS = 400
+
+/**
+ * The fiber node builds + broadcasts the channel's funding tx internally, so the
+ * app can only observe the channel lifecycle. Poll `channels.list` until the
+ * peer's channel reaches `ChannelReady` (funding tx confirmed on-chain); returns
+ * the funding tx hash when available. Throws on timeout so the modal surfaces it.
+ */
+async function waitForChannelReady(peerId: string, timeoutMs = 120_000): Promise<string | null> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    try {
+      const list = await channels.list()
+      const ready = list.nodes
+        .find((n) => n.peer.id === peerId)
+        ?.channels.find((c) => c.state === 'ChannelReady')
+      if (ready) return ready.txHash || null
+    } catch {
+      /* transient — keep polling */
+    }
+    await new Promise((r) => setTimeout(r, 2000))
+  }
+  throw new Error('timeout waiting for the channel to open')
+}
+
+/** Poll `channels.list` until the channel leaves the list or is `Closed`. */
+async function waitForChannelClosed(channelId: string, timeoutMs = 120_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    try {
+      const list = await channels.list()
+      const ch = list.nodes.flatMap((n) => n.channels).find((c) => c.channelId === channelId)
+      if (!ch || ch.state === 'Closed') return
+    } catch {
+      /* transient — keep polling */
+    }
+    await new Promise((r) => setTimeout(r, 2000))
+  }
+  throw new Error('timeout waiting for the channel to close')
 }
 
 export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
@@ -83,6 +126,10 @@ export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
       /* best-effort */
     }
   }, [])
+
+  // Channel open/close runs behind the 3-step confirmation modal; `load` (the
+  // channel list refresh) fires once the operation settles.
+  const { ckbTxState, runCkbTx, closeCkbTx } = useCkbTx(load)
 
   useEffect(() => {
     load()
@@ -180,28 +227,45 @@ export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
     setChannelFormOpen(null)
     const capacityCkb = Number(channelCapacity.replace(/,/g, '')) || 0
     try {
-      await channels.openChannel(
-        peerId,
-        Math.round(capacityCkb * 1e8),
-        Number(channelBaseFee) || undefined,
-        Number(channelFeeRate) || undefined,
-      )
+      await runCkbTx(t.channelOpenLabel, async ({ advance }) => {
+        await channels.openChannel(
+          peerId,
+          Math.round(capacityCkb * 1e8),
+          Number(channelBaseFee) || undefined,
+          Number(channelFeeRate) || undefined,
+        )
+        // The fiber node builds + broadcasts the funding tx internally — the app
+        // observes only the channel lifecycle, so steps 1-2 advance on the RPC
+        // returning and step 3 waits for the funding tx to confirm (ChannelReady).
+        advance('broadcasting')
+        await new Promise((r) => setTimeout(r, CHANNEL_STEP_DWELL_MS))
+        advance('confirming')
+        const fundingHash = await waitForChannelReady(peerId)
+        return fundingHash ? { txHash: fundingHash } : null
+      })
+      await load()
+      onToast(t.nodeCreateToast)
     } catch {
-      /* mock — best-effort */
+      /* best-effort — the 3-step modal surfaces the failure */
     }
-    await load()
-    onToast(t.nodeCreateToast)
   }
 
   const handleCloseChannel = async (id: string, force: boolean) => {
     setPendingCloseId(null)
     try {
-      await channels.closeChannel(id, force)
+      await runCkbTx(t.channelCloseLabel, async ({ advance }) => {
+        await channels.closeChannel(id, force)
+        advance('broadcasting')
+        await new Promise((r) => setTimeout(r, CHANNEL_STEP_DWELL_MS))
+        advance('confirming')
+        await waitForChannelClosed(id)
+        return null
+      })
+      await load()
+      onToast(t.nodeDeleteToast)
     } catch {
-      /* mock — best-effort */
+      /* best-effort — the 3-step modal surfaces the failure */
     }
-    await load()
-    onToast(t.nodeDeleteToast)
   }
 
   const handleDisconnect = async (id: string) => {
@@ -600,6 +664,7 @@ export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
         onCancel={() => setPendingRemoveId(null)}
         onConfirm={() => pendingRemoveId && handleDisconnect(pendingRemoveId)}
       />
+      <CkbTxModal state={ckbTxState} onClose={closeCkbTx} />
     </div>
   )
 }

@@ -13,6 +13,9 @@ type NodeCtx = {
    *  that needs the node (出金/入金, liquidity 注入/抽离, publish/cancel). */
   running: boolean
   starting: boolean
+  /** The fiber node's identity pubkey (66-hex). Orders whose cell pubkey differs
+   *  were created under an older/different node identity → flagged as legacy. */
+  fiberPubkey: string
 }
 
 const NodeContext = createContext<NodeCtx | null>(null)
@@ -25,6 +28,7 @@ export function NodeProvider({ children }: { children: ReactNode }) {
   // first poll. Conservative readers should gate on `running && !starting`.
   const [running, setRunning] = useState(true)
   const [starting, setStarting] = useState(false)
+  const [fiberPubkey, setFiberPubkey] = useState('')
 
   useEffect(() => {
     let alive = true
@@ -36,6 +40,7 @@ export function NodeProvider({ children }: { children: ReactNode }) {
           setChain(r.chain)
           setRunning(r.running)
           setStarting(r.starting)
+          setFiberPubkey(r.fiberPubkey)
         })
         .catch(() => {})
     poll()
@@ -49,8 +54,8 @@ export function NodeProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo(
-    () => ({ chain, setChain, running, starting }),
-    [chain, running, starting],
+    () => ({ chain, setChain, running, starting, fiberPubkey }),
+    [chain, running, starting, fiberPubkey],
   )
 
   return <NodeContext.Provider value={value}>{children}</NodeContext.Provider>

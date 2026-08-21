@@ -13,6 +13,9 @@ use crate::wire::{Chain, CommandError};
 pub struct RealChainProvider {
   rpc: RpcClient,
   network: Chain,
+  /// Upper bound for a single RPC request. Kept as a field so tests can inject
+  /// a short value; a hung endpoint can no longer wedge a blocking await.
+  request_timeout: std::time::Duration,
 }
 
 impl RealChainProvider {
@@ -34,7 +37,11 @@ impl RealChainProvider {
       network
     );
 
-    Self { rpc, network }
+    Self {
+      rpc,
+      network,
+      request_timeout: std::time::Duration::from_secs(15),
+    }
   }
 
   /// Auto-detect the CKB network from the RPC URL.
@@ -121,53 +128,67 @@ impl ChainProvider for RealChainProvider {
     timeout: Option<std::time::Duration>,
   ) -> Result<String, CommandError> {
     use ckb_cinnabar_calculator::re_exports::ckb_jsonrpc_types::Status;
+    use std::time::{Duration, Instant};
 
     let hash = parse_tx_hash(tx_hash)?;
     if confirm_count == 0 {
       return Ok(tx_hash.to_string());
     }
 
-    // Poll every 3s until committed and `confirm_count` blocks have passed —
-    // mirrors `TransactionSkeleton::send_and_wait`.
-    let mut block_number = 0u64;
-    let mut time_used = std::time::Duration::from_secs(0);
-    let interval = std::time::Duration::from_secs(3);
-    loop {
-      if let Some(t) = timeout {
-        if time_used > t {
-          return Err(CommandError::chain(format!(
-            "timeout waiting for tx {tx_hash} to confirm"
-          )));
-        }
-        time_used += interval;
-      }
-      tokio::time::sleep(interval).await;
+    // Poll until committed and `confirm_count` blocks have passed — mirrors
+    // `TransactionSkeleton::send_and_wait`. Every RPC call is bounded by
+    // `request_timeout` so a hung endpoint can't wedge the wait forever, and
+    // the wall-clock `deadline` is the true upper bound on the whole wait.
+    let deadline = timeout.map(|t| Instant::now() + t);
+    let interval = Duration::from_secs(3);
+    let mut committed_block: Option<u64> = None;
 
-      let tx = self
-        .rpc
-        .get_transaction(&hash)
-        .await
-        .map_err(Self::map_err)?;
+    loop {
+      if deadline.is_some_and(|dl| Instant::now() >= dl) {
+        return Err(CommandError::chain(format!(
+          "timeout waiting for tx {tx_hash} to confirm after {}s",
+          timeout.map_or(0, |t| t.as_secs()),
+        )));
+      }
+
+      let tx =
+        match tokio::time::timeout(self.request_timeout, self.rpc.get_transaction(&hash)).await {
+          Ok(res) => res.map_err(Self::map_err)?,
+          Err(_) => continue, // request hung — keep polling until the deadline
+        };
       let Some(tx) = tx else {
-        return Err(CommandError::chain(format!("tx {tx_hash} not found")));
+        continue; // not visible to this node yet (lagging/restarted) — keep polling
       };
       if tx.tx_status.status == Status::Rejected {
         let reason = tx.tx_status.reason.unwrap_or_else(|| "unknown".to_string());
-        return Err(CommandError::chain(format!("tx {tx_hash} rejected: {reason}")));
+        return Err(CommandError::chain(format!(
+          "tx {tx_hash} rejected: {reason}"
+        )));
       }
       if tx.tx_status.status != Status::Committed {
+        tokio::time::sleep(interval).await;
         continue;
       }
-      if block_number == 0 {
-        if let Some(n) = tx.tx_status.block_number {
-          block_number = n.value();
-        }
-      } else {
-        let tip = self.get_tip_block_number().await?;
-        if tip >= block_number + confirm_count as u64 {
-          break;
+      // A committed observation may come without a block number (some nodes
+      // report it transiently as null) — keep the first one we capture in an
+      // `Option` instead of overloading `0` as a "not yet set" sentinel.
+      if committed_block.is_none() {
+        committed_block = tx.tx_status.block_number.map(|n| n.value());
+      }
+      if let Some(block) = committed_block {
+        let tip =
+          match tokio::time::timeout(self.request_timeout, self.get_tip_block_number()).await {
+            Ok(Ok(tip)) => Some(tip),
+            Ok(Err(e)) => return Err(e),
+            Err(_) => None, // tip call hung — keep polling
+          };
+        if let Some(tip) = tip {
+          if tip >= block + confirm_count as u64 {
+            break;
+          }
         }
       }
+      tokio::time::sleep(interval).await;
     }
     Ok(tx_hash.to_string())
   }
@@ -346,6 +367,72 @@ fn parse_tx_hash(
 #[cfg(test)]
 mod tests {
   use super::*;
+  use std::io::{Read, Write};
+  use std::net::TcpListener;
+  use std::sync::atomic::{AtomicUsize, Ordering};
+  use std::sync::Arc;
+  use std::time::{Duration, Instant};
+
+  const TEST_HASH: &str = "0x0000000000000000000000000000000000000000000000000000000000000000";
+
+  fn provider(url: &str) -> RealChainProvider {
+    RealChainProvider::new(url, url)
+  }
+
+  /// Wrap a JSON-RPC body in a canned HTTP response.
+  fn http_response(body: &str) -> String {
+    format!(
+      "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+      body.len(),
+      body
+    )
+  }
+
+  /// Canned `get_transaction` result: committed in block `n` (or block_number null).
+  fn committed_tx_json(block: Option<u64>) -> String {
+    let block = block
+      .map(|n| format!(r#""{:#x}""#, n))
+      .unwrap_or_else(|| "null".to_string());
+    format!(
+      r#"{{"jsonrpc":"2.0","result":{{"transaction":null,"cycles":null,"time_added_to_pool":null,"tx_status":{{"status":"committed","block_number":{block},"block_hash":null,"tx_index":null,"reason":null}},"fee":null,"min_replace_fee":null}},"id":0}}"#,
+      block = block
+    )
+  }
+
+  fn tip_json(n: u64) -> String {
+    format!(r#"{{"jsonrpc":"2.0","result":"{:#x}","id":0}}"#, n)
+  }
+
+  /// Spawn a canned JSON-RPC server on an ephemeral port; the responder is
+  /// routed by request method and returns a JSON-RPC body.
+  fn spawn_rpc_server(respond: impl Fn(&str) -> String + Send + 'static) -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    std::thread::spawn(move || {
+      for stream in listener.incoming() {
+        let mut stream = match stream {
+          Ok(s) => s,
+          Err(_) => break,
+        };
+        let mut buf = [0u8; 8192];
+        let n = match stream.read(&mut buf) {
+          Ok(0) | Err(_) => break,
+          Ok(n) => n,
+        };
+        let req = String::from_utf8_lossy(&buf[..n]).to_string();
+        let method = req
+          .split("\r\n\r\n")
+          .nth(1)
+          .and_then(|body| serde_json::from_str::<serde_json::Value>(body).ok())
+          .and_then(|v| v["method"].as_str().map(str::to_string))
+          .unwrap_or_default();
+        let body = respond(&method);
+        let resp = http_response(&body);
+        let _ = stream.write_all(resp.as_bytes());
+      }
+    });
+    format!("http://{addr}")
+  }
 
   #[test]
   fn parse_tx_hash_accepts_bare_and_prefixed() {
@@ -358,5 +445,93 @@ mod tests {
   fn parse_tx_hash_rejects_malformed() {
     assert!(parse_tx_hash("not-a-hash").is_err());
     assert!(parse_tx_hash("0xshort").is_err());
+  }
+
+  #[tokio::test]
+  async fn wait_for_confirmation_resolves_when_committed_and_tip_advances() {
+    let url = spawn_rpc_server(|method| {
+      if method == "get_transaction" {
+        committed_tx_json(Some(5))
+      } else {
+        tip_json(6)
+      }
+    });
+    let res = provider(&url)
+      .wait_for_confirmation(TEST_HASH, 1, Some(Duration::from_secs(30)))
+      .await;
+    assert_eq!(res.unwrap(), TEST_HASH);
+  }
+
+  #[tokio::test]
+  async fn wait_for_confirmation_keeps_polling_until_committed() {
+    // First observation is still pending; the loop must keep polling until the
+    // tx becomes committed and the tip advances past its block.
+    let calls = Arc::new(AtomicUsize::new(0));
+    let counter = calls.clone();
+    let url = spawn_rpc_server(move |method| {
+      if method == "get_transaction" {
+        if counter.fetch_add(1, Ordering::SeqCst) == 0 {
+          r#"{"jsonrpc":"2.0","result":{"transaction":null,"cycles":null,"time_added_to_pool":null,"tx_status":{"status":"pending","block_number":null,"block_hash":null,"tx_index":null,"reason":null},"fee":null,"min_replace_fee":null},"id":0}"#.to_string()
+        } else {
+          committed_tx_json(Some(5))
+        }
+      } else {
+        tip_json(6)
+      }
+    });
+    let res = provider(&url)
+      .wait_for_confirmation(TEST_HASH, 1, Some(Duration::from_secs(30)))
+      .await;
+    assert_eq!(res.unwrap(), TEST_HASH);
+    assert!(calls.load(Ordering::SeqCst) >= 2);
+  }
+
+  #[tokio::test]
+  async fn wait_for_confirmation_handles_missing_block_number_then_captures() {
+    // A committed observation reported without a block_number used to wedge the
+    // old `0`-sentinel logic forever; it must keep polling and confirm once a
+    // later observation supplies one.
+    let calls = Arc::new(AtomicUsize::new(0));
+    let counter = calls.clone();
+    let url = spawn_rpc_server(move |method| {
+      if method == "get_transaction" {
+        let n = counter.fetch_add(1, Ordering::SeqCst);
+        committed_tx_json(if n == 0 { None } else { Some(5) })
+      } else {
+        tip_json(6)
+      }
+    });
+    let res = provider(&url)
+      .wait_for_confirmation(TEST_HASH, 1, Some(Duration::from_secs(30)))
+      .await;
+    assert_eq!(res.unwrap(), TEST_HASH);
+    assert!(calls.load(Ordering::SeqCst) >= 2);
+  }
+
+  #[tokio::test]
+  async fn wait_for_confirmation_bounds_a_hung_rpc() {
+    // Endpoint accepts connections but never responds. The pre-fix code had no
+    // per-request timeout, so this wedged the wait forever; now the deadline
+    // must surface a timeout error instead.
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    std::thread::spawn(move || {
+      // Hold each connection open without writing a response.
+      for stream in listener.incoming() {
+        let _ = stream;
+        std::thread::sleep(Duration::from_secs(30));
+      }
+    });
+    let mut provider = provider(&format!("http://{addr}"));
+    provider.request_timeout = Duration::from_millis(100);
+
+    let started = Instant::now();
+    let res = provider
+      .wait_for_confirmation(TEST_HASH, 1, Some(Duration::from_secs(1)))
+      .await;
+    let elapsed = started.elapsed();
+    let err = res.expect_err("hung endpoint should time out");
+    assert!(err.to_string().contains("timeout"), "err: {err}");
+    assert!(elapsed < Duration::from_secs(5), "elapsed: {elapsed:?}");
   }
 }

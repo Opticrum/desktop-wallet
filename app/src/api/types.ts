@@ -177,6 +177,8 @@ export type Channel = {
 
 export type LiquidityOrder = {
   outpoint: string
+  /** The 33-byte fiber pubkey embedded in the order cell's lock args. */
+  fiberPubkey: string
   channelCapacityCkb: number
   channelCapacityShannons: number
   shannonsPerBlock: number
@@ -194,11 +196,19 @@ export type LiquidityOrder = {
 export type LiquidityMatch = {
   outpoint: string
   channelOutpoint: string
-  /** Remaining capacity — 0 when exhausted. */
+  /** The fiber pubkey of the underlying order cell this match derives from. */
+  fiberPubkey: string
+  /** Capacity of the funded Fiber channel (constant — the yield basis). */
   channelCapacityCkb: number
   shannonsPerBlock: number
   annualYieldBps: number
+  /** Current remaining rent pool — shrinks on each seller extraction. */
   depositCkb: number
+  /** Original rent pool at match creation (lineage trace to the `order_match`
+   *  tx; falls back to the current stake when the trace fails). */
+  originalStakeCkb: number
+  /** Buyer-withdrawable CKB — the full stake only while this wallet is the
+   *  buyer AND inside the hesitation window; otherwise 0. */
   withdrawableCkb: number
   xudtAmount: string
   createdAtMs: number
@@ -209,6 +219,12 @@ export type LiquidityMatch = {
   lastExtractionBlock: number
   projectedExhaustionBlock: number
   sellerLockHash: string
+  /** The match cell's producing block — the hesitation-window anchor. */
+  matchCreationBlock: number
+  /** Buyer full-withdrawal deadline (`created_at_ms + HESITATION_BLOCKS×12s`). */
+  hesitationEndsAtMs: number
+  /** Which party this wallet is on the match — gates inject/withdraw UX. */
+  role: 'buyer' | 'seller' | 'other'
 }
 
 // ── SDK-native aggregates (snake_case) ─────────────────────────────────────
@@ -269,6 +285,20 @@ export type DashboardData = {
 }
 
 // ── errors ────────────────────────────────────────────────────────────────
+
+/**
+ * Phases of a broadcast CKB transaction pushed over the per-invocation progress
+ * `Channel` — drives the 3-step transaction-confirmation modal. The modal opens
+ * on the "constructing" step itself and completes the last step from the command
+ * resolving, so only these two boundaries are reported.
+ */
+export type CkbTxPhase = 'broadcasting' | 'confirming'
+
+/** Rust `wire::TxProgress` (snake_case). */
+export interface CkbTxProgress {
+  phase: CkbTxPhase
+  tx_hash?: string | null
+}
 
 /** serde-tagged `{ code, message }` — switch on `code`. */
 export type CommandError = {

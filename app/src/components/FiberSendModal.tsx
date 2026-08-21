@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocale } from '../i18n/LocaleContext'
+import { useScrollLock } from '../lib/useScrollLock'
 
 function IconClose() {
   return (
@@ -52,6 +53,8 @@ export function FiberSendModal({
   const [amount, setAmount] = useState('')
   const [error, setError] = useState<string | null>(null)
 
+  useScrollLock(open)
+
   useEffect(() => {
     if (!open) return
     setInvoice('')
@@ -85,7 +88,7 @@ export function FiberSendModal({
   }
 
   return (
-    <div className="send-modal-backdrop" onClick={onClose} role="presentation">
+    <div className="send-modal-backdrop" role="presentation">
       <div
         className="send-modal fiber-modal"
         role="dialog"

@@ -4,11 +4,25 @@
 //! backend on the shared `BackendBundle`, and returns the result. No business
 //! logic lives here — it all lives in `opticrum-wallet-core`.
 
+use opticrum_wallet_core::backend::TxProgressReporter;
 use opticrum_wallet_core::wire::*;
+use tauri::ipc::Channel;
 use tauri::{AppHandle, State};
 
 use crate::fnn_cli::FnnCliStatus;
 use crate::AppState;
+
+/// Stream tx lifecycle progress (broadcasting → confirming) to the frontend's
+/// transaction-confirmation modal over a per-invocation Tauri channel.
+struct ChannelReporter {
+  channel: Channel<TxProgress>,
+}
+
+impl TxProgressReporter for ChannelReporter {
+  fn report(&self, progress: TxProgress) {
+    let _ = self.channel.send(progress);
+  }
+}
 
 // ── app ───────────────────────────────────────────────────────────────────────
 
@@ -125,8 +139,14 @@ pub async fn wallet_send_ckb(
   state: State<'_, AppState>,
   address: String,
   amount_shannons: u64,
+  channel: Channel<TxProgress>,
 ) -> Result<TxHashResult, CommandError> {
-  state.0.wallet.send_ckb(address, amount_shannons).await
+  let progress = ChannelReporter { channel };
+  state
+    .0
+    .wallet
+    .send_ckb(address, amount_shannons, &progress)
+    .await
 }
 
 // ── node ─────────────────────────────────────────────────────────────────────
@@ -239,6 +259,19 @@ pub async fn channels_close_channel(
   state.0.channels.close_channel(channel_id, force).await
 }
 
+#[tauri::command]
+pub async fn channels_create_invoice(
+  state: State<'_, AppState>,
+  amount_shannons: u64,
+  chain: Chain,
+) -> Result<String, CommandError> {
+  state
+    .0
+    .channels
+    .create_invoice(amount_shannons, chain)
+    .await
+}
+
 // ── liquidity ────────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -291,7 +324,9 @@ pub async fn liquidity_publish_order(
   rent_capacity_shannons: u64,
   rental_days: u32,
   fiber_address: Option<String>,
+  channel: Channel<TxProgress>,
 ) -> Result<PublishOrderResult, CommandError> {
+  let progress = ChannelReporter { channel };
   state
     .0
     .liquidity
@@ -301,6 +336,7 @@ pub async fn liquidity_publish_order(
       rent_capacity_shannons,
       rental_days,
       fiber_address,
+      &progress,
     )
     .await
 }
@@ -309,8 +345,10 @@ pub async fn liquidity_publish_order(
 pub async fn liquidity_cancel_order(
   state: State<'_, AppState>,
   outpoint: String,
+  channel: Channel<TxProgress>,
 ) -> Result<TxHashResult, CommandError> {
-  state.0.liquidity.cancel_order(outpoint).await
+  let progress = ChannelReporter { channel };
+  state.0.liquidity.cancel_order(outpoint, &progress).await
 }
 
 #[tauri::command]
@@ -318,11 +356,13 @@ pub async fn liquidity_inject_deposit(
   state: State<'_, AppState>,
   match_outpoint: String,
   amount_shannons: u64,
+  channel: Channel<TxProgress>,
 ) -> Result<TxHashResult, CommandError> {
+  let progress = ChannelReporter { channel };
   state
     .0
     .liquidity
-    .inject_deposit(match_outpoint, amount_shannons)
+    .inject_deposit(match_outpoint, amount_shannons, &progress)
     .await
 }
 
@@ -331,11 +371,13 @@ pub async fn liquidity_withdraw_deposit(
   state: State<'_, AppState>,
   match_outpoint: String,
   amount_shannons: u64,
+  channel: Channel<TxProgress>,
 ) -> Result<TxHashResult, CommandError> {
+  let progress = ChannelReporter { channel };
   state
     .0
     .liquidity
-    .withdraw_deposit(match_outpoint, amount_shannons)
+    .withdraw_deposit(match_outpoint, amount_shannons, &progress)
     .await
 }
 
@@ -343,6 +385,12 @@ pub async fn liquidity_withdraw_deposit(
 pub async fn liquidity_extract_spent_match(
   state: State<'_, AppState>,
   match_outpoint: String,
+  channel: Channel<TxProgress>,
 ) -> Result<ExtractResult, CommandError> {
-  state.0.liquidity.extract_spent_match(match_outpoint).await
+  let progress = ChannelReporter { channel };
+  state
+    .0
+    .liquidity
+    .extract_spent_match(match_outpoint, &progress)
+    .await
 }

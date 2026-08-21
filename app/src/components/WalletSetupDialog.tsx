@@ -1,5 +1,6 @@
 import { useLocale } from '../i18n/LocaleContext'
 import { WalletGate } from './WalletGate'
+import { useScrollLock } from '../lib/useScrollLock'
 
 type WalletSetupDialogProps = {
   open: boolean
@@ -14,6 +15,9 @@ type WalletSetupDialogProps = {
  */
 export function WalletSetupDialog({ open, onReady }: WalletSetupDialogProps) {
   const { t } = useLocale()
+
+  useScrollLock(open)
+
   if (!open) return null
 
   return (

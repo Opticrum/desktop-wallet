@@ -1,13 +1,14 @@
 import { useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { useScrollLock } from '../lib/useScrollLock'
 
 /**
  * Bottom-up drawer ("big picture" sheet) for the node page's secondary views
  * (full logs, full transaction history). Slides up from the bottom edge and
- * carries the caller's content directly — no title bar. Closes on backdrop
- * click or Escape; body scroll locks while open. Rendered through a portal
- * into `document.body` so no ancestor stacking context can trap the fixed
- * overlay beneath the top bar.
+ * carries the caller's content directly — no title bar. Closes on Escape (the
+ * backdrop does not close it, to avoid accidental dismissal); page scroll locks
+ * while open. Rendered through a portal into `document.body` so no ancestor
+ * stacking context can trap the fixed overlay beneath the top bar.
  */
 export function BottomDrawer({
   open,
@@ -27,18 +28,15 @@ export function BottomDrawer({
       if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', handler)
-    const prevOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      window.removeEventListener('keydown', handler)
-      document.body.style.overflow = prevOverflow
-    }
+    return () => window.removeEventListener('keydown', handler)
   }, [open, onClose])
+
+  useScrollLock(open)
 
   if (!open) return null
 
   return createPortal(
-    <div className="drawer-backdrop" onClick={onClose} role="presentation">
+    <div className="drawer-backdrop" role="presentation">
       <div
         className="bottom-drawer"
         role="dialog"

@@ -52,10 +52,40 @@ fn backend_config(app: &tauri::App) -> BackendConfig {
   }
 }
 
+/// Install a panic hook that writes the panic message + backtrace to
+/// `panic.log` under the app data dir (and stderr). A Rust panic that escapes
+/// an ObjC/AppKit callback (e.g. tao's `sendEvent:`) aborts the whole process
+/// without reaching any visible console in release builds — this guarantees we
+/// always capture the exact panic message for diagnosis.
+fn install_panic_hook(app: &tauri::App) {
+  let log_path = app
+    .path()
+    .app_data_dir()
+    .ok()
+    .map(|dir| dir.join("panic.log"));
+  if let Some(dir) = log_path.as_ref().and_then(|p| p.parent()) {
+    let _ = std::fs::create_dir_all(dir);
+  }
+  std::panic::set_hook(Box::new(move |info| {
+    let backtrace = std::backtrace::Backtrace::force_capture();
+    let msg = format!("[opticrum] panic: {info}\n{backtrace}\n");
+    eprintln!("{msg}");
+    if let Some(path) = &log_path {
+      use std::io::Write;
+      let _ = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .and_then(|mut f| f.write_all(msg.as_bytes()));
+    }
+  }));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
     .setup(|app| {
+      install_panic_hook(app);
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()
@@ -74,13 +104,17 @@ pub fn run() {
     // Closing the window hides it to the tray instead of quitting — the fiber
     // node keeps running in the background. Quitting goes through the tray's
     // 退出 item (risk prompt) → `app.exit`, which bypasses this handler.
+    // The body runs inside an AppKit window-delegate callback; a Rust panic
+    // there aborts the process, so it is contained and left to the panic hook.
     .on_window_event(|window, event| {
-      if let WindowEvent::CloseRequested { api, .. } = event {
-        if window.label() == "main" {
-          api.prevent_close();
-          let _ = window.hide();
+      let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if let WindowEvent::CloseRequested { api, .. } = event {
+          if window.label() == "main" {
+            api.prevent_close();
+            let _ = window.hide();
+          }
         }
-      }
+      }));
     })
     .invoke_handler(tauri::generate_handler![
       // app
@@ -114,6 +148,7 @@ pub fn run() {
       commands::channels_disconnect_peer,
       commands::channels_open_channel,
       commands::channels_close_channel,
+      commands::channels_create_invoice,
       // liquidity
       commands::liquidity_get_dashboard,
       commands::liquidity_get_orders,

@@ -42,7 +42,7 @@ export function NodeKpiGrid({
   onToast?: (msg: string) => void
 }) {
   const { t } = useLocale()
-  const { running } = useNode()
+  const { running, chain } = useNode()
   const [data, setData] = useState<ChannelList | null>(null)
   const [sendOpen, setSendOpen] = useState(false)
   const [invoiceOpen, setInvoiceOpen] = useState(false)
@@ -168,6 +168,7 @@ export function NodeKpiGrid({
         open={invoiceOpen}
         onClose={closeInvoice}
         capCkb={inboundCkb}
+        network={chain}
         onToast={onToast}
       />
     </section>

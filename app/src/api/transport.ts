@@ -3,8 +3,9 @@
 // The desktop app is Tauri-only (the runtime browser mock was removed), so every
 // command is dispatched via `@tauri-apps/api` `invoke`.
 
-import { invoke } from '@tauri-apps/api/core'
+import { Channel, invoke } from '@tauri-apps/api/core'
 import { toCommandError } from './types'
+import type { CkbTxProgress } from './types'
 
 /** True when running inside the Tauri webview (always true — desktop only). */
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -24,12 +25,19 @@ const CKB_TX_COMMANDS = new Set([
   'channels.close_channel',
 ])
 
-export async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+export async function call<T>(
+  cmd: string,
+  args?: Record<string, unknown>,
+  progress?: Channel<CkbTxProgress>,
+): Promise<T> {
   try {
     // The docs name commands `<domain>.<verb>`; Tauri registers commands by
     // the Rust function name (`wallet_get_summary`), so map dots → underscores.
     const wireName = cmd.replace(/\./g, '_')
-    return await invoke<T>(wireName, args)
+    // Progress channels ride as a normal arg — the Rust command receives it as
+    // `tauri::ipc::Channel<TxProgress>` and streams lifecycle phases back.
+    const payload = progress ? { ...args, channel: progress } : args
+    return await invoke<T>(wireName, payload)
   } catch (e) {
     if (CKB_TX_COMMANDS.has(cmd)) {
       // Print code + message as a single string — the console's collapsed

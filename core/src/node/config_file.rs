@@ -9,8 +9,8 @@ use std::path::Path;
 
 use serde::Serialize;
 
-use crate::wire::{NodeConfig, ScriptCellDep};
 use crate::wire::CommandError;
+use crate::wire::{NodeConfig, ScriptCellDep};
 
 #[derive(Serialize)]
 pub(crate) struct FiberConfigFile {
@@ -199,7 +199,10 @@ fn wire_to_config_file(cfg: &NodeConfig) -> FiberConfigFile {
 }
 
 /// Write a fiber `config.yml` into `base_dir`; returns the file path.
-pub fn write_fiber_config(cfg: &NodeConfig, base_dir: &Path) -> Result<std::path::PathBuf, CommandError> {
+pub fn write_fiber_config(
+  cfg: &NodeConfig,
+  base_dir: &Path,
+) -> Result<std::path::PathBuf, CommandError> {
   std::fs::create_dir_all(base_dir).map_err(|e| CommandError::io(e.to_string()))?;
   let yaml = serde_yaml::to_string(&wire_to_config_file(cfg))
     .map_err(|e| CommandError::io(format!("serialize fiber config: {e}")))?;
@@ -220,7 +223,10 @@ mod tests {
     let path = write_fiber_config(&cfg, dir.path()).unwrap();
     let yaml = std::fs::read_to_string(&path).unwrap();
 
-    assert!(yaml.contains("listening_addr: /ip4/0.0.0.0/tcp/8228"), "{yaml}");
+    assert!(
+      yaml.contains("listening_addr: /ip4/0.0.0.0/tcp/8228"),
+      "{yaml}"
+    );
     assert!(yaml.contains("chain: testnet"));
     // nested script maps for the contract scripts
     assert!(yaml.contains("name: FundingLock"));

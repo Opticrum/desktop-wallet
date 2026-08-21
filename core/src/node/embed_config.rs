@@ -14,7 +14,10 @@ use crate::node::config_file;
 use crate::wire::{CommandError, NodeConfig};
 
 /// Build the full `fnn::Config` from the persisted wire `NodeConfig`.
-pub fn fnn_config_from_wire(cfg: &NodeConfig, base_dir: &Path) -> Result<fnn::Config, CommandError> {
+pub fn fnn_config_from_wire(
+  cfg: &NodeConfig,
+  base_dir: &Path,
+) -> Result<fnn::Config, CommandError> {
   let run_fiber = cfg.services.iter().any(|s| s == "fiber");
   let run_rpc = cfg.services.iter().any(|s| s == "rpc");
   let run_ckb = cfg.services.iter().any(|s| s == "ckb");
@@ -184,7 +187,10 @@ mod tests {
     assert_eq!(ckb.rpc_url, cfg.ckb.rpc_url);
 
     let rpc = fnn_cfg.rpc.as_ref().unwrap();
-    assert_eq!(rpc.listening_addr.as_deref(), Some(cfg.rpc.listening_addr.as_str()));
+    assert_eq!(
+      rpc.listening_addr.as_deref(),
+      Some(cfg.rpc.listening_addr.as_str())
+    );
     assert_eq!(rpc.enabled_modules, cfg.rpc.enabled_modules);
   }
 

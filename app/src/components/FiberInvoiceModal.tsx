@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useLocale } from '../i18n/LocaleContext'
+import { channels } from '../api/client'
+import { toCommandError } from '../api/types'
 import { QrPlaceholder } from './QrModal'
+import { useScrollLock } from '../lib/useScrollLock'
 
 function IconClose() {
   return (
@@ -45,24 +48,6 @@ function fmtCkb(n: number): string {
   return s
 }
 
-/** Deterministic, plausible-looking mock Fiber invoice (not a real one). */
-function mockFiberInvoice(amountCkb: number): string {
-  const CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l' // bech32 charset
-  const sat = Math.max(1, Math.round(amountCkb * 1e8))
-  let s = (sat ^ 0x9e3779b9) >>> 0
-  const next = () => {
-    s = Math.imul(s ^ (s >>> 15), 0x2c1b3c6d) >>> 0
-    s = Math.imul(s ^ (s >>> 12), 0x297a2d39) >>> 0
-    s = (s ^ (s >>> 15)) >>> 0
-    return s
-  }
-  // Amount tag (BOLT11-style: integer + unit letter) folded into the body.
-  const amountTag = `${Math.floor(amountCkb)}u`
-  let body = amountTag
-  while (body.length < 96) body += CHARSET[next() % 32]
-  return `fiber1${body}`
-}
-
 async function copyText(value: string): Promise<void> {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(value)
@@ -81,19 +66,22 @@ async function copyText(value: string): Promise<void> {
 /**
  * Generate-invoice dialog, opened from the node overview's 入金 KPI. The
  * amount is capped at the inbound capacity (sum of channel remote balances).
- * Two steps: pick an amount → reveal the generated invoice (QR + copy plate).
- * Functional mockup — no real invoice is produced yet.
+ * Two steps: pick an amount → ask the fiber node for a real signed invoice
+ * (bech32m `fibt|fibb` address) → reveal it (QR + copy plate).
  */
 export function FiberInvoiceModal({
   open,
   onClose,
   capCkb,
+  network = 'testnet',
   onToast,
 }: {
   open: boolean
   onClose: () => void
   /** Inbound capacity cap (CKB) — the max the invoice may request. */
   capCkb: number
+  /** CKB chain the node is on — drives the invoice HRP (`fibt` testnet / `fibb` mainnet). */
+  network: 'mainnet' | 'testnet'
   onToast: (msg: string) => void
 }) {
   const { t } = useLocale()
@@ -101,6 +89,9 @@ export function FiberInvoiceModal({
   const [error, setError] = useState<string | null>(null)
   const [invoice, setInvoice] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [generating, setGenerating] = useState(false)
+
+  useScrollLock(open)
 
   useEffect(() => {
     if (!open) return
@@ -108,6 +99,7 @@ export function FiberInvoiceModal({
     setError(null)
     setInvoice(null)
     setCopied(false)
+    setGenerating(false)
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
@@ -117,7 +109,7 @@ export function FiberInvoiceModal({
 
   if (!open) return null
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     const value = Number.parseFloat(amount)
     if (!amount.trim() || !Number.isFinite(value) || value <= 0) {
       setError(t.fiberAmountRequired)
@@ -127,9 +119,20 @@ export function FiberInvoiceModal({
       setError(t.fiberOverCap)
       return
     }
-    setInvoice(mockFiberInvoice(value))
     setError(null)
-    onToast(t.fiberGeneratedToast)
+    setGenerating(true)
+    try {
+      // Ask the fiber node for a real signed invoice — `fnn-cli send_payment`
+      // validates the bech32m structure + signature, so a mock string fails.
+      const address = await channels.createInvoice(Math.round(value * 1e8), network)
+      setInvoice(address)
+      onToast(t.fiberGeneratedToast)
+    } catch (e) {
+      setError(t.fiberGenerateFailed)
+      onToast(`${t.fiberGenerateFailed}${toCommandError(e).message}`)
+    } finally {
+      setGenerating(false)
+    }
   }
 
   const handleCopy = async () => {
@@ -147,7 +150,7 @@ export function FiberInvoiceModal({
   }
 
   return (
-    <div className="send-modal-backdrop" onClick={onClose} role="presentation">
+    <div className="send-modal-backdrop" role="presentation">
       <div
         className="send-modal fiber-modal"
         role="dialog"
@@ -213,11 +216,16 @@ export function FiberInvoiceModal({
             {error && <p className="text-error">{error}</p>}
 
             <div className="send-form-actions">
-              <button type="button" className="btn-secondary" onClick={onClose}>
+              <button type="button" className="btn-secondary" onClick={onClose} disabled={generating}>
                 {t.walletCancel}
               </button>
-              <button type="button" className="btn-primary" onClick={handleGenerate}>
-                {t.fiberGenerate}
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleGenerate}
+                disabled={generating}
+              >
+                {generating ? t.fiberGenerating : t.fiberGenerate}
               </button>
             </div>
           </div>

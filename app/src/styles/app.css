@@ -250,6 +250,15 @@
   padding: 28px 32px 48px;
 }
 
+/* While any modal overlay is mounted, lock the real scroller so wheel/trackpad
+   input over the dialog can't scroll the page behind it. `overscroll-behavior`
+   on the overlay alone doesn't cut the wheel chain on every WebView; `:has()`
+   re-evaluates live as overlays mount/unmount (the useScrollLock hook backs
+   this up in JS). */
+body:has(.modal-backdrop, .send-modal-backdrop, .drawer-backdrop) .center-panel {
+  overflow: hidden;
+}
+
 .page {
   max-width: 880px;
   margin: 0 auto;
@@ -821,6 +830,8 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
+  overflow: hidden;
+  overscroll-behavior: contain;
   animation: send-modal-fade 0.16s ease-out;
 }
 
@@ -833,6 +844,9 @@
   width: min(480px, 100%);
   max-height: calc(100vh - 48px);
   overflow: auto;
+  /* Cut the wheel chain at the panel itself — scrolled to its end it must not
+     fall through to the overlay/page behind. */
+  overscroll-behavior: contain;
   background: var(--surface);
   border-radius: var(--radius-lg);
   box-shadow:
@@ -939,6 +953,13 @@
   font-size: 14px;
   font-weight: 700;
   color: var(--ink-3);
+}
+
+.send-form-error {
+  margin-top: -6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--danger);
 }
 
 .send-form-actions {
@@ -2608,6 +2629,10 @@
      always top any floating layer; drawer (300) and send-modal (200) stay above. */
   z-index: 150;
   padding: 24px;
+  /* Make the overlay a scroll container so wheel/trackpad input over it (or a
+     panel inside it) can't chain through and scroll the page behind. */
+  overflow: hidden;
+  overscroll-behavior: contain;
   animation: backdrop-in 140ms ease-out;
 }
 
@@ -2622,6 +2647,11 @@
   padding: 24px;
   max-width: 440px;
   width: 100%;
+  /* Bound the panel so a tall modal scrolls internally instead of clipping
+     under the fixed overlay — and never chains its scroll to the page. */
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   box-shadow: var(--shadow-panel);
   animation: modal-in 180ms ease-out;
 }
@@ -2754,6 +2784,130 @@
   font-size: 12px;
   font-weight: 600;
   color: var(--ink-3);
+}
+
+/* 3-step lifecycle stepper — 构造交易 → 发送上链 → 打包确认 */
+.ckb-tx-steps {
+  list-style: none;
+  margin: 18px auto 0;
+  padding: 0;
+  width: 100%;
+  max-width: 250px;
+  text-align: left;
+}
+
+.ckb-tx-step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+}
+
+/* connector line down to the next step, at the node centre */
+.ckb-tx-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 30px;
+  bottom: -4px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--line-strong);
+}
+
+.ckb-tx-step.is-done:not(:last-child)::after {
+  background: color-mix(in srgb, var(--ok) 55%, transparent);
+}
+
+.ckb-tx-step-node {
+  position: relative;
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.ckb-tx-step-node svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ckb-tx-step.is-pending .ckb-tx-step-node {
+  background: var(--surface-2);
+  border: 1.5px solid var(--line-strong);
+  color: var(--ink-3);
+}
+
+.ckb-tx-step.is-active .ckb-tx-step-node {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1.5px solid var(--accent);
+}
+
+.ckb-tx-step.is-done .ckb-tx-step-node {
+  background: var(--ok);
+  color: var(--accent-ink);
+}
+
+.ckb-tx-step.is-failed .ckb-tx-step-node {
+  background: var(--danger);
+  color: var(--accent-ink);
+}
+
+.ckb-tx-step-spinner {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border-top-color: var(--accent);
+  animation: btn-spin 0.7s linear infinite;
+}
+
+.ckb-tx-step-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.ckb-tx-step.is-pending .ckb-tx-step-label {
+  color: var(--ink-3);
+}
+
+.ckb-tx-step.is-done .ckb-tx-step-label,
+.ckb-tx-step.is-active .ckb-tx-step-label {
+  color: var(--ink);
+}
+
+.ckb-tx-step.is-active .ckb-tx-step-label {
+  font-weight: 700;
+}
+
+.ckb-tx-step.is-failed .ckb-tx-step-label {
+  color: var(--danger);
+}
+
+/* phase / terminal status line */
+.ckb-tx-status {
+  margin-top: 16px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.ckb-tx-status.is-failed {
+  color: var(--danger);
 }
 
 .ckb-tx-hint {
@@ -3918,6 +4072,8 @@
   justify-content: center;
   background: var(--modal-backdrop);
   backdrop-filter: blur(2px);
+  overflow: hidden;
+  overscroll-behavior: contain;
   animation: backdrop-in 160ms ease-out;
 }
 
@@ -3952,6 +4108,8 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* Scrolling the drawer list to its end must not chain to the page behind. */
+  overscroll-behavior: contain;
   padding: 4px 28px 36px;
 }
 
@@ -6462,6 +6620,31 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Tooltip hesitation row — violet countdown on a pending-decision match. */
+.lm-tooltip-hesitation strong {
+  color: var(--violet);
+  font-weight: 800;
+}
+
+/* Tooltip extraction row — violet "已提取 X%" figure. */
+.lm-tooltip-extract strong {
+  color: var(--violet);
+  font-weight: 800;
+}
+
+/* Tooltip note — a cell created under an older/different node identity. */
+.lm-tooltip-warn {
+  margin-top: 6px;
+  padding: 5px 7px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 600;
+  color: var(--warn);
+  background: var(--warn-soft);
+  border: 1px solid color-mix(in srgb, var(--warn) 26%, transparent);
+}
+
 /* Demand-share row — the emphasised figure on an order hover. */
 .lm-tooltip-share strong {
   color: var(--cell-accent);
@@ -6644,6 +6827,102 @@
   color: var(--cell-accent-ink);
   background: var(--cell-accent);
   box-shadow: 0 2px 8px color-mix(in srgb, var(--cell-accent) 38%, transparent);
+}
+
+/* Hesitation-window badge — violet "犹豫期 + countdown" on the match cell's top
+   rim while the buyer's withdrawal window is still open (pending decision). */
+.cell-hesitation-badge {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+  white-space: nowrap;
+  font-size: clamp(9px, calc(var(--cell-d) * 0.075), 12px);
+  color: var(--violet);
+  background: color-mix(in srgb, var(--violet) 14%, var(--surface));
+  border: 1px solid var(--violet);
+  box-shadow: var(--shadow-elevate);
+  pointer-events: none;
+}
+
+.cell-hesitation-clock {
+  width: 11px;
+  height: 11px;
+  flex: none;
+}
+
+/* Rent-extraction progress badge — bottom rim of a match cell, shown once rent
+   has actually been extracted (original stake > current stake): a mini progress
+   bar + "已提取 X%". Distinct from the time-based life gauge. */
+.cell-extract-badge {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+  white-space: nowrap;
+  font-size: clamp(9px, calc(var(--cell-d) * 0.075), 12px);
+  color: var(--ink-2);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-elevate);
+  pointer-events: none;
+}
+
+.cell-extract-track {
+  display: inline-block;
+  width: 26px;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+  overflow: hidden;
+}
+
+.cell-extract-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--violet);
+}
+
+/* Legacy-node badge — amber "!" at the top-right rim: the cell was created
+   under an older/different fiber node identity than the one running now. */
+.cell-legacy-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: var(--radius-pill);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--warn);
+  background: var(--surface);
+  border: 1px solid var(--warn);
+  box-shadow: var(--shadow-elevate);
+  pointer-events: none;
 }
 
 
@@ -6933,6 +7212,8 @@
 .help-body {
   max-height: 62vh;
   overflow-y: auto;
+  /* Scrolling the help list to its end must not chain to the page behind. */
+  overscroll-behavior: contain;
   padding-right: 4px;
   animation: help-body-in 160ms ease-out;
 }
@@ -7098,6 +7379,20 @@
   color: var(--ink-3);
 }
 
+/* Below-the-action status — the hesitation-window state under the single
+   mutually-exclusive buyer action (abandon during the window / inject after). */
+.lm-drawer-action-status {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--ink-3);
+  background: color-mix(in srgb, var(--violet) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--violet) 22%, transparent);
+}
+
 /* Fiber-address input — teal-tinted so it stands out from the plain numeric
    fields: it's the field that determines match reachability, so the market's
    own accent marks it as the recommended one. */
@@ -7192,6 +7487,12 @@
   background: var(--surface-2);
 }
 
+/* Hesitation-window pill — violet, buyer's pending-decision state. */
+.mg-pill.hesitate {
+  color: var(--violet);
+  background: color-mix(in srgb, var(--violet) 14%, var(--surface));
+}
+
 .mg-dot {
   position: relative;
   width: 6px;
@@ -7251,6 +7552,79 @@
   height: 3px;
 }
 
+/* ── Rent-extraction progress (sheet) — actual funds drained vs original ─── */
+
+.lm-extraction-progress {
+  margin-top: 10px;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--violet) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--violet) 22%, transparent);
+}
+
+.lm-extraction-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.lm-extraction-pct {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--violet);
+  font-variant-numeric: tabular-nums;
+}
+
+.lm-extraction-track {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.lm-extraction-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--violet);
+}
+
+.lm-extraction-cols {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.lm-extraction-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.lm-extraction-col-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-4);
+  white-space: nowrap;
+}
+
+.lm-extraction-col-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.lm-extraction-col-value small {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-4);
+}
+
 /* ── Order/match detail — right-side drawer in the aside ────────────────── */
 
 /* Slides into the right sidebar, replacing the market overview when a cell
@@ -7263,6 +7637,8 @@
   gap: 16px;
   max-height: calc(100vh - 32px);
   overflow-y: auto;
+  /* Scrolling this detail panel to its end must not chain to the page behind. */
+  overscroll-behavior: contain;
   background: var(--surface);
   border-radius: var(--radius);
   padding: 18px;

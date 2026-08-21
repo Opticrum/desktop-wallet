@@ -10,7 +10,9 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use ckb_cinnabar_calculator::re_exports::ckb_types::{
-  core::ScriptHashType, packed::Script, prelude::{Builder, Entity, Pack},
+  core::ScriptHashType,
+  packed::Script,
+  prelude::{Builder, Entity, Pack},
 };
 use ckb_cinnabar_calculator::re_exports::secp256k1::{PublicKey, SecretKey};
 use ckb_cinnabar_calculator::rpc::{Network, RPC};
@@ -26,7 +28,7 @@ use crate::wallet::{address, crypto, hd_wallet, keystore, signer, wallet_service
 use crate::wire::*;
 
 use super::traits::WalletBackend;
-use super::SigningWallet;
+use super::{SigningWallet, TxProgressReporter};
 
 /// Minimal CKB capacity of a secp256k1_blake160 cell with empty data (61 CKB).
 const MIN_TRANSFER_SHANNONS: u64 = 6_100_000_000;
@@ -179,7 +181,10 @@ impl<T: RPC> RealWalletBackend<T> {
       let mut conn = self.db.lock().unwrap();
       let _ = txs_cache::upsert_cached(&mut conn, &info, ts);
     }
-    Ok(LoadedTx { info, timestamp_ms: ts })
+    Ok(LoadedTx {
+      info,
+      timestamp_ms: ts,
+    })
   }
 }
 
@@ -675,6 +680,7 @@ impl<T: RPC + Send + Sync> WalletBackend for RealWalletBackend<T> {
     &self,
     address: String,
     amount_shannons: u64,
+    progress: &dyn TxProgressReporter,
   ) -> Result<TxHashResult, CommandError> {
     self.require_unlocked()?;
     if amount_shannons == 0 {
@@ -711,7 +717,15 @@ impl<T: RPC + Send + Sync> WalletBackend for RealWalletBackend<T> {
     .await?;
 
     let json = serde_json::to_string(&tx).map_err(|e| CommandError::internal(e.to_string()))?;
+    progress.report(TxProgress {
+      phase: TxPhase::Broadcasting,
+      tx_hash: None,
+    });
     let tx_hash = self.provider.send_transaction(&hex::encode(json)).await?;
+    progress.report(TxProgress {
+      phase: TxPhase::Confirming,
+      tx_hash: Some(tx_hash.clone()),
+    });
     // Resolve only once the transfer is confirmed on-chain.
     self
       .provider
@@ -724,7 +738,10 @@ impl<T: RPC + Send + Sync> WalletBackend for RealWalletBackend<T> {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::chain::chain_provider::{MockChainProvider, TransactionInfo, TxInputInfo, TxOutputInfo};
+  use crate::backend::NoopTxProgressReporter;
+  use crate::chain::chain_provider::{
+    MockChainProvider, TransactionInfo, TxInputInfo, TxOutputInfo,
+  };
   use crate::db::init_test_db;
   use crate::db::txs_cache;
   use crate::db::wallets;
@@ -775,7 +792,11 @@ mod tests {
     let s = backend.get_summary().await.unwrap();
     assert!(!s.unlocked);
     let err = backend
-      .send_ckb("ckt1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsqds6edszer3w0fkx63kvxu6znl0z2vhrza3x9s2p".into(), 61_0000_0000)
+      .send_ckb(
+        "ckt1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsqds6edszer3w0fkx63kvxu6znl0z2vhrza3x9s2p".into(),
+        61_0000_0000,
+        &NoopTxProgressReporter,
+      )
       .await
       .unwrap_err();
     assert!(matches!(err, CommandError::WalletLocked(_)));
@@ -881,7 +902,10 @@ mod tests {
       }
     }
     assert_eq!(recv, 10000.0, "the 10000 receive must survive the spend");
-    assert_eq!(send, -1000.0, "the spend must show as a Send, not a 9000 receive");
+    assert_eq!(
+      send, -1000.0,
+      "the spend must show as a Send, not a 9000 receive"
+    );
   }
 
   /// A channel funding tx (wallet funds a FundingLock cell) must classify as
@@ -1095,7 +1119,12 @@ mod tests {
     };
     // OrderArgs = 33-byte fiber pubkey + 32-byte buyer lock hash (65 bytes);
     // MatchArgs = OrderArgs + 36-byte outpoint + 32-byte seller lock hash (133).
-    let order_args_hex = hex::encode([0x02u8; 33].into_iter().chain([0xaa; 32]).collect::<Vec<u8>>());
+    let order_args_hex = hex::encode(
+      [0x02u8; 33]
+        .into_iter()
+        .chain([0xaa; 32])
+        .collect::<Vec<u8>>(),
+    );
     let match_args_hex = hex::encode(
       [0x02u8; 33]
         .into_iter()
@@ -1134,7 +1163,10 @@ mod tests {
           previous_tx_hash: tx_seed.to_string(),
           previous_index: 0,
         }],
-        outputs: vec![wallet_out(900_000_000_000), opticrum_out(100_000_000_000, &order_args_hex, 65)],
+        outputs: vec![
+          wallet_out(900_000_000_000),
+          opticrum_out(100_000_000_000, &order_args_hex, 65),
+        ],
       },
     );
     // tx_match: creates the match cell (resolved only as the extract input).
@@ -1356,7 +1388,10 @@ mod tests {
     let txs = backend.get_transactions(None, None).await.unwrap();
     assert_eq!(sum_flows(&txs), (10000.0, -1000.0));
     assert!(
-      provider.get_transaction_calls.load(std::sync::atomic::Ordering::Relaxed) > 0,
+      provider
+        .get_transaction_calls
+        .load(std::sync::atomic::Ordering::Relaxed)
+        > 0,
       "first refresh must trace from the chain"
     );
 
@@ -1372,12 +1407,16 @@ mod tests {
     let txs2 = backend.get_transactions(None, None).await.unwrap();
     assert_eq!(sum_flows(&txs2), (10000.0, -1000.0));
     assert_eq!(
-      provider.get_transaction_calls.load(std::sync::atomic::Ordering::Relaxed),
+      provider
+        .get_transaction_calls
+        .load(std::sync::atomic::Ordering::Relaxed),
       0,
       "second refresh must not re-fetch any tx"
     );
     assert_eq!(
-      provider.get_block_timestamp_calls.load(std::sync::atomic::Ordering::Relaxed),
+      provider
+        .get_block_timestamp_calls
+        .load(std::sync::atomic::Ordering::Relaxed),
       0,
       "block timestamps must come from the cache"
     );
@@ -1405,7 +1444,10 @@ mod tests {
       .store(0, std::sync::atomic::Ordering::Relaxed);
     let _ = backend.get_transactions(None, None).await.unwrap();
     assert!(
-      provider.get_transaction_calls.load(std::sync::atomic::Ordering::Relaxed) > 0,
+      provider
+        .get_transaction_calls
+        .load(std::sync::atomic::Ordering::Relaxed)
+        > 0,
       "near-tip tx must be re-traced on the next refresh"
     );
   }
@@ -1426,7 +1468,9 @@ mod tests {
       );
     }
     assert_eq!(
-      provider.get_block_timestamp_calls.load(std::sync::atomic::Ordering::Relaxed),
+      provider
+        .get_block_timestamp_calls
+        .load(std::sync::atomic::Ordering::Relaxed),
       0,
       "no block-timestamp RPC for an unconfirmed tx"
     );
@@ -1529,7 +1573,7 @@ mod tests {
     // Recipient is the sender's own (valid) address — a self-transfer.
     let sender_addr = address::ckb_address_from_pubkey(&pk, true);
     let result = backend
-      .send_ckb(sender_addr.clone(), 61_0000_0000)
+      .send_ckb(sender_addr.clone(), 61_0000_0000, &NoopTxProgressReporter)
       .await
       .expect("send should broadcast");
 
