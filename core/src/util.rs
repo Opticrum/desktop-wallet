@@ -41,3 +41,15 @@ pub fn parse_chain(s: &str) -> Chain {
     Chain::Testnet
   }
 }
+
+/// Map a Fiber `node_info.chain_hash` onto the wallet's Chain enum.
+/// Unknown hashes fall back to testnet (the desktop default).
+pub fn chain_from_hash(hash: &str) -> Chain {
+  const MAINNET: &str = "92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5";
+  let h = hash.trim_start_matches("0x").to_ascii_lowercase();
+  if h == MAINNET {
+    Chain::Mainnet
+  } else {
+    Chain::Testnet
+  }
+}

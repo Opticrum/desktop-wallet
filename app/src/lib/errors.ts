@@ -12,6 +12,14 @@ export function commandErrorText(t: Messages, err: CommandError): string {
     // Wrong wallet password (core wallet/crypto.rs returns NotAuthorized).
     case 'not_authorized':
       return t.walletPasswordWrong
+    case 'chain':
+      if (
+        err.message.includes('Fiber RPC unreachable') ||
+        err.message.includes('Fiber RPC timed out')
+      ) {
+        return t.nodeUnreachable
+      }
+      return err.message
     default:
       return err.message
   }

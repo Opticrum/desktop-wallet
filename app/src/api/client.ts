@@ -17,6 +17,7 @@ import type {
   NodeConfig,
   NodeLog,
   NodeRuntime,
+  NodeTargetList,
   WalletAddress,
   WalletStatus,
   WalletSummary,
@@ -65,6 +66,13 @@ export const node = {
   fnnCliStatus: () => call<FnnCliStatus>('node.fnn_cli_status'),
   openFnnCli: (url: string) => call<void>('node.fnn_cli_open', { url }),
   openUrl: (url: string) => call<void>('node.open_url', { url }),
+  listTargets: () => call<NodeTargetList>('node.list_targets'),
+  addExternal: (alias: string, rpcUrl: string, authToken?: string) =>
+    call<NodeTargetList>('node.add_external', { alias, rpcUrl, authToken }),
+  updateExternal: (id: string, alias: string, rpcUrl: string, authToken?: string) =>
+    call<NodeTargetList>('node.update_external', { id, alias, rpcUrl, authToken }),
+  removeExternal: (id: string) => call<NodeTargetList>('node.remove_external', { id }),
+  setActive: (id: string) => call<NodeRuntime>('node.set_active', { id }),
 }
 
 // ── channels ──────────────────────────────────────────────────────────────

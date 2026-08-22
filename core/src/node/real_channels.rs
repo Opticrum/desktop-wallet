@@ -19,6 +19,7 @@ use opticrum_protocol::OutPoint as ProtocolOutPoint;
 use std::collections::HashMap;
 
 use crate::backend::traits::ChannelsBackend;
+use crate::node::fiber_client::FiberClientHandle;
 use crate::node::rpc_client::{FiberRpcExt, RpcClient};
 use crate::wire::*;
 
@@ -49,14 +50,18 @@ pub trait FiberChannelApi: Send + Sync {
   ) -> Result<String, CommandError>;
 }
 
-/// Real impl over the fiber JSON-RPC client.
+/// Real impl over the (hot-swappable) fiber JSON-RPC client.
 pub struct RealFiberChannels {
-  client: RpcClient,
+  handle: FiberClientHandle,
 }
 
 impl RealFiberChannels {
-  pub fn new(client: RpcClient) -> Self {
-    Self { client }
+  pub fn new(handle: FiberClientHandle) -> Self {
+    Self { handle }
+  }
+
+  fn client(&self) -> RpcClient {
+    self.handle.current()
   }
 }
 
@@ -64,11 +69,11 @@ impl RealFiberChannels {
 impl FiberChannelApi for RealFiberChannels {
   async fn list_channels(&self) -> Result<ListChannelsResult, CommandError> {
     let params = serde_json::json!({ "include_closed": true });
-    self.client.call_fiber("list_channels", &params).await
+    self.client().call_fiber("list_channels", &params).await
   }
 
   async fn list_peers(&self) -> Result<ListPeersResult, CommandError> {
-    self.client.call_fiber_no_params("list_peers").await
+    self.client().call_fiber_no_params("list_peers").await
   }
 
   async fn list_graph_nodes(&self) -> Result<GraphNodesResult, CommandError> {
@@ -76,12 +81,12 @@ impl FiberChannelApi for RealFiberChannels {
       limit: Some(500),
       after: None,
     };
-    self.client.call_fiber("graph_nodes", &params).await
+    self.client().call_fiber("graph_nodes", &params).await
   }
 
   async fn connect_peer(&self, address: &str) -> Result<(), CommandError> {
     let params = serde_json::json!({ "address": address });
-    let _: serde_json::Value = self.client.call_fiber("connect_peer", &params).await?;
+    let _: serde_json::Value = self.client().call_fiber("connect_peer", &params).await?;
     Ok(())
   }
 
@@ -90,7 +95,7 @@ impl FiberChannelApi for RealFiberChannels {
     // (fiber-json-types `DisconnectPeerParams`) — `peer_id` is rejected as
     // `invalid params`.
     let params = serde_json::json!({ "pubkey": peer_id });
-    let _: serde_json::Value = self.client.call_fiber("disconnect_peer", &params).await?;
+    let _: serde_json::Value = self.client().call_fiber("disconnect_peer", &params).await?;
     Ok(())
   }
 
@@ -107,13 +112,16 @@ impl FiberChannelApi for RealFiberChannels {
     if let Some(a) = address {
       params["address"] = serde_json::json!(a);
     }
-    let result: FiberOpenChannelResult = self.client.call_fiber("open_channel", &params).await?;
+    let result: FiberOpenChannelResult = self.client().call_fiber("open_channel", &params).await?;
     Ok(hex::encode(result.temporary_channel_id.as_bytes()))
   }
 
   async fn shutdown_channel(&self, channel_id: &str, force: bool) -> Result<(), CommandError> {
     let params = serde_json::json!({ "channel_id": channel_id, "force": force });
-    let _: serde_json::Value = self.client.call_fiber("shutdown_channel", &params).await?;
+    let _: serde_json::Value = self
+      .client()
+      .call_fiber("shutdown_channel", &params)
+      .await?;
     Ok(())
   }
 
@@ -139,7 +147,7 @@ impl FiberChannelApi for RealFiberChannels {
       final_expiry_delta: Some(24 * 60 * 60 * 1000),
       ..Default::default()
     };
-    let result: InvoiceResult = self.client.call_fiber("new_invoice", &params).await?;
+    let result: InvoiceResult = self.client().call_fiber("new_invoice", &params).await?;
     Ok(result.invoice_address)
   }
 }

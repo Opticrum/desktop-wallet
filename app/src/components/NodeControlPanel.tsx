@@ -13,6 +13,10 @@ type Props = {
   onToast: (msg: string) => void
   /** Bumped by the page's refresh control to re-fetch the runtime. */
   refreshKey?: number
+  /** Open the local CKB wallet drawer (unlock / create). */
+  onRequestWallet?: () => void
+  /** Open the external-node edit dialog for the currently selected target. */
+  onEditConnection?: () => void
 }
 
 function IconPlay() {
@@ -72,9 +76,14 @@ function formatUptime(ms: number): string {
   return `${h}h ${m}m`
 }
 
-export function NodeControlPanel({ onToast, refreshKey = 0 }: Props) {
+export function NodeControlPanel({
+  onToast,
+  refreshKey = 0,
+  onRequestWallet,
+  onEditConnection,
+}: Props) {
   const { t, locale } = useLocale()
-  const { chain } = useNode()
+  const { chain, kind } = useNode()
   const [runtime, setRuntime] = useState<NodeRuntime | null>(null)
   // Live-uptime ticker anchor — bumped every second while the node is up so
   // the "运行时长" counts up smoothly between the 5s runtime polls.
@@ -115,7 +124,7 @@ export function NodeControlPanel({ onToast, refreshKey = 0 }: Props) {
       alive = false
       window.clearInterval(id)
     }
-  }, [refreshKey])
+  }, [refreshKey, kind])
 
   // 1s ticker for the live uptime readout — runs only while the node reports a
   // start anchor (startedAtMs), so a stopped node doesn't re-render every second.
@@ -141,7 +150,7 @@ export function NodeControlPanel({ onToast, refreshKey = 0 }: Props) {
       alive = false
       window.clearInterval(id)
     }
-  }, [])
+  }, [refreshKey])
 
   const refetchConfig = () =>
     node
@@ -165,6 +174,7 @@ export function NodeControlPanel({ onToast, refreshKey = 0 }: Props) {
   const fiberPubkey = runtime?.fiberPubkey || '—'
   const fiberAddr = runtime?.fiberAddr || '—'
   const startDisabled = !walletGate.hasWallet || !walletGate.unlocked
+  const isExternal = kind === 'external'
 
   const handleStop = async () => {
     setStopOpen(false)
@@ -220,12 +230,24 @@ export function NodeControlPanel({ onToast, refreshKey = 0 }: Props) {
         <div className="ncp-status-left">
           <span className={starting ? 'pulse-dot starting' : running ? 'pulse-dot' : 'dot-static'} />
           <span className={`ncp-status-badge${running ? '' : starting ? ' starting' : ' stopped'}`}>
-            {starting ? t.nodePreparing : running ? t.nodeRunning : t.nodeStopped}
+            {isExternal
+              ? running
+                ? t.nodeReachable
+                : t.nodeUnreachable
+              : starting
+                ? t.nodePreparing
+                : running
+                  ? t.nodeRunning
+                  : t.nodeStopped}
           </span>
           <span className="ncp-meta-line">
             {alias}
-            <span className="ncp-meta-sep">·</span>
-            {uptimeText}
+            {!isExternal && (
+              <>
+                <span className="ncp-meta-sep">·</span>
+                {uptimeText}
+              </>
+            )}
           </span>
         </div>
         <div className="ncp-status-right">
@@ -233,37 +255,54 @@ export function NodeControlPanel({ onToast, refreshKey = 0 }: Props) {
             {chain === 'mainnet' ? t.networkMainnet : t.networkTestnet}
           </span>
           <div className="ncp-actions">
-            {running ? (
-              <button type="button" className="btn-danger btn-icon" onClick={() => setStopOpen(true)}>
-                <IconStop />
-                <span>{t.nodeStop}</span>
+            {isExternal ? (
+              <button
+                type="button"
+                className="btn-secondary btn-icon"
+                onClick={onEditConnection}
+              >
+                <IconGear />
+                <span>{t.nodeEditConnection}</span>
               </button>
             ) : (
-              <span className="ncp-start">
-                <button
-                  type="button"
-                  className="btn-primary btn-icon"
-                  disabled={startDisabled || starting}
-                  onClick={handleStart}
-                >
-                  {starting ? <span className="btn-spin" aria-hidden /> : <IconPlay />}
-                  <span>{starting ? t.nodeStarting : t.nodeStart}</span>
-                </button>
-                {startDisabled && !starting && (
-                  <span className="ncp-start-tip" role="tooltip">
-                    {!walletGate.hasWallet ? t.nodeStartNoWallet : t.nodeStartLocked}
+              <>
+                {running ? (
+                  <button type="button" className="btn-danger btn-icon" onClick={() => setStopOpen(true)}>
+                    <IconStop />
+                    <span>{t.nodeStop}</span>
+                  </button>
+                ) : (
+                  <span className="ncp-start">
+                    <button
+                      type="button"
+                      className="btn-primary btn-icon"
+                      disabled={startDisabled || starting}
+                      onClick={handleStart}
+                    >
+                      {starting ? <span className="btn-spin" aria-hidden /> : <IconPlay />}
+                      <span>{starting ? t.nodeStarting : t.nodeStart}</span>
+                    </button>
+                    {startDisabled && !starting && (
+                      <button
+                        type="button"
+                        className="ncp-start-tip"
+                        onClick={onRequestWallet}
+                      >
+                        {!walletGate.hasWallet ? t.nodeStartNoWallet : t.nodeStartLocked}
+                      </button>
+                    )}
                   </span>
                 )}
-              </span>
+                <button
+                  type="button"
+                  className="btn-secondary btn-icon"
+                  onClick={() => setConfigOpen(true)}
+                >
+                  <IconGear />
+                  <span>{t.nodeConfig}</span>
+                </button>
+              </>
             )}
-            <button
-              type="button"
-              className="btn-secondary btn-icon"
-              onClick={() => setConfigOpen(true)}
-            >
-              <IconGear />
-              <span>{t.nodeConfig}</span>
-            </button>
           </div>
         </div>
       </div>
@@ -286,39 +325,39 @@ export function NodeControlPanel({ onToast, refreshKey = 0 }: Props) {
           <span className="ncp-label">{t.fiberVersion}</span>
           <span className="ncp-value mono">{runtime?.version || '—'}</span>
         </div>
-        <div className="ncp-detail-row">
-          <span className="ncp-label">{t.fiberPort}</span>
-          <span className="ncp-value mono ncp-pubkey">
-            {rpcUrl ? (
-              // The URL itself is the 打开 fnn-cli trigger — hover reveals the
-              // action hint (mirrors CopyableText), click runs the open flow.
-              <span
-                className="ncp-cli-trigger"
-                role="button"
-                tabIndex={0}
-                aria-label={t.fnnCliOpen}
-                onClick={handleOpenFnnCli}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    handleOpenFnnCli()
-                  }
-                }}
-              >
-                <span className="ncp-cli-trigger-text">{rpcUrl}</span>
-                <span className="ncp-cli-trigger-hint" aria-hidden="true">
-                  <IconTerminal />
-                  {t.fnnCliOpen}
+        {!isExternal && (
+          <div className="ncp-detail-row">
+            <span className="ncp-label">{t.fiberPort}</span>
+            <span className="ncp-value mono ncp-pubkey">
+              {rpcUrl ? (
+                <span
+                  className="ncp-cli-trigger"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={t.fnnCliOpen}
+                  onClick={handleOpenFnnCli}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      handleOpenFnnCli()
+                    }
+                  }}
+                >
+                  <span className="ncp-cli-trigger-text">{rpcUrl}</span>
+                  <span className="ncp-cli-trigger-hint" aria-hidden="true">
+                    <IconTerminal />
+                    {t.fnnCliOpen}
+                  </span>
                 </span>
-              </span>
-            ) : (
-              '—'
-            )}
-          </span>
-        </div>
+              ) : (
+                '—'
+              )}
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* ── Watchtower — derived from config, displayed as a status capsule ── */}
+      {!isExternal && (
       <div className="ncp-watchtower">
         <div className="ncp-wt-capsule">
           {watchtower.mode === 'standalone' && watchtower.endpoint && (
@@ -333,6 +372,7 @@ export function NodeControlPanel({ onToast, refreshKey = 0 }: Props) {
           </span>
         </div>
       </div>
+      )}
 
       <ConfirmModal
         open={stopOpen}

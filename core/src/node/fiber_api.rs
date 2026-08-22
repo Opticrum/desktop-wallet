@@ -8,8 +8,11 @@ use std::sync::Mutex;
 use async_trait::async_trait;
 use serde::{de::Deserializer, Deserialize};
 
+use std::time::Duration;
+
 use crate::wire::CommandError;
 
+use super::fiber_client::FiberClientHandle;
 use super::rpc_client::{FiberRpcExt, RpcClient};
 
 /// Deserialize a `"0x…"` (or bare) hex string into a `u32` — the fiber node
@@ -49,29 +52,45 @@ pub trait FiberNodeApi: Send + Sync {
   async fn node_info(&self) -> Result<Option<FiberNodeInfo>, CommandError>;
 }
 
-/// Real impl over the fiber JSON-RPC client.
+/// Real impl over the (hot-swappable) fiber JSON-RPC client.
 pub struct FiberRpcApi {
-  client: RpcClient,
+  handle: FiberClientHandle,
 }
 
 impl FiberRpcApi {
-  pub fn new(client: RpcClient) -> Self {
-    Self { client }
+  pub fn new(handle: FiberClientHandle) -> Self {
+    Self { handle }
+  }
+}
+
+async fn node_info_on(client: &RpcClient) -> Result<Option<FiberNodeInfo>, CommandError> {
+  match client
+    .call_fiber_no_params::<FiberNodeInfo>("node_info")
+    .await
+  {
+    Ok(info) => Ok(Some(info)),
+    // Unreachable / malformed response → report as not-running (state-as-data).
+    Err(_) => Ok(None),
+  }
+}
+
+/// Probe a candidate RPC with a hard timeout — used before adding/updating an
+/// external target so a hung host cannot stall the IPC command.
+pub async fn probe_node_info(
+  client: &RpcClient,
+  timeout_secs: u64,
+) -> Result<FiberNodeInfo, CommandError> {
+  match tokio::time::timeout(Duration::from_secs(timeout_secs), node_info_on(client)).await {
+    Ok(Ok(Some(info))) => Ok(info),
+    Ok(Ok(None)) | Ok(Err(_)) => Err(CommandError::chain("Fiber RPC unreachable")),
+    Err(_) => Err(CommandError::chain("Fiber RPC timed out")),
   }
 }
 
 #[async_trait]
 impl FiberNodeApi for FiberRpcApi {
   async fn node_info(&self) -> Result<Option<FiberNodeInfo>, CommandError> {
-    match self
-      .client
-      .call_fiber_no_params::<FiberNodeInfo>("node_info")
-      .await
-    {
-      Ok(info) => Ok(Some(info)),
-      // Unreachable / malformed response → report as not-running (state-as-data).
-      Err(_) => Ok(None),
-    }
+    node_info_on(&self.handle.current()).await
   }
 }
 

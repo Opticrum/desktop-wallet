@@ -83,7 +83,7 @@ export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
   // Runtime/frozen gating comes from the shared NodeContext (it polls
   // `node.get_runtime`). The channel list itself refreshes only on demand — an
   // interval refresh re-runs the default-expand and pops collapsed peers open.
-  const { running } = useNode()
+  const { running, targetId } = useNode()
   const [nodes, setNodes] = useState<ChannelNode[]>([])
   const [refreshing, setRefreshing] = useState(false)
   const [refreshingNode, setRefreshingNode] = useState<string | null>(null)
@@ -132,8 +132,9 @@ export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
   const { ckbTxState, runCkbTx, closeCkbTx } = useCkbTx(load)
 
   useEffect(() => {
+    initialExpandDone.current = false
     load()
-  }, [load])
+  }, [load, targetId])
 
   // When the node restarts, `channels.list` isn't re-fetched on its own — reload
   // peers immediately and a few times after, so peers that reconnect a beat

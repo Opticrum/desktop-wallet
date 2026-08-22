@@ -2,12 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocale } from '../i18n/LocaleContext'
 import { wallet } from '../api/client'
 import type { WalletStatus, WalletSummary, WalletTx, WalletTxKind } from '../api/types'
-import { toCommandError } from '../api/types'
 import { addressShort, typeCounts, TX_TYPE_ORDER } from '../lib/wallet'
-import { commandErrorText } from '../lib/errors'
-import { BottomDrawer } from './BottomDrawer'
 import { CkbTxModal, useCkbTx } from './CkbTxModal'
-import { QrIcon, QrModal } from './QrModal'
+import { CopyableText } from './CopyableText'
+import { QrModal } from './QrModal'
 import { SendDetail } from '../pages/SendDetail'
 import { TransactionTable, txLabel } from './TransactionTable'
 
@@ -15,7 +13,7 @@ type TxType = WalletTxKind
 
 const TX_TYPES: TxType[] = [...TX_TYPE_ORDER]
 
-function IconArrowUpRight() {
+function IconSend() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden>
       <path d="M7 17 17 7" />
@@ -24,41 +22,56 @@ function IconArrowUpRight() {
   )
 }
 
+function IconReceive() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path d="M17 7 7 17" />
+      <path d="M7 8v9h9" />
+    </svg>
+  )
+}
+
+function addrDisplay(address: string): string {
+  if (address.length <= 22) return address
+  return `${address.slice(0, 10)}…${address.slice(-8)}`
+}
+
+function WalletPageHead({ address }: { address?: string }) {
+  const { t } = useLocale()
+  return (
+    <header className="wallet-page-head">
+      <div className="wallet-page-head-main">
+        <h1 className="wallet-page-title">{t.walletCkb}</h1>
+        {address ? (
+          <CopyableText
+            className="wallet-page-addr mono"
+            value={address}
+            display={addrDisplay(address)}
+          />
+        ) : null}
+      </div>
+    </header>
+  )
+}
+
 /**
- * The wallet, embedded as a module in the node page's sidebar. A single
- * wallet address (always present). Transaction records take the emphasis;
- * the balance (click to send) and a QR thumbnail form a compact footer.
- *
- * Data comes from `wallet.get_summary` + `wallet.get_transactions` over IPC.
+ * Local CKB wallet as a page inside the node-page bottom drawer — header,
+ * balance hero with explicit send/receive, then the full transaction list.
  */
 export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
   const { t } = useLocale()
   const [sendOpen, setSendOpen] = useState(false)
   const [qrOpen, setQrOpen] = useState(false)
-  const [activityOpen, setActivityOpen] = useState(false)
 
   const [summary, setSummary] = useState<WalletSummary | null>(null)
-  // Fast wallet state (no chain query) — gates the unlock form so the password
-  // field appears immediately, independent of the slower balance/tx trace-back.
   const [status, setStatus] = useState<WalletStatus | null>(null)
   const [txs, setTxs] = useState<WalletTx[]>([])
-  // wallet-unlock state (wallet exists but locked)
-  const [unlockPw, setUnlockPw] = useState('')
-  const [unlockBusy, setUnlockBusy] = useState(false)
-  const [unlockError, setUnlockError] = useState<string | null>(null)
-  // Refreshing veil — shown only when a refresh actually takes a moment
-  // (never unmount/clear the module on refresh).
   const [refreshing, setRefreshing] = useState(false)
   const refreshTimer = useRef<number | null>(null)
 
   const refresh = useCallback(() => {
     if (refreshTimer.current) window.clearTimeout(refreshTimer.current)
-    // Only show the refreshing veil once a refresh actually stalls (no response
-    // within 3s) — fast refreshes shouldn't flash anything.
     refreshTimer.current = window.setTimeout(() => setRefreshing(true), 3000)
-    // Summary and transactions resolve independently — the unlock gate only waits
-    // on the (fail-fast) summary, so the password field appears without waiting
-    // for the slower tx trace-back.
     const summary = wallet.getSummary().then(setSummary).catch(() => {})
     const txs = wallet.getTransactions().then(setTxs).catch(() => {})
     Promise.all([summary, txs]).finally(() => {
@@ -67,8 +80,6 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
     })
   }, [])
 
-  // CKB transfer — runs behind the 3-step confirmation modal and reloads the
-  // wallet once confirmed on-chain.
   const { ckbTxState, runCkbTx, closeCkbTx } = useCkbTx(refresh)
 
   const handleSend = useCallback(
@@ -88,7 +99,6 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
     return () => window.clearInterval(id)
   }, [refresh, refreshKey])
 
-  // Fast status poll (5s) — reflects lock/unlock without waiting for the balance.
   useEffect(() => {
     let alive = true
     const poll = () =>
@@ -104,24 +114,7 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
       alive = false
       window.clearInterval(id)
     }
-  }, [])
-
-  const unlockWallet = async () => {
-    if (!unlockPw) {
-      setUnlockError(t.walletPasswordRequired)
-      return
-    }
-    setUnlockBusy(true)
-    setUnlockError(null)
-    try {
-      await wallet.unlock(unlockPw)
-      wallet.getStatus().then(setStatus).catch(() => {})
-      refresh()
-    } catch (e) {
-      setUnlockError(commandErrorText(t, toCommandError(e)))
-    }
-    setUnlockBusy(false)
-  }
+  }, [refreshKey])
 
   const [activeTypes, setActiveTypes] = useState<Record<TxType, boolean>>({
     receive: true,
@@ -132,56 +125,33 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
     rent_extract: true,
   })
 
-  // ── wallet gate (fast status — no chain query, so it renders immediately) ──
   if (!status) {
     return (
-      <section className="panel wallet-module">
-        <div className="section-head">
-          <h2 className="node-section-title">{t.walletCkb}</h2>
-        </div>
-        <p className="text-secondary" style={{ padding: '16px' }}>
-          …
-        </p>
-      </section>
+      <article className="wallet-page">
+        <WalletPageHead />
+        <p className="wallet-page-placeholder">{t.walletRefreshing}</p>
+      </article>
     )
   }
+
   if (!status.hasWallet) {
     return (
-      <section className="panel wallet-module">
-        <div className="section-head">
-          <h2 className="node-section-title">{t.walletCkb}</h2>
-        </div>
-        <div className="wallet-none">
+      <article className="wallet-page">
+        <WalletPageHead />
+        <div className="wallet-page-empty">
           <div className="wallet-none-badge">{t.walletNone}</div>
           <p className="text-secondary">{t.walletNoneHint}</p>
         </div>
-      </section>
+      </article>
     )
   }
+
   if (!status.unlocked) {
     return (
-      <section className="panel wallet-module">
-        <div className="section-head">
-          <h2 className="node-section-title">{t.walletCkb}</h2>
-        </div>
-        <div className="wallet-gate">
-          <div className="wallet-gate-field">
-            <label className="send-form-label">{t.walletPassword}</label>
-            <input
-              className="search-input"
-              type="password"
-              value={unlockPw}
-              onChange={(e) => setUnlockPw(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && unlockWallet()}
-              placeholder="••••••••"
-            />
-          </div>
-          {unlockError && <p className="text-error">{unlockError}</p>}
-          <button type="button" className="btn-primary" disabled={unlockBusy} onClick={unlockWallet}>
-            {t.walletUnlockAction}
-          </button>
-        </div>
-      </section>
+      <article className="wallet-page">
+        <WalletPageHead address={status.address} />
+        <p className="wallet-page-placeholder">{t.walletRefreshing}</p>
+      </article>
     )
   }
 
@@ -194,77 +164,44 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
 
   const typeCountsMap = typeCounts(txs)
   const visibleTxs = txs.filter((tx) => activeTypes[tx.kind])
-
   const toggleType = (type: TxType) =>
     setActiveTypes((prev) => ({ ...prev, [type]: !prev[type] }))
 
   return (
-    <section className="panel wallet-module">
-      <div className="section-head">
-        <h2 className="node-section-title">{t.walletCkb}</h2>
-        <button
-          type="button"
-          className="wallet-qr-thumb"
-          onClick={() => setQrOpen(true)}
-          aria-label={t.zoomQr}
-          title={t.zoomQr}
-        >
-          <QrIcon />
-        </button>
-      </div>
+    <article className="wallet-page">
+      <WalletPageHead address={status.address || summary?.address} />
 
-      {/* Wallet info — balance (click to send) */}
-      <div className="wallet-info">
-        <button
-          type="button"
-          className="wallet-figure-btn"
-          onClick={() => setSendOpen(true)}
-          title={t.clickToSend}
-        >
-          <span className="wallet-figure">
-            {summary ? (
-              <>
-                {Number(whole).toLocaleString()}
-                <span className="frac">.{frac}</span> <span className="unit">CKB</span>
-              </>
-            ) : (
-              <span className="frac">…</span>
-            )}
-          </span>
-          {fiatUsd != null && (
-            <span className="wallet-fiat">
-              ≈ ${fiatUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })} USD
-            </span>
+      <section className="wallet-page-hero" aria-label={t.availableCkb}>
+        <p className="wallet-page-kicker">{t.availableCkb}</p>
+        <p className="wallet-page-balance">
+          {summary ? (
+            <>
+              {Number(whole).toLocaleString()}
+              <span className="frac">.{frac}</span>
+              <span className="unit">CKB</span>
+            </>
+          ) : (
+            <span className="frac">…</span>
           )}
-          <span className="wallet-send-hint">
-            <IconArrowUpRight />
-            {t.clickToSend}
-          </span>
-        </button>
-      </div>
-
-      {/* Recent transactions — the module's primary content, one line each */}
-      <div className="wallet-recent">
-        <TransactionTable transactions={txs.slice(0, 4)} compact />
-        {txs.length > 4 && (
-          <button
-            type="button"
-            className="wallet-more-txs"
-            onClick={() => setActivityOpen(true)}
-          >
-            <span className="wallet-more-txs-remaining">
-              {t.txMoreRemaining.replace('{n}', String(txs.length - 4))}
-            </span>
-            <span className="wallet-more-txs-action">{t.viewAll} →</span>
-          </button>
+        </p>
+        {fiatUsd != null && (
+          <p className="wallet-page-fiat">
+            ≈ ${fiatUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })} USD
+          </p>
         )}
-      </div>
+        <div className="wallet-page-actions">
+          <button type="button" className="btn-primary btn-icon" onClick={() => setSendOpen(true)}>
+            <IconSend />
+            <span>{t.send}</span>
+          </button>
+          <button type="button" className="btn-secondary btn-icon" onClick={() => setQrOpen(true)}>
+            <IconReceive />
+            <span>{t.walletReceive}</span>
+          </button>
+        </div>
+      </section>
 
-      <BottomDrawer
-        open={activityOpen}
-        onClose={() => setActivityOpen(false)}
-        ariaLabel={t.txHistory}
-      >
+      <section className="wallet-page-txs" aria-label={t.recentTxs}>
         <div className="drawer-filter" role="group" aria-label={t.txFilterLabel}>
           {TX_TYPES.map((type) => {
             const active = activeTypes[type]
@@ -290,7 +227,7 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
         ) : (
           <div className="filter-empty">{t.txFilterEmpty}</div>
         )}
-      </BottomDrawer>
+      </section>
 
       <SendDetail
         open={sendOpen}
@@ -308,6 +245,6 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
           <span className="wallet-refreshing-label">{t.walletRefreshing}</span>
         </div>
       )}
-    </section>
+    </article>
   )
 }

@@ -3,22 +3,27 @@ import { NodeConnectionsSection } from '../components/NodeConnectionsSection'
 import { NodeControlPanel } from '../components/NodeControlPanel'
 import { NodeKpiGrid } from '../components/NodeKpiGrid'
 import { NodeLogsConsole } from '../components/NodeLogsConsole'
+import { NodeSideMenu } from '../components/NodeSideMenu'
 import { WalletModule } from '../components/WalletModule'
+import { WalletUnlockDialog } from '../components/WalletUnlockDialog'
 import { WalletSetupDialog } from '../components/WalletSetupDialog'
+import { BottomDrawer } from '../components/BottomDrawer'
 import { Toast } from '../components/Toast'
 import { wallet } from '../api/client'
+import { useLocale } from '../i18n/LocaleContext'
+import { useNode } from '../node/NodeContext'
 
 export function NodeDetail() {
+  const { t } = useLocale()
+  const { kind, targetId } = useNode()
   const [toast, setToast] = useState<string | null>(null)
-  // Bumped to remount WalletModule (immediate refresh) once a wallet exists.
   const [walletEpoch, setWalletEpoch] = useState(0)
-  // Bumped by the connections toolbar's refresh button to re-fetch the
-  // node-overview runtime (pubkey/address/status) as well.
   const [overviewEpoch, setOverviewEpoch] = useState(0)
   const [noWallet, setNoWallet] = useState(false)
+  const [walletOpen, setWalletOpen] = useState(false)
+  const [unlockOpen, setUnlockOpen] = useState(false)
+  const [editRequest, setEditRequest] = useState(0)
 
-  // The node page owns the wallet gate: while no CKB wallet exists, a
-  // non-dismissable creation dialog blocks the page (Fiber links one wallet).
   useEffect(() => {
     let alive = true
     const check = () =>
@@ -36,36 +41,76 @@ export function NodeDetail() {
     }
   }, [])
 
+  useEffect(() => {
+    setOverviewEpoch((n) => n + 1)
+  }, [targetId])
+
   const handleWalletReady = () => {
     setNoWallet(false)
     setWalletEpoch((n) => n + 1)
   }
 
+  const requestWallet = async () => {
+    try {
+      const s = await wallet.getStatus()
+      if (!s.hasWallet) return
+      if (!s.unlocked) {
+        setUnlockOpen(true)
+        return
+      }
+      setWalletOpen(true)
+    } catch {
+      setUnlockOpen(true)
+    }
+  }
+
   return (
-    <div className="page-wide">
-      <div className="node-layout">
-        <div className="node-main">
-          <NodeControlPanel onToast={setToast} refreshKey={overviewEpoch} />
-          <NodeLogsConsole />
+    <div className="node-frames">
+      <NodeSideMenu
+        onWallet={requestWallet}
+        onToast={setToast}
+        editRequest={editRequest}
+        walletEpoch={walletEpoch}
+      />
+      <div className="node-content">
+        <div className="node-content-inner">
+          <NodeControlPanel
+            onToast={setToast}
+            refreshKey={overviewEpoch}
+            onRequestWallet={requestWallet}
+            onEditConnection={() => setEditRequest((n) => n + 1)}
+          />
+          <NodeKpiGrid refreshKey={overviewEpoch} onToast={setToast} />
+          {kind === 'builtin' && <NodeLogsConsole />}
           <NodeConnectionsSection
             onToast={setToast}
             onRefresh={() => {
-              // The toolbar refresh re-fetches the node overview AND remounts
-              // the wallet module so its balance/history refresh too.
               setOverviewEpoch((n) => n + 1)
               setWalletEpoch((n) => n + 1)
             }}
           />
         </div>
-
-        <aside className="node-aside">
-          <NodeKpiGrid refreshKey={overviewEpoch} onToast={setToast} />
-          {/* refreshKey re-fetches without unmounting — keeps the content visible
-              and shows the refreshing veil instead of clearing. */}
-          <WalletModule refreshKey={walletEpoch} />
-        </aside>
       </div>
 
+      <BottomDrawer
+        open={walletOpen}
+        onClose={() => setWalletOpen(false)}
+        ariaLabel={t.walletCkb}
+        wide
+      >
+        <WalletModule refreshKey={walletEpoch} />
+      </BottomDrawer>
+
+      <WalletUnlockDialog
+        open={unlockOpen}
+        onCancel={() => setUnlockOpen(false)}
+        onUnlocked={() => {
+          setUnlockOpen(false)
+          setWalletEpoch((n) => n + 1)
+          setOverviewEpoch((n) => n + 1)
+          setWalletOpen(true)
+        }}
+      />
       <WalletSetupDialog open={noWallet} onReady={handleWalletReady} />
       <Toast message={toast} onDismiss={() => setToast(null)} />
     </div>

@@ -14,13 +14,16 @@ use async_trait::async_trait;
 
 use crate::backend::traits::NodeBackend;
 use crate::backend::SigningWallet;
-use crate::util::{parse_chain, watchtower_from_config};
+use crate::util::{chain_from_hash, parse_chain, watchtower_from_config};
 use crate::wire::*;
 
 use super::default_config::default_config;
 
 use super::embedded_node::EmbeddedNode;
-use super::fiber_api::{FiberNodeApi, FiberNodeInfo};
+use super::fiber_api::{probe_node_info, FiberNodeApi, FiberNodeInfo};
+use super::fiber_client::{FiberClientHandle, BUILTIN_ID};
+use super::rpc_client::RpcClient;
+use super::targets::{new_external_id, StoredExternal, TargetsFile};
 
 /// Append the `/p2p/<node_id>` identity to a fiber multiaddr if it isn't there
 /// yet — a complete fiber address is `/ip4/<ip>/tcp/<port>/p2p/<pubkey>`.
@@ -65,16 +68,23 @@ pub struct RealNodeBackend {
   /// The fiber node's peer id (`Qm…` libp2p PeerId) captured from fiber-lib on
   /// start — this is what goes in `/p2p/<node_id>`, NOT the secp256k1 pubkey.
   node_id: Mutex<Option<String>>,
-  /// The fiber node's secp256k1 identity pubkey (66-hex), captured on start so
-  /// it survives the node stopping. Shared with the liquidity backend so new
-  /// orders are attributed to the current node's identity.
+  /// Built-in node's secp256k1 identity, captured on start. Survives stop and
+  /// is restored onto `node_pubkey` when switching back from an external target.
+  identity_pubkey: Mutex<Option<String>>,
+  /// Currently-active Fiber identity (builtin or external). Shared with the
+  /// liquidity backend so new orders are attributed to the selected node.
   node_pubkey: Arc<Mutex<Option<String>>>,
   /// When the embedded node was (last) started — the uptime anchor. Cleared on
   /// stop, so a stopped node reports `started_at_ms: None`, `uptime_hours: 0`.
   started_at: Mutex<Option<SystemTime>>,
+  /// Hot-swappable Fiber JSON-RPC client shared with the channels backend.
+  handle: FiberClientHandle,
+  targets_path: PathBuf,
+  targets: Mutex<TargetsFile>,
 }
 
 impl RealNodeBackend {
+  #[allow(clippy::too_many_arguments)]
   pub fn new(
     fiber: Arc<dyn FiberNodeApi>,
     config_path: PathBuf,
@@ -82,7 +92,10 @@ impl RealNodeBackend {
     wallet: Arc<dyn SigningWallet>,
     config: Arc<Mutex<NodeConfig>>,
     node_pubkey: Arc<Mutex<Option<String>>>,
+    handle: FiberClientHandle,
+    targets_path: PathBuf,
   ) -> Self {
+    let targets = TargetsFile::load(&targets_path);
     Self {
       fiber,
       config_path,
@@ -92,9 +105,103 @@ impl RealNodeBackend {
       base_dir,
       starting: AtomicBool::new(false),
       node_id: Mutex::new(None),
+      identity_pubkey: Mutex::new(None),
       node_pubkey,
       started_at: Mutex::new(None),
+      handle,
+      targets_path,
+      targets: Mutex::new(targets),
     }
+  }
+
+  /// Point the shared Fiber client at the persisted `active_id` (startup).
+  pub async fn restore_active(&self) {
+    let id = self.targets.lock().unwrap().active_id.clone();
+    if id == BUILTIN_ID {
+      return;
+    }
+    if let Err(e) = self.apply_client(&id).await {
+      log::warn!("restore external node {id}: {e}");
+    }
+  }
+
+  fn make_client(url: &str, token: Option<String>) -> Result<RpcClient, CommandError> {
+    RpcClient::new(url, false, token).map_err(|e| CommandError::invalid_input(e.to_string()))
+  }
+
+  fn builtin_rpc_url(&self) -> String {
+    self.config.lock().unwrap().rpc.listening_addr.clone()
+  }
+
+  fn active_id(&self) -> String {
+    self.targets.lock().unwrap().active_id.clone()
+  }
+
+  fn is_builtin(&self) -> bool {
+    self.active_id() == BUILTIN_ID
+  }
+
+  fn require_builtin(&self) -> Result<(), CommandError> {
+    if self.is_builtin() {
+      Ok(())
+    } else {
+      Err(CommandError::invalid_input(
+        "this action is only available on the built-in node",
+      ))
+    }
+  }
+
+  async fn apply_client(&self, id: &str) -> Result<(), CommandError> {
+    if id == BUILTIN_ID {
+      let url = self.builtin_rpc_url();
+      self.handle.replace(Self::make_client(&url, None)?);
+      let builtin = self.identity_pubkey.lock().unwrap().clone();
+      *self.node_pubkey.lock().unwrap() = builtin;
+      return Ok(());
+    }
+    let ext = self
+      .targets
+      .lock()
+      .unwrap()
+      .find(id)
+      .cloned()
+      .ok_or_else(|| CommandError::invalid_input(format!("unknown node target: {id}")))?;
+    let client = Self::make_client(&ext.rpc_url, ext.auth_token.clone())?;
+    self.handle.replace(client.clone());
+    match probe_node_info(&client, 8).await {
+      Ok(info) => *self.node_pubkey.lock().unwrap() = Some(info.pubkey),
+      Err(_) => *self.node_pubkey.lock().unwrap() = None,
+    }
+    Ok(())
+  }
+
+  fn persist_targets(&self) -> Result<(), CommandError> {
+    self.targets.lock().unwrap().persist(&self.targets_path)
+  }
+
+  fn snapshot_targets(&self, running: bool, starting: bool) -> NodeTargetList {
+    let config = self.config.lock().unwrap();
+    let watchtower = watchtower_from_config(&config);
+    let alias = config.fiber.announced_node_name.clone();
+    drop(config);
+    let file = self.targets.lock().unwrap();
+    NodeTargetList {
+      active_id: file.active_id.clone(),
+      builtin: BuiltinTarget {
+        id: BUILTIN_ID.into(),
+        alias,
+        running,
+        starting,
+        watchtower,
+      },
+      externals: file.to_wire_externals(),
+    }
+  }
+
+  async fn builtin_process_flags(&self) -> (bool, bool) {
+    let running = self.embedded.lock().await.is_some();
+    let starting = self.starting.load(Ordering::SeqCst);
+    (running, starting)
   }
 
   fn runtime_from_info(
@@ -112,6 +219,7 @@ impl RealNodeBackend {
     let node_id = self.node_id.lock().unwrap().clone().unwrap_or_default();
     let fiber_pubkey = info
       .map(|i| i.pubkey.clone())
+      .or_else(|| self.identity_pubkey.lock().unwrap().clone())
       .or_else(|| self.node_pubkey.lock().unwrap().clone())
       .unwrap_or_default();
     let (alias, fiber_pubkey, fiber_addr, addresses, version, commit, peers, channels, pending) =
@@ -210,6 +318,62 @@ impl RealNodeBackend {
       channel_count: channels,
       pending_channel_count: pending,
       watchtower,
+      kind: NodeKind::Builtin,
+      target_id: BUILTIN_ID.into(),
+    }
+  }
+
+  fn external_runtime(
+    &self,
+    info: Option<&FiberNodeInfo>,
+    target_id: &str,
+    alias: &str,
+  ) -> NodeRuntime {
+    match info {
+      Some(i) => NodeRuntime {
+        running: true,
+        starting: false,
+        alias: i.node_name.clone().or_else(|| Some(alias.to_string())),
+        started_at_ms: None,
+        uptime_hours: 0,
+        fiber_pubkey: i.pubkey.clone(),
+        fiber_addr: i.addresses.first().cloned(),
+        addresses: i.addresses.clone(),
+        chain: chain_from_hash(&i.chain_hash),
+        version: Some(i.version.clone()),
+        commit_hash: Some(i.commit_hash.clone()),
+        peers_count: i.peers_count,
+        channel_count: i.channel_count,
+        pending_channel_count: i.pending_channel_count,
+        watchtower: WatchtowerConfig {
+          mode: WatchtowerMode::Disabled,
+          endpoint: None,
+        },
+        kind: NodeKind::External,
+        target_id: target_id.into(),
+      },
+      None => NodeRuntime {
+        running: false,
+        starting: false,
+        alias: Some(alias.to_string()),
+        started_at_ms: None,
+        uptime_hours: 0,
+        fiber_pubkey: self.node_pubkey.lock().unwrap().clone().unwrap_or_default(),
+        fiber_addr: None,
+        addresses: Vec::new(),
+        chain: parse_chain(&self.config.lock().unwrap().fiber.chain),
+        version: None,
+        commit_hash: None,
+        peers_count: 0,
+        channel_count: 0,
+        pending_channel_count: 0,
+        watchtower: WatchtowerConfig {
+          mode: WatchtowerMode::Disabled,
+          endpoint: None,
+        },
+        kind: NodeKind::External,
+        target_id: target_id.into(),
+      },
     }
   }
 
@@ -234,7 +398,9 @@ impl RealNodeBackend {
     if let Some(fiber) = fnn_cfg.fiber.as_ref() {
       let pk = fiber.public_key();
       *self.node_id.lock().unwrap() = Some(pk.peer_id().to_string());
-      *self.node_pubkey.lock().unwrap() = Some(hex::encode(pk.inner_ref()));
+      let hex_pk = hex::encode(pk.inner_ref());
+      *self.identity_pubkey.lock().unwrap() = Some(hex_pk.clone());
+      *self.node_pubkey.lock().unwrap() = Some(hex_pk);
     }
     let node = EmbeddedNode::start(&fnn_cfg).await?;
     *self.embedded.lock().await = Some(node);
@@ -259,6 +425,18 @@ impl RealNodeBackend {
 #[async_trait]
 impl NodeBackend for RealNodeBackend {
   async fn get_runtime(&self) -> Result<NodeRuntime, CommandError> {
+    if !self.is_builtin() {
+      let id = self.active_id();
+      let alias = self
+        .targets
+        .lock()
+        .unwrap()
+        .find(&id)
+        .map(|e| e.alias.clone())
+        .unwrap_or_else(|| id.clone());
+      let info = self.fiber.node_info().await.unwrap_or(None);
+      return Ok(self.external_runtime(info.as_ref(), &id, &alias));
+    }
     let running = self.embedded.lock().await.is_some();
     let starting = self.starting.load(Ordering::SeqCst);
     if running || starting {
@@ -272,6 +450,7 @@ impl NodeBackend for RealNodeBackend {
   }
 
   async fn start(&self, config: Option<NodeConfig>) -> Result<NodeRuntime, CommandError> {
+    self.require_builtin()?;
     // Never start twice — the fiber root actor is a process-global singleton
     // and a second `EmbeddedNode::start` panics with `ActorAlreadyRegistered`.
     if self.embedded.lock().await.is_some() {
@@ -289,6 +468,7 @@ impl NodeBackend for RealNodeBackend {
   }
 
   async fn stop(&self) -> Result<(), CommandError> {
+    self.require_builtin()?;
     if let Some(node) = self.embedded.lock().await.take() {
       node.stop().await?;
     }
@@ -303,6 +483,7 @@ impl NodeBackend for RealNodeBackend {
     since_ts_ms: Option<u64>,
     limit: Option<u32>,
   ) -> Result<Vec<NodeLog>, CommandError> {
+    self.require_builtin()?;
     let buf = super::node_logs::install_log_capture();
     Ok(buf.drain(level, since_ts_ms, limit))
   }
@@ -316,7 +497,131 @@ impl NodeBackend for RealNodeBackend {
     let watchtower = watchtower_from_config(&config);
     persist_config(&self.config_path, &config)?;
     *self.config.lock().unwrap() = config;
+    if self.is_builtin() {
+      let url = self.builtin_rpc_url();
+      if let Ok(client) = Self::make_client(&url, None) {
+        self.handle.replace(client);
+      }
+    }
     Ok(SaveConfigResult { chain, watchtower })
+  }
+
+  async fn list_targets(&self) -> Result<NodeTargetList, CommandError> {
+    let (running, starting) = self.builtin_process_flags().await;
+    Ok(self.snapshot_targets(running, starting))
+  }
+
+  async fn add_external(
+    &self,
+    alias: String,
+    rpc_url: String,
+    auth_token: Option<String>,
+  ) -> Result<NodeTargetList, CommandError> {
+    let alias = alias.trim().to_string();
+    let rpc_url = rpc_url.trim().to_string();
+    if alias.is_empty() {
+      return Err(CommandError::invalid_input("alias is required"));
+    }
+    if rpc_url.is_empty() {
+      return Err(CommandError::invalid_input("rpc url is required"));
+    }
+    let token = auth_token
+      .map(|t| t.trim().to_string())
+      .filter(|t| !t.is_empty());
+    let client = Self::make_client(&rpc_url, token.clone())?;
+    probe_node_info(&client, 8).await?;
+    let stored = StoredExternal {
+      id: new_external_id(),
+      alias,
+      rpc_url,
+      auth_token: token,
+    };
+    {
+      let mut file = self.targets.lock().unwrap();
+      file.externals.push(stored);
+    }
+    self.persist_targets()?;
+    self.list_targets().await
+  }
+
+  async fn update_external(
+    &self,
+    id: String,
+    alias: String,
+    rpc_url: String,
+    auth_token: Option<String>,
+  ) -> Result<NodeTargetList, CommandError> {
+    if id == BUILTIN_ID {
+      return Err(CommandError::invalid_input("cannot edit the built-in node"));
+    }
+    let alias = alias.trim().to_string();
+    let rpc_url = rpc_url.trim().to_string();
+    if alias.is_empty() {
+      return Err(CommandError::invalid_input("alias is required"));
+    }
+    if rpc_url.is_empty() {
+      return Err(CommandError::invalid_input("rpc url is required"));
+    }
+    let token = auth_token
+      .map(|t| t.trim().to_string())
+      .filter(|t| !t.is_empty());
+    let client = Self::make_client(&rpc_url, token.clone())?;
+    probe_node_info(&client, 8).await?;
+    {
+      let mut file = self.targets.lock().unwrap();
+      let ext = file
+        .externals
+        .iter_mut()
+        .find(|e| e.id == id)
+        .ok_or_else(|| CommandError::invalid_input(format!("unknown node target: {id}")))?;
+      ext.alias = alias;
+      ext.rpc_url = rpc_url;
+      ext.auth_token = token;
+    }
+    self.persist_targets()?;
+    if self.active_id() == id {
+      self.apply_client(&id).await?;
+    }
+    self.list_targets().await
+  }
+
+  async fn remove_external(&self, id: String) -> Result<NodeTargetList, CommandError> {
+    if id == BUILTIN_ID {
+      return Err(CommandError::invalid_input(
+        "cannot remove the built-in node",
+      ));
+    }
+    let was_active = self.active_id() == id;
+    {
+      let mut file = self.targets.lock().unwrap();
+      let before = file.externals.len();
+      file.externals.retain(|e| e.id != id);
+      if file.externals.len() == before {
+        return Err(CommandError::invalid_input(format!(
+          "unknown node target: {id}"
+        )));
+      }
+      if was_active {
+        file.active_id = BUILTIN_ID.into();
+      }
+    }
+    self.persist_targets()?;
+    if was_active {
+      self.apply_client(BUILTIN_ID).await?;
+    }
+    self.list_targets().await
+  }
+
+  async fn set_active(&self, id: String) -> Result<NodeRuntime, CommandError> {
+    if id != BUILTIN_ID && self.targets.lock().unwrap().find(&id).is_none() {
+      return Err(CommandError::invalid_input(format!(
+        "unknown node target: {id}"
+      )));
+    }
+    self.targets.lock().unwrap().active_id = id.clone();
+    self.persist_targets()?;
+    self.apply_client(&id).await?;
+    self.get_runtime().await
   }
 }
 
@@ -362,6 +667,12 @@ mod tests {
     }
   }
 
+  fn dummy_handle() -> crate::node::fiber_client::FiberClientHandle {
+    crate::node::fiber_client::FiberClientHandle::new(
+      crate::node::rpc_client::RpcClient::new("127.0.0.1:8227", false, None).unwrap(),
+    )
+  }
+
   fn test_backend(fiber: Arc<dyn FiberNodeApi>) -> (RealNodeBackend, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
     let config_path = dir.path().join("node-config.json");
@@ -374,6 +685,8 @@ mod tests {
         Arc::new(TestWallet),
         config,
         Arc::new(Mutex::new(None)),
+        dummy_handle(),
+        dir.path().join("node-targets.json"),
       ),
       dir,
     )
@@ -426,6 +739,8 @@ mod tests {
         &dir.path().join("node-config.json"),
       ))),
       Arc::new(Mutex::new(None)),
+      dummy_handle(),
+      dir.path().join("node-targets.json"),
     );
     assert_eq!(
       reloaded
@@ -469,5 +784,29 @@ mod tests {
     let r = backend.runtime_from_info(Some(&sample_info()), false, false);
     assert_eq!(r.uptime_hours, 0);
     assert!(r.started_at_ms.is_none(), "no start anchor while stopped");
+  }
+
+  #[tokio::test]
+  async fn list_targets_defaults_to_builtin() {
+    let (backend, _dir) = test_backend(Arc::new(MockFiberApi::new(None)));
+    let list = backend.list_targets().await.unwrap();
+    assert_eq!(list.active_id, "builtin");
+    assert!(list.externals.is_empty());
+    assert!(!list.builtin.running);
+  }
+
+  #[tokio::test]
+  async fn set_active_unknown_id_errors() {
+    let (backend, _dir) = test_backend(Arc::new(MockFiberApi::new(None)));
+    let err = backend.set_active("nope".into()).await.unwrap_err();
+    assert!(err.to_string().contains("unknown node target"));
+  }
+
+  #[tokio::test]
+  async fn start_rejected_when_external_is_active() {
+    let (backend, _dir) = test_backend(Arc::new(MockFiberApi::new(None)));
+    backend.targets.lock().unwrap().active_id = "ext1".into();
+    let err = backend.start(None).await.unwrap_err();
+    assert!(err.to_string().contains("built-in"));
   }
 }

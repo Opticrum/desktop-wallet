@@ -1,34 +1,45 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { node } from '../api/client'
-import type { Chain } from '../api/types'
+import type { Chain, NodeKind, NodeRuntime } from '../api/types'
 
 /** Back-compat alias — used by the config form context. */
 export type NodeChain = Chain
 
 type NodeCtx = {
-  /** CKB chain the node is configured for — drives the liquidity market network. */
+  /** CKB chain the *selected* node is on — drives the liquidity market network. */
   chain: Chain
   setChain: (chain: Chain) => void
-  /** Whether the embedded node is up and fully started — gates every action
-   *  that needs the node (出金/入金, liquidity 注入/抽离, publish/cancel). */
+  /** Whether the selected Fiber RPC is reachable / the builtin process is up. */
   running: boolean
   starting: boolean
-  /** The fiber node's identity pubkey (66-hex). Orders whose cell pubkey differs
-   *  were created under an older/different node identity → flagged as legacy. */
+  /** The selected node's identity pubkey (66-hex). Orders whose cell pubkey
+   *  differs were created under an older/different node identity → flagged as legacy. */
   fiberPubkey: string
+  kind: NodeKind
+  targetId: string
+  /** Push a runtime snapshot immediately after `node.set_active` so liquidity
+   *  gating doesn't wait for the 5s poll. */
+  applyRuntime: (r: NodeRuntime) => void
 }
 
 const NodeContext = createContext<NodeCtx | null>(null)
 
 export function NodeProvider({ children }: { children: ReactNode }) {
-  // Authoritative chain comes from `node.get_runtime` (persisted config);
-  // `setChain` is called with the result of `node.save_config`.
   const [chain, setChain] = useState<Chain>('testnet')
-  // Optimistic default — the mock runtime is up; real node resolves on the
-  // first poll. Conservative readers should gate on `running && !starting`.
   const [running, setRunning] = useState(true)
   const [starting, setStarting] = useState(false)
   const [fiberPubkey, setFiberPubkey] = useState('')
+  const [kind, setKind] = useState<NodeKind>('builtin')
+  const [targetId, setTargetId] = useState('builtin')
+
+  const applyRuntime = useCallback((r: NodeRuntime) => {
+    setChain(r.chain)
+    setRunning(r.running)
+    setStarting(r.starting)
+    setFiberPubkey(r.fiberPubkey)
+    setKind(r.kind ?? 'builtin')
+    setTargetId(r.targetId || 'builtin')
+  }, [])
 
   useEffect(() => {
     let alive = true
@@ -37,25 +48,29 @@ export function NodeProvider({ children }: { children: ReactNode }) {
         .getRuntime()
         .then((r) => {
           if (!alive) return
-          setChain(r.chain)
-          setRunning(r.running)
-          setStarting(r.starting)
-          setFiberPubkey(r.fiberPubkey)
+          applyRuntime(r)
         })
         .catch(() => {})
     poll()
-    // Poll so node-dependent actions disable promptly when the node stops and
-    // re-enable once it is back up (mirrors NodeControlPanel's cadence).
     const id = window.setInterval(poll, 5000)
     return () => {
       alive = false
       window.clearInterval(id)
     }
-  }, [])
+  }, [applyRuntime])
 
   const value = useMemo(
-    () => ({ chain, setChain, running, starting, fiberPubkey }),
-    [chain, running, starting, fiberPubkey],
+    () => ({
+      chain,
+      setChain,
+      running,
+      starting,
+      fiberPubkey,
+      kind,
+      targetId,
+      applyRuntime,
+    }),
+    [chain, running, starting, fiberPubkey, kind, targetId, applyRuntime],
   )
 
   return <NodeContext.Provider value={value}>{children}</NodeContext.Provider>

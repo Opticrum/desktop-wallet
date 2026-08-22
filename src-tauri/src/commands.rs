@@ -210,6 +210,52 @@ pub async fn node_open_url(url: String) -> Result<(), CommandError> {
   crate::fnn_cli::open_url(&url).map_err(CommandError::io)
 }
 
+#[tauri::command]
+pub async fn node_list_targets(state: State<'_, AppState>) -> Result<NodeTargetList, CommandError> {
+  state.0.node.list_targets().await
+}
+
+#[tauri::command]
+pub async fn node_add_external(
+  state: State<'_, AppState>,
+  alias: String,
+  rpc_url: String,
+  auth_token: Option<String>,
+) -> Result<NodeTargetList, CommandError> {
+  state.0.node.add_external(alias, rpc_url, auth_token).await
+}
+
+#[tauri::command]
+pub async fn node_update_external(
+  state: State<'_, AppState>,
+  id: String,
+  alias: String,
+  rpc_url: String,
+  auth_token: Option<String>,
+) -> Result<NodeTargetList, CommandError> {
+  state
+    .0
+    .node
+    .update_external(id, alias, rpc_url, auth_token)
+    .await
+}
+
+#[tauri::command]
+pub async fn node_remove_external(
+  state: State<'_, AppState>,
+  id: String,
+) -> Result<NodeTargetList, CommandError> {
+  state.0.node.remove_external(id).await
+}
+
+#[tauri::command]
+pub async fn node_set_active(
+  state: State<'_, AppState>,
+  id: String,
+) -> Result<NodeRuntime, CommandError> {
+  state.0.node.set_active(id).await
+}
+
 // ── channels ─────────────────────────────────────────────────────────────────
 
 #[tauri::command]

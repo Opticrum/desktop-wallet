@@ -4,6 +4,25 @@ export type Messages = {
   brand: string
   brandSub: string
   nodeLabel: string
+  nodeBuiltin: string
+  nodeExternals: string
+  nodeAddExternal: string
+  nodeEditExternal: string
+  nodeRemoveExternal: string
+  nodeExternalAlias: string
+  nodeExternalRpcUrl: string
+  nodeExternalToken: string
+  nodeExternalTokenHint: string
+  nodeExternalSave: string
+  nodeExternalBusy: string
+  nodeReachable: string
+  nodeUnreachable: string
+  nodeConfirmRemoveExternalTitle: string
+  nodeConfirmRemoveExternalBody: string
+  nodeWalletLocked: string
+  nodeWalletUnlocked: string
+  nodeNoExternals: string
+  nodeEditConnection: string
   locked: string
   availableCkb: string
   lockedFiber: string
@@ -64,6 +83,8 @@ export type Messages = {
   walletPrivateKey: string
   walletCreateAction: string
   walletUnlockAction: string
+  walletLockAction: string
+  walletReceive: string
   walletImportMnemonicAction: string
   walletImportKeyAction: string
   walletCancel: string

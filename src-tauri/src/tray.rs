@@ -92,14 +92,14 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
   let backend = app.state::<AppState>().0.clone();
   tauri::async_runtime::spawn(async move {
     loop {
-      if let Ok(rt) = backend.node.get_runtime().await {
+      if let Ok(list) = backend.node.list_targets().await {
         let changed = {
           let status_state = handle.state::<TrayStatusState>();
           let mut status = status_state.0.lock().unwrap();
-          let watchtower_running = rt.watchtower.mode != WatchtowerMode::Disabled;
-          let changed =
-            status.node_running != rt.running || status.watchtower_running != watchtower_running;
-          status.node_running = rt.running;
+          let watchtower_running = list.builtin.watchtower.mode != WatchtowerMode::Disabled;
+          let changed = status.node_running != list.builtin.running
+            || status.watchtower_running != watchtower_running;
+          status.node_running = list.builtin.running;
           status.watchtower_running = watchtower_running;
           changed
         };

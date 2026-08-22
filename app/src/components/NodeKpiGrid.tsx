@@ -26,13 +26,12 @@ function IconReceive() {
 }
 
 /**
- * Node connection KPIs — a compact 2×2 grid shown above the wallet module
- * in the node sidebar (outbound/inbound balance + node/channel counts).
+ * Node connection KPIs — a compact 4-column strip between the control panel
+ * and the logs (outbound/inbound balance + node/channel counts).
  * Data comes from `channels.list`; the sums are frontend formulas.
  *
- * 出金/入金 are action cards like the wallet balance: clicking opens a
- * send-Fiber-transfer / generate-invoice dialog, each capped at its own
- * capacity (outbound = local balances, inbound = remote balances).
+ * 出金/入金 are action cards: clicking opens a send-Fiber-transfer /
+ * generate-invoice dialog, each capped at its own capacity.
  */
 export function NodeKpiGrid({
   refreshKey = 0,
@@ -42,7 +41,7 @@ export function NodeKpiGrid({
   onToast?: (msg: string) => void
 }) {
   const { t } = useLocale()
-  const { running, chain } = useNode()
+  const { running, chain, targetId } = useNode()
   const [data, setData] = useState<ChannelList | null>(null)
   const [sendOpen, setSendOpen] = useState(false)
   const [invoiceOpen, setInvoiceOpen] = useState(false)
@@ -65,7 +64,7 @@ export function NodeKpiGrid({
   // Initial + manual toolbar refresh.
   useEffect(() => {
     load()
-  }, [load, refreshKey])
+  }, [load, refreshKey, targetId])
 
   // The Fiber node starts/restarts independently of this component — watch the
   // runtime from NodeContext and re-fetch the overview on the stopped→running
@@ -99,10 +98,7 @@ export function NodeKpiGrid({
   const inboundCkb = all.reduce((sum, c) => sum + c.remoteBalanceCkb, 0)
 
   return (
-    <section className="panel node-kpi-grid">
-      <div className="section-head">
-        <h2 className="node-section-title">{t.nodeOverview}</h2>
-      </div>
+    <section className="node-kpi-grid node-kpi-strip">
       <div className="kpi-grid conn-kpis">
         <button
           type="button"

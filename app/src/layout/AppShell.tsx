@@ -13,8 +13,8 @@ export function AppShell() {
   return (
     <div className="app-shell">
       <TopBar />
-      <main className="center-panel">
-        <div className={`app-page${isNode ? ' is-active' : ''}`}>
+      <main className={`center-panel${isNode ? ' is-node' : ''}`}>
+        <div className={`app-page${isNode ? ' is-active is-node' : ''}`}>
           <NodeDetail />
         </div>
         <div className={`app-page${isLiquidity ? ' is-active' : ''}`}>

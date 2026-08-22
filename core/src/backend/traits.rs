@@ -14,8 +14,8 @@ use super::TxProgressReporter;
 use crate::wire::{
   Chain, ChannelList, CommandError, ConnectPeerResult, CreateWalletResult, DashboardData,
   ExtractResult, LiquidityMatch, LiquidityOrder, LogLevel, MatchDeadline, NodeConfig, NodeLog,
-  NodeRuntime, OpenChannelResult, PublishOrderResult, SaveConfigResult, TxHashResult,
-  WalletAddress, WalletStatus, WalletSummary, WalletTx,
+  NodeRuntime, NodeTargetList, OpenChannelResult, PublishOrderResult, SaveConfigResult,
+  TxHashResult, WalletAddress, WalletStatus, WalletSummary, WalletTx,
 };
 
 #[async_trait]
@@ -76,6 +76,22 @@ pub trait NodeBackend: Send + Sync {
   ) -> Result<Vec<NodeLog>, CommandError>;
   async fn get_config(&self) -> Result<NodeConfig, CommandError>;
   async fn save_config(&self, config: NodeConfig) -> Result<SaveConfigResult, CommandError>;
+  async fn list_targets(&self) -> Result<NodeTargetList, CommandError>;
+  async fn add_external(
+    &self,
+    alias: String,
+    rpc_url: String,
+    auth_token: Option<String>,
+  ) -> Result<NodeTargetList, CommandError>;
+  async fn update_external(
+    &self,
+    id: String,
+    alias: String,
+    rpc_url: String,
+    auth_token: Option<String>,
+  ) -> Result<NodeTargetList, CommandError>;
+  async fn remove_external(&self, id: String) -> Result<NodeTargetList, CommandError>;
+  async fn set_active(&self, id: String) -> Result<NodeRuntime, CommandError>;
 }
 
 #[async_trait]

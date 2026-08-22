@@ -136,21 +136,25 @@ impl BackendBundle {
       Some(db::init_db(&cfg.database_url)?),
     ));
 
-    // Node + channels: attached fiber node at the default config's RPC address
-    // (dynamic reconnect on config change is a P5 refinement).
+    // Node + channels share a hot-swappable Fiber RPC client so set_active
+    // retargets every Fiber call without rebuilding the backends.
     use crate::node::fiber_api::{FiberNodeApi, FiberRpcApi};
+    use crate::node::fiber_client::FiberClientHandle;
     use crate::node::rpc_client::RpcClient as FiberRpcClient;
-    use crate::node::{real_channels::RealChannelsBackend, real_node::RealNodeBackend};
-    let fiber_url = crate::node::default_config::default_config()
-      .rpc
-      .listening_addr;
+    use crate::node::{real_channels::RealChannelsBackend, real_node::RealNodeBackend, targets};
+    let fiber_url = {
+      let cfg = node_config.lock().unwrap();
+      cfg.rpc.listening_addr.clone()
+    };
     let fiber_client = FiberRpcClient::new(&fiber_url, false, None).expect("valid fiber rpc url");
-    let fiber_api: Arc<dyn FiberNodeApi> = Arc::new(FiberRpcApi::new(fiber_client.clone()));
+    let handle = FiberClientHandle::new(fiber_client);
+    let fiber_api: Arc<dyn FiberNodeApi> = Arc::new(FiberRpcApi::new(handle.clone()));
     let node_config_path = std::path::PathBuf::from(&cfg.node_config_path);
     let node_base_dir = node_config_path
       .parent()
       .unwrap_or(std::path::Path::new("data"))
       .join("fiber-node");
+    let targets_path = targets::targets_path_beside(&node_config_path);
     let node = Arc::new(RealNodeBackend::new(
       fiber_api,
       node_config_path,
@@ -158,9 +162,12 @@ impl BackendBundle {
       wallet.clone(),
       node_config,
       node_pubkey,
+      handle.clone(),
+      targets_path,
     ));
+    node.restore_active().await;
     let channels = Arc::new(RealChannelsBackend::new(Arc::new(
-      crate::node::real_channels::RealFiberChannels::new(fiber_client),
+      crate::node::real_channels::RealFiberChannels::new(handle),
     )));
 
     Ok(BackendBundle {

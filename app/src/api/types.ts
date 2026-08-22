@@ -61,6 +61,8 @@ export type WalletTx = {
 
 // ── node ──────────────────────────────────────────────────────────────────
 
+export type NodeKind = 'builtin' | 'external'
+
 export type NodeRuntime = {
   running: boolean
   starting: boolean
@@ -77,6 +79,29 @@ export type NodeRuntime = {
   channelCount: number
   pendingChannelCount: number
   watchtower: WatchtowerConfig
+  kind: NodeKind
+  targetId: string
+}
+
+export type BuiltinTarget = {
+  id: string
+  alias: string
+  running: boolean
+  starting: boolean
+  watchtower: WatchtowerConfig
+}
+
+export type ExternalTarget = {
+  id: string
+  alias: string
+  rpcUrl: string
+  authToken?: string | null
+}
+
+export type NodeTargetList = {
+  activeId: string
+  builtin: BuiltinTarget
+  externals: ExternalTarget[]
 }
 
 export type NodeLog = {

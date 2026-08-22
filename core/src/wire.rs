@@ -152,6 +152,15 @@ pub struct WalletTx {
 
 // ── node ─────────────────────────────────────────────────────────────────────
 
+/// Which Fiber RPC the desktop is currently talking to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum NodeKind {
+  #[default]
+  Builtin,
+  External,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NodeRuntime {
@@ -176,6 +185,47 @@ pub struct NodeRuntime {
   pub channel_count: u32,
   pub pending_channel_count: u32,
   pub watchtower: WatchtowerConfig,
+  /// Built-in embedded process vs a user-added remote Fiber RPC.
+  #[serde(default)]
+  pub kind: NodeKind,
+  /// `"builtin"` or the external target's id. Default keeps older test fixtures compiling.
+  #[serde(default = "default_builtin_id")]
+  pub target_id: String,
+}
+
+fn default_builtin_id() -> String {
+  "builtin".into()
+}
+
+/// Local embedded node as shown in `node.list_targets`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuiltinTarget {
+  pub id: String,
+  pub alias: String,
+  pub running: bool,
+  pub starting: bool,
+  pub watchtower: WatchtowerConfig,
+}
+
+/// A user-configured remote Fiber JSON-RPC endpoint.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExternalTarget {
+  pub id: String,
+  pub alias: String,
+  pub rpc_url: String,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub auth_token: Option<String>,
+}
+
+/// `node.list_targets` / add / update / remove return this snapshot.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeTargetList {
+  pub active_id: String,
+  pub builtin: BuiltinTarget,
+  pub externals: Vec<ExternalTarget>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -142,6 +142,11 @@ pub fn run() {
       commands::node_fnn_cli_status,
       commands::node_fnn_cli_open,
       commands::node_open_url,
+      commands::node_list_targets,
+      commands::node_add_external,
+      commands::node_update_external,
+      commands::node_remove_external,
+      commands::node_set_active,
       // channels
       commands::channels_list,
       commands::channels_connect_peer,
