@@ -16,6 +16,7 @@
   top: 0;
   z-index: 100;
   flex-shrink: 0;
+  overflow: visible;
 }
 
 .top-bar {
@@ -23,6 +24,7 @@
   background: var(--bg-elevated);
   border-bottom: 1px solid var(--border);
   box-shadow: 0 1px 8px rgb(0 0 0 / 6%);
+  overflow: visible;
 }
 
 /* ── Inner container ─────────────────────────────────────────────────────── */
@@ -31,6 +33,7 @@
   height: 50px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 0 24px;
   gap: 32px;
   user-select: none;
@@ -103,94 +106,6 @@
   transform: translateY(-50%);
 }
 
-/* ── Nav ───────────────────────────────────────────────────────────────── */
-
-.top-bar-nav {
-  display: flex;
-  align-items: stretch;
-  gap: 2px;
-  flex: 1;
-  min-width: 0;
-}
-
-.top-bar-nav-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  border-radius: 6px;
-  color: var(--text-secondary);
-  text-decoration: none;
-  font-size: 13px;
-  font-weight: 500;
-  transition: color 0.12s ease, background 0.12s ease;
-  white-space: nowrap;
-  border: none;
-  background: none;
-}
-
-.top-bar-nav-item.active {
-  color: var(--accent);
-  background: var(--accent-muted);
-}
-
-.top-bar-nav-item:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-
-/* Disabled entry — presentational pin, not navigable */
-.top-bar-nav-item.disabled {
-  cursor: not-allowed;
-}
-
-.top-bar-nav-item.disabled:hover {
-  background: var(--danger-soft);
-  color: var(--danger);
-}
-
-.top-bar-nav-item.disabled:hover .top-bar-nav-glyph {
-  background: var(--danger);
-  color: #fff;
-}
-
-/* Lock badge — slides in on hover to signal the entry is pinned */
-.top-bar-lock {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 0;
-  overflow: hidden;
-  opacity: 0;
-  flex-shrink: 0;
-  transition: width 0.15s ease, opacity 0.15s ease;
-}
-
-.top-bar-nav-item.disabled:hover .top-bar-lock {
-  width: 16px;
-  opacity: 1;
-}
-
-.top-bar-nav-glyph {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 4px;
-  background: var(--bg-muted);
-  color: var(--text-tertiary);
-  font-size: 10px;
-  font-weight: 700;
-  flex-shrink: 0;
-  transition: background 0.12s ease, color 0.12s ease;
-}
-
-.top-bar-nav-item.active .top-bar-nav-glyph {
-  background: var(--accent);
-  color: #fff;
-}
-
 /* ── Top bar right section ─────────────────────────────────────────────── */
 
 .top-bar-right {
@@ -198,6 +113,277 @@
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+}
+
+/* Market chip — teal identity pill, not a chrome twin of Theme / EN / About.
+   Idle = Opticrum 市场概况; hover swaps the face and drops the dashboard. */
+.tb-market {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.tb-market-btn {
+  position: relative;
+  height: 30px;
+  padding: 0 13px 0 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--tb-market-chip-bg);
+  color: var(--tb-market-chip-ink);
+  box-shadow: var(--tb-market-chip-shadow);
+  cursor: pointer;
+  transition-property: background-color, color, box-shadow, transform;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Expand the hit area vertically to 40px without growing the visual pill. */
+.tb-market-btn::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 40px;
+  transform: translateY(-50%);
+}
+
+.tb-market:hover .tb-market-btn,
+.tb-market.is-open .tb-market-btn {
+  background: var(--tb-market-chip-bg-hover);
+  color: var(--tb-market-chip-ink-hover);
+  box-shadow: var(--tb-market-chip-shadow-hover);
+}
+
+.tb-market-btn:active {
+  transform: scale(0.96);
+}
+
+.tb-market-btn:focus-visible {
+  outline: 2px solid var(--me-accent);
+  outline-offset: 2px;
+}
+
+.tb-market-mark {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+}
+
+.tb-market-mark-core {
+  fill: currentColor;
+  stroke: none;
+}
+
+.tb-market-faces {
+  position: relative;
+  display: block;
+}
+
+.tb-market-label,
+.tb-market-hint {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1;
+  white-space: nowrap;
+  transition-property: opacity, transform, filter;
+  transition-duration: 160ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.tb-market-label {
+  display: block;
+}
+
+.tb-market-hint {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  opacity: 0;
+  transform: scale(0.25);
+  filter: blur(4px);
+  pointer-events: none;
+}
+
+.tb-market-hint svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tb-market:hover .tb-market-label,
+.tb-market.is-open .tb-market-label {
+  opacity: 0;
+  transform: scale(0.96);
+  filter: blur(4px);
+}
+
+.tb-market:hover .tb-market-hint,
+.tb-market.is-open .tb-market-hint {
+  opacity: 1;
+  transform: scale(1);
+  filter: blur(0);
+}
+
+.tb-market-btn.is-refreshing .tb-market-hint svg {
+  animation: refresh-spin 0.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tb-market-btn,
+  .tb-market-label,
+  .tb-market-hint {
+    transition: none;
+  }
+  .tb-market-label,
+  .tb-market-hint {
+    transform: none;
+    filter: none;
+  }
+}
+
+/* Market flyout — teal-tinted sheet, lifted off the page cards so the
+   dashboard reads as its own surface, not another node panel. */
+.tb-market-flyout {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 300px;
+  padding: 16px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--tb-market-flyout-bg);
+  border: 1px solid var(--tb-market-flyout-line);
+  border-radius: var(--radius);
+  box-shadow: var(--tb-market-flyout-shadow);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-6px);
+  transition-property: opacity, transform, visibility;
+  transition-duration: 160ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  z-index: 20;
+}
+
+.tb-market-flyout::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 10px;
+}
+
+.tb-market:hover .tb-market-flyout,
+.tb-market.is-open .tb-market-flyout {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.tb-market-flyout-head {
+  padding-top: 2px;
+}
+
+.tb-market-flyout-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+.tb-market-flyout .lm-dash-figure {
+  gap: 6px;
+}
+
+.tb-market-flyout .stat-label {
+  color: var(--ink-3);
+}
+
+.tb-market-flyout .lm-dash-value {
+  font-size: 24px;
+  color: var(--me-accent);
+}
+
+.tb-market-flyout .lm-dash-unit {
+  color: var(--ink-3);
+}
+
+.tb-market-flyout .kpi-grid {
+  gap: 8px;
+  margin: 0;
+}
+
+.tb-market-flyout .kpi {
+  background: var(--tb-market-flyout-well);
+  min-height: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  box-shadow: none;
+  border: 1px solid color-mix(in srgb, var(--me-accent) 16%, transparent);
+}
+
+.tb-market-flyout .kpi-label {
+  font-size: 10px;
+  color: var(--ink-3);
+}
+
+.tb-market-flyout .kpi-value,
+.tb-market-flyout .conn-kpis .kpi-value {
+  flex: none;
+  font-size: 15px;
+  margin-top: 2px;
+  color: var(--ink);
+}
+
+.tb-market-flyout .kpi-sub {
+  margin-top: 0;
+  font-size: 10px;
+}
+
+.tb-market-flyout .lm-yield {
+  gap: 8px;
+}
+
+.tb-market-flyout .lm-yield-track {
+  background: var(--tb-market-flyout-track);
+  border-color: color-mix(in srgb, var(--me-accent) 18%, transparent);
+}
+
+.tb-market-flyout .lm-yield-fill {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--me-accent) 55%, transparent),
+    var(--me-accent)
+  );
+}
+
+.tb-market-flyout .lm-yield-row-label,
+.tb-market-flyout .lm-yield-row-count {
+  color: var(--ink-2);
+}
+
+.tb-market-flyout .lm-yield-empty {
+  color: var(--ink-3);
 }
 
 .top-bar-quick-btn {
@@ -234,6 +420,39 @@
 .top-bar-quick-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Bare GitHub mark — not a chrome twin of Theme / EN / About. */
+.top-bar-github {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  line-height: 0;
+}
+
+.top-bar-github:hover {
+  color: var(--text-primary);
+}
+
+.top-bar-github:active {
+  color: var(--accent);
+}
+
+.top-bar-github:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.top-bar-github svg {
+  display: block;
+  width: 20px;
+  height: 20px;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -2415,6 +2634,7 @@ body:has(.modal-backdrop, .send-modal-backdrop, .drawer-backdrop) .center-panel 
 }
 
 .node-frames {
+  position: relative;
   display: flex;
   flex: 1;
   min-height: 0;
@@ -2445,6 +2665,295 @@ body:has(.modal-backdrop, .send-modal-backdrop, .drawer-backdrop) .center-panel 
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* Section switch — 节点列表 | 入金流动性.
+   Recessed-slate track (same family as the logs well). The active pane's
+   toolbar (新建连接 / 购买流动性) is pulled onto this row (absolute,
+   top-right) so the switcher and actions share one rail. Inactive pane
+   stays `display: none`. */
+.node-section-block {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.node-section-tabs {
+  display: inline-flex;
+  align-items: stretch;
+  align-self: flex-start;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--page-bg) 38%, var(--surface) 62%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--ink) 5%, transparent),
+    0 0 0 1px var(--line);
+}
+
+.node-section-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 13px 0 11px;
+  appearance: none;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-3);
+  cursor: pointer;
+  white-space: nowrap;
+  transition-property: color, background-color, box-shadow, transform;
+  transition-duration: 160ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.node-section-tab svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.node-section-tab:hover {
+  color: var(--ink);
+}
+
+.node-section-tab:active {
+  transform: scale(0.96);
+}
+
+.node-section-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.node-section-tab.is-active {
+  color: var(--accent-ink);
+  font-weight: 700;
+  background: var(--accent);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.node-section-tab.is-active:hover {
+  background: var(--accent-hover);
+  color: var(--accent-ink);
+}
+
+.node-section-tab.is-active:focus-visible {
+  outline-color: var(--accent-hover);
+}
+
+.node-section-pane {
+  display: none;
+}
+
+.node-section-pane.is-active {
+  display: block;
+}
+
+.node-section-pane.is-active .node-tabbar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  margin: 0;
+}
+
+/* Liquidity tab — fill leftover height under overview/logs so the cell
+   pool is the pane canvas. Node-list tab is unchanged (document scroll). */
+.node-content:has(#node-section-liquidity.is-active) {
+  display: flex;
+  flex-direction: column;
+}
+
+.node-content:has(#node-section-liquidity.is-active) .node-content-inner {
+  flex: 1 0 auto;
+  min-height: 100%;
+  width: 100%;
+}
+
+.node-content-inner:has(#node-section-liquidity.is-active) .node-section-block {
+  flex: 1 0 auto;
+  min-height: 0;
+}
+
+#node-section-liquidity.is-active {
+  display: flex;
+  flex-direction: column;
+  flex: 1 0 auto;
+  min-height: 720px;
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node-section-tab {
+    transition: none;
+  }
+
+  .node-section-tab:active {
+    transform: none;
+  }
+}
+
+.node-liq-panel,
+.node-liq-panel.lm-main {
+  margin-top: 0;
+  flex: 1 0 auto;
+  min-height: 720px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.node-liq-panel .lm-pool {
+  flex: 1;
+  min-height: 720px;
+  width: 100%;
+  aspect-ratio: auto;
+  max-height: none;
+}
+
+.node-liq-panel .lm-pool-hud {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 5;
+  width: fit-content;
+  max-width: 100%;
+  margin-inline: auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px 14px;
+  padding: 8px 10px 8px 8px;
+  overflow: visible;
+  box-shadow: var(--shadow-elevate);
+  pointer-events: auto;
+}
+
+.node-liq-panel .lm-pool-hud .lm-strip-kpis {
+  gap: 16px;
+  min-width: 0;
+}
+
+.node-liq-panel .lm-pool-hud .lm-kpi-value {
+  font-size: 15px;
+}
+
+.node-liq-panel .lm-node-hint {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 4;
+  width: auto;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.node-liq-panel .lm-wallet-lock-hint {
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.node-liq-sheet {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+}
+
+.node-liq-sheet .lm-drawer {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  max-width: 100%;
+  max-height: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  animation: none;
+  transform: none;
+}
+
+.node-liq-sheet .kpi-grid.kpi-grid-2 {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.node-liq-sheet .lm-drawer-kpi,
+.node-liq-sheet .lm-drawer-kpi-note,
+.node-liq-sheet .lm-drawer-figure,
+.node-liq-sheet .lm-drawer-details,
+.node-liq-sheet .lm-drawer-actions,
+.node-liq-sheet .ms-detail,
+.node-liq-sheet .ms-detail-value,
+.node-liq-sheet .copyable,
+.node-liq-sheet .section-head,
+.node-liq-sheet .lm-drawer-status {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.node-liq-sheet .lm-drawer-tx {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.node-liq-sheet .lm-extraction-cols {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.node-liq-sheet .lm-extraction-col-label,
+.node-liq-sheet .lm-extraction-col-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Monitor card + 2×2 KPI cluster share the top row. The monitor shortens
+   on the right so the four KPIs sit beside it instead of a full-width strip. */
+.node-overview-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.node-overview-row .node-control-panel {
+  min-width: 0;
+}
+
+.node-overview-row .ncp-status-bar {
+  flex-wrap: nowrap;
+}
+
+.node-overview-row .node-kpi-grid {
+  min-width: 0;
+  display: flex;
+}
+
+.node-overview-row .node-kpi-grid .kpi-grid {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
 }
 
 .node-layout {
@@ -2666,6 +3175,10 @@ body:has(.modal-backdrop, .send-modal-backdrop, .drawer-backdrop) .center-panel 
   overflow: hidden;
   overscroll-behavior: contain;
   animation: backdrop-in 140ms ease-out;
+}
+
+.modal-backdrop.is-over-drawer {
+  z-index: 350;
 }
 
 @keyframes backdrop-in {
@@ -2957,7 +3470,7 @@ body:has(.modal-backdrop, .send-modal-backdrop, .drawer-backdrop) .center-panel 
   word-break: break-word;
 }
 
-/* Copyable tx hash plate */
+/* Tx hash plate — hash opens the explorer; copy is a side action */
 .ckb-tx-hash {
   display: flex;
   flex-direction: column;
@@ -2968,20 +3481,14 @@ body:has(.modal-backdrop, .send-modal-backdrop, .drawer-backdrop) .center-panel 
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
   background: var(--surface-2);
-  cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.ckb-tx-hash:hover,
-.ckb-tx-hash:focus-visible {
-  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--ok) 14%, transparent);
+  text-align: left;
 }
 
 .ckb-tx-hash-label {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -2990,17 +3497,35 @@ body:has(.modal-backdrop, .send-modal-backdrop, .drawer-backdrop) .center-panel 
 }
 
 .ckb-tx-hash-copy {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 40px;
+  margin: -10px -8px -10px 0;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: none;
   font-size: 11px;
   font-weight: 700;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition-property: color, background-color, transform;
+  transition-duration: 0.15s;
+  transition-timing-function: ease;
+}
+
+.ckb-tx-hash-copy:hover,
+.ckb-tx-hash-copy:focus-visible {
   color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
 }
 
 .ckb-tx-hash-copy svg {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   stroke: currentColor;
   fill: none;
   stroke-width: 1.8;
@@ -3009,17 +3534,81 @@ body:has(.modal-backdrop, .send-modal-backdrop, .drawer-backdrop) .center-panel 
 }
 
 .ckb-tx-hash-value {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 4px 0 0;
+  border: none;
+  background: none;
+  appearance: none;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--ink-2);
+  color: var(--accent);
   word-break: break-all;
   text-align: left;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  transition-property: color, transform;
+  transition-duration: 0.15s;
+  transition-timing-function: ease;
+}
+
+.ckb-tx-hash-value:hover,
+.ckb-tx-hash-value:focus-visible {
+  color: var(--accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ckb-tx-hash-copy:active {
+  transform: scale(0.96);
+}
+
+.ckb-tx-hash-value:active {
+  transform: scale(0.96);
+}
+
+.ckb-tx-hash-value span {
+  flex: 1;
+  min-width: 0;
+}
+
+.ckb-tx-hash-value svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .ckb-tx-done {
   margin-top: 18px;
   width: 100%;
   justify-content: center;
+}
+
+/* Channel-open wait dialog — status icon + channel id, no CKB stepper */
+.channel-open-id {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin-top: 14px;
+  text-align: left;
+}
+
+.channel-open-id-k {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-4);
 }
 
 /* Enlarged receive QR dialog (click the QR on the wallet page) */
@@ -3282,26 +3871,21 @@ body:has(.modal-backdrop, .send-modal-backdrop, .drawer-backdrop) .center-panel 
   box-shadow: none;
 }
 
-/* Large node config modal — YAML view/edit */
-.config-modal {
+/* Node config — structured form inside a bottom drawer */
+.config-drawer {
   display: flex;
   flex-direction: column;
-  background: var(--surface);
-  border-radius: var(--radius-lg);
-  width: 100%;
-  max-width: 880px;
-  height: min(78vh, 720px);
-  box-shadow: var(--shadow-panel);
-  animation: modal-in 180ms ease-out;
-  overflow: hidden;
+  height: 100%;
+  min-height: 0;
 }
 
 .config-modal-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 24px 16px;
+  padding: 8px 24px 16px;
   border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
 }
 
 .config-modal-title {
@@ -3330,35 +3914,6 @@ body:has(.modal-backdrop, .send-modal-backdrop, .drawer-backdrop) .center-panel 
   letter-spacing: 0.03em;
 }
 
-.config-modal-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 8px;
-  background: none;
-  color: var(--ink-3);
-  cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
-}
-
-.config-modal-close:hover {
-  background: var(--surface-2);
-  color: var(--ink);
-}
-
-.config-modal-close svg {
-  width: 16px;
-  height: 16px;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
 .config-modal-body {
   flex: 1;
   min-height: 0;
@@ -3376,6 +3931,7 @@ body:has(.modal-backdrop, .send-modal-backdrop, .drawer-backdrop) .center-panel 
   gap: 27px;
   padding: 0 24px;
   border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
 }
 
 .config-modal-tab {
@@ -4063,6 +4619,7 @@ body:has(.modal-backdrop, .send-modal-backdrop, .drawer-backdrop) .center-panel 
   gap: 16px;
   padding: 14px 24px 20px;
   border-top: 1px solid var(--line);
+  flex-shrink: 0;
 }
 
 .config-modal-path {
@@ -4116,6 +4673,11 @@ body:has(.modal-backdrop, .send-modal-backdrop, .drawer-backdrop) .center-panel 
   opacity: 1;
 }
 
+.drawer-backdrop.is-side {
+  align-items: stretch;
+  justify-content: flex-end;
+}
+
 .drawer-backdrop:not(.is-open) {
   transition-timing-function: ease-in;
   pointer-events: none;
@@ -4138,8 +4700,22 @@ body:has(.modal-backdrop, .send-modal-backdrop, .drawer-backdrop) .center-panel 
   width: min(960px, calc(100vw - 48px));
 }
 
-.drawer-backdrop.is-open .bottom-drawer-stack {
+.bottom-drawer-stack.is-side {
+  flex-direction: row;
+  align-items: stretch;
+  height: 100%;
+  width: auto;
+  transform: translateX(100%);
+}
+
+.drawer-backdrop.is-open .bottom-drawer-stack:not(.is-side) {
   transform: translateY(0);
+  transition-duration: 340ms;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.drawer-backdrop.is-open .bottom-drawer-stack.is-side {
+  transform: translateX(0);
   transition-duration: 340ms;
   transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -4153,6 +4729,45 @@ body:has(.modal-backdrop, .send-modal-backdrop, .drawer-backdrop) .center-panel 
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
   box-shadow: var(--shadow-panel);
   overflow: hidden;
+}
+
+.bottom-drawer-stack.is-side .drawer-close {
+  margin-bottom: 0;
+  margin-right: 12px;
+  margin-top: 0;
+  align-self: center;
+}
+
+.bottom-drawer-stack.is-side .bottom-drawer {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 560px;
+  max-width: calc(100vw - 72px);
+  height: 100%;
+  max-height: none;
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+}
+
+.bottom-drawer-stack.is-side .drawer-inner {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 18px 20px 24px;
+  overflow: hidden;
+}
+
+.bottom-drawer-stack.is-side .drawer-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
 }
 
 .drawer-chrome {
@@ -5052,10 +5667,9 @@ button.ncp-start-tip {
   text-decoration: none;
 }
 
-/* ── Node connections (nodes with nested channels) ────────────────────── */
-/* One toolbar row keeps the old tab-bar rhythm: section title + counts on
-   the left, the "new connection" pill on the right. Below it, a stacked
-   list of nodes; each node expands to reveal its own channels. */
+/* ── Node connections (header + channel gauges) ───────────────────────── */
+/* Toolbar on top; each peer is one surface. Header is identity + endpoints;
+   channels sit below as instruments, not nested cards or tables. */
 
 .node-tabbar {
   display: flex;
@@ -5156,7 +5770,10 @@ button.ncp-start-tip {
 .conn-section.is-frozen .node-tabbar-action,
 .conn-section.is-frozen .node-refresh-btn,
 .conn-section.is-frozen .row-action-btn,
-.conn-section.is-frozen .conn-new-channel,
+.conn-section.is-frozen .conn-card-foot,
+.conn-section.is-frozen .conn-channel-drawer-new,
+.conn-section.is-frozen .conn-gauge-refresh,
+.conn-section.is-frozen .conn-gauge-close,
 .conn-section.is-frozen .btn-primary,
 .conn-section.is-frozen .btn-secondary {
   opacity: 0.5;
@@ -5174,6 +5791,35 @@ button.ncp-start-tip {
   background: var(--surface-2);
   color: var(--ink-3);
   border-color: transparent;
+}
+
+.conn-section.is-frozen .conn-card-foot:hover {
+  color: var(--conn-foot-ink);
+  background-color: var(--conn-foot-track);
+}
+
+.conn-section.is-frozen .conn-card-foot::before,
+.conn-section.is-frozen .conn-card-foot-fill::after {
+  animation: none;
+  opacity: 0;
+}
+
+.conn-section.is-frozen .conn-card-foot.is-create:hover {
+  color: var(--conn-foot-create-ink);
+  background: var(--conn-foot-create);
+  border-color: var(--conn-foot-create-line);
+}
+
+.conn-section.is-frozen .conn-gauge-refresh:hover {
+  color: var(--ink-3);
+  border-color: transparent;
+  background: var(--surface);
+}
+
+.conn-section.is-frozen .conn-gauge-close:hover {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--line));
+  background: color-mix(in srgb, var(--danger-soft) 85%, var(--surface));
 }
 
 /* Node-stopped notice */
@@ -5215,170 +5861,687 @@ button.ncp-start-tip {
 }
 
 .conn-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-items: stretch;
 }
 
-.conn-card {
+.conn-unit {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;
 }
 
-/* Single-line node header: expand chevron · status dot · alias ·
-   channel count, with the create/disconnect actions on the right. */
-.conn-card-head {
+.conn-card {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+  flex-direction: column;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
 }
 
-.conn-card-main {
-  flex: 1;
+.conn-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 16px;
+}
+
+.conn-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   min-width: 0;
+}
+
+.conn-card-title {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0;
-  background: none;
-  border: none;
-  border-radius: 6px;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.conn-card-main:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
-}
-
-.conn-expander {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-  color: var(--ink-4);
-}
-
-.conn-expander svg {
-  width: 14px;
-  height: 14px;
-  stroke-width: 1.7;
-  transition: transform 0.15s ease;
-}
-
-.conn-card.open .conn-expander svg {
-  transform: rotate(90deg);
+  min-width: 0;
 }
 
 .conn-alias {
-  font-weight: 600;
-  font-size: 14px;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.02em;
   color: var(--ink);
   white-space: nowrap;
-}
-
-/* Peer fiber software version tag on the node card */
-.conn-version {
-  flex-shrink: 0;
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--ink-4);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  padding: 1px 7px;
-  background: var(--surface-2);
-  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .conn-actions {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
 }
 
-/* Expanded panel header: endpoint on the left, "new channel" action on the right */
-.conn-panel-head {
-  display: flex;
+.conn-card-foot {
+  position: relative;
+  width: 100%;
+  min-height: 44px;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 2px 4px 10px;
+  justify-content: center;
+  margin-top: auto;
+  padding: 0 16px;
+  overflow: hidden;
+  isolation: isolate;
+  contain: layout;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+  color: var(--conn-foot-ink);
+  background-color: var(--conn-foot-track);
+  background-image:
+    linear-gradient(180deg, var(--flow-highlight) 0%, transparent 46%),
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--flow-in) 6%, transparent),
+      color-mix(in srgb, var(--flow-in) 22%, transparent)
+    );
+  border: none;
+  border-top: 1px solid var(--conn-foot-line);
+  border-radius: 0;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  transition-property: color, background-color, filter, box-shadow;
+  transition-duration: 180ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.conn-card-foot-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  overflow: hidden;
+  background-color: var(--conn-foot-fill);
+  background-image:
+    linear-gradient(180deg, var(--flow-highlight) 0%, transparent 50%),
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--flow-out) 4%, transparent),
+      color-mix(in srgb, var(--flow-out) 32%, transparent)
+    );
+  box-shadow: inset 0 1px 0 var(--flow-highlight);
+  pointer-events: none;
+  z-index: 0;
+  /* Width is an inline percentage — never transition it. Hovering the
+     I/O KPIs promotes compositor layers in WebKit and retriggers a
+     width 0→n% tween, which makes the inbound (green) track flash. */
+  transition-property: background-color;
+  transition-duration: 180ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.conn-card-foot:not(.is-create)::before,
+.conn-card-foot-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    var(--flow-highlight),
+    transparent
+  );
+  background-size: 42% 100%;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.conn-card-foot:not(.is-create)::before {
+  background-position: 140% 0;
+}
+
+.conn-card-foot-fill::after {
+  background-position: -40% 0;
+}
+
+.conn-card-foot-label {
+  position: relative;
+  z-index: 1;
+}
+
+.conn-card-foot.is-create {
+  width: auto;
+  margin: auto 8px 8px;
+  min-height: 40px;
+  color: var(--conn-foot-create-ink);
+  background: var(--conn-foot-create);
+  border: 1px dashed var(--conn-foot-create-line);
+  border-radius: 8px;
+  font-weight: 600;
+  box-shadow: none;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.conn-card-foot.is-create::before,
+.conn-card-foot.is-create .conn-card-foot-fill,
+.conn-card-foot.is-create .conn-card-foot-fill::after {
+  display: none;
+}
+
+.conn-card-foot:hover:not(:disabled):not(.is-create) {
+  background-color: var(--conn-foot-track-hover);
+  color: var(--conn-foot-ink);
+  filter: saturate(1.08) brightness(1.03);
+}
+
+.conn-card-foot:hover:not(:disabled) .conn-card-foot-fill {
+  background-color: var(--conn-foot-fill-hover);
+}
+
+.conn-card-foot:active:not(:disabled):not(.is-create) {
+  filter: brightness(0.92) saturate(1.04);
+  box-shadow: inset 0 2px 8px color-mix(in srgb, var(--ink) 18%, transparent);
+}
+
+.conn-card-foot.is-create:hover:not(:disabled) {
+  color: var(--conn-foot-create-ink-hover);
+  background: var(--conn-foot-create-hover);
+  border-color: color-mix(in srgb, var(--ink-3) 55%, var(--line-strong));
+}
+
+.conn-card-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 0;
   font-size: 12px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.conn-sub-item:not(:last-child)::after {
+  content: '·';
+  margin: 0 8px;
   color: var(--ink-4);
 }
 
-/* Pubkey + address column — shown in full; long pubkeys wrap to stay visible */
-.conn-panel-meta {
+.conn-card-endpoints {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.conn-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 10px;
+  background: var(--surface-2);
+  border-radius: 10px;
+}
+
+.conn-chip-k {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+.conn-chip .copyable,
+.conn-chip-empty {
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 3px;
+  align-items: center;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-2);
 }
-.conn-panel-pubkey,
-.conn-panel-addr {
+
+.conn-chip .copyable-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: normal;
+}
+
+.conn-chip .copyable-icon {
+  flex-shrink: 0;
+}
+
+.conn-chip-empty {
+  color: var(--ink-4);
+}
+
+.conn-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+  padding: 12px 12px 14px;
+}
+
+.conn-channels {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.conn-gauge {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--surface-2);
+  border-radius: 10px;
+}
+
+.conn-gauge-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.conn-gauge-id {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.conn-gauge-id-k {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+.conn-gauge-id .copyable {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.conn-gauge-id .copyable-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: normal;
+}
+
+.conn-gauge-id .copyable-icon {
+  flex-shrink: 0;
+}
+
+.conn-gauge-top .badge {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+.conn-gauge-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
+.conn-gauge-refresh,
+.conn-gauge-close {
+  position: relative;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+
+.conn-gauge-refresh::after,
+.conn-gauge-close::after {
+  content: '';
+  position: absolute;
+  inset: -6px 0;
+}
+
+.conn-gauge-refresh {
+  color: var(--ink-3);
+  background: var(--surface);
+  border: 1px solid transparent;
+}
+
+.conn-gauge-refresh svg {
+  width: 14px;
+  height: 14px;
+}
+
+.conn-gauge-refresh svg.spin {
+  animation: btn-spin 0.7s linear infinite;
+}
+
+.conn-gauge-refresh:hover:not(:disabled) {
+  color: var(--accent);
+  background: var(--accent-muted);
+  border-color: transparent;
+}
+
+.conn-gauge-refresh:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.conn-gauge-close {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger-soft) 85%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--danger) 42%, var(--line));
+}
+
+.conn-gauge-close svg {
+  width: 15px;
+  height: 15px;
+}
+
+.conn-gauge-close:hover:not(:disabled) {
+  color: var(--accent-ink);
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.conn-gauge-close:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.conn-gauge-io {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.conn-gauge-side {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.conn-gauge-side.is-remote {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.conn-gauge-k {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+.conn-gauge-v {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 16px;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.conn-gauge-side.is-local .conn-gauge-v {
+  color: color-mix(in srgb, var(--flow-out) 94%, var(--ink-2));
+}
+
+.conn-gauge-side.is-remote .conn-gauge-v {
+  color: color-mix(in srgb, var(--flow-in) 94%, var(--ink-2));
+}
+
+.conn-gauge-unit {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink-4);
+}
+
+.conn-gauge-track {
+  min-width: 0;
+}
+
+.conn-gauge .ch-capacity-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+.conn-gauge .ch-capacity-bar-local,
+.conn-gauge .ch-capacity-bar-remote {
+  border-radius: 0;
+}
+
+.conn-pill {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.conn-pill.is-public {
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+.conn-gauge-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px 12px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+
+.conn-gauge-meta-item {
   display: flex;
   align-items: baseline;
   gap: 6px;
   min-width: 0;
 }
-.conn-panel-pubkey {
-  font-family: var(--font-mono);
-  color: var(--ink-2);
-  align-items: flex-start;
+
+.conn-gauge-meta-item:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
 }
-.conn-panel-addr {
-  font-family: var(--font-mono);
-  color: var(--ink-3);
-  white-space: nowrap;
-}
-.conn-panel-label {
+
+.conn-gauge-meta-label {
   flex-shrink: 0;
   font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
   color: var(--ink-4);
-  padding-top: 2px;
 }
 
-/* New-channel action — centered full-width button below the channel list */
-.conn-panel-actions {
+.conn-gauge-meta-value,
+.conn-gauge-meta .copyable {
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: 11px;
+}
+
+.conn-gauge-meta .copyable-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conn-open-form {
   display: flex;
-  justify-content: center;
-  padding-top: 12px;
-}
-.conn-panel-actions .conn-new-channel {
-  width: 100%;
-  justify-content: center;
+  flex-direction: column;
+  gap: 14px;
 }
 
-.conn-panel {
-  border-top: 1px solid var(--line);
-  background: var(--surface-2);
-  padding: 12px 16px 16px;
-  animation: conn-panel-in 180ms ease-out;
+.conn-channel-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
 }
 
-@keyframes conn-panel-in {
-  from { opacity: 0; transform: translateY(-4px); }
-  to   { opacity: 1; transform: translateY(0); }
+.conn-channel-drawer-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-shrink: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
 }
 
+.conn-channel-drawer-id {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
 
-/* Nested channel table is denser than the standard .data-table-sm */
-.conn-ch-table.data-table-sm th,
-.conn-ch-table.data-table-sm td {
-  padding: 8px 12px;
+.conn-channel-drawer-id-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.conn-channel-drawer-id-row .copyable {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
   font-size: 13px;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.conn-channel-drawer-id-row .copyable-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: normal;
+}
+
+.conn-channel-drawer-ver {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ink-3);
+}
+
+.conn-channel-drawer-liq {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.conn-channel-drawer-liq span:not(:last-child)::after {
+  content: '·';
+  margin: 0 8px;
+  color: var(--ink-4);
+  font-weight: 500;
+}
+
+.conn-channel-drawer-new {
+  flex-shrink: 0;
+  width: 100%;
+  height: 40px;
+  padding: 0 16px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--ink-3);
+  background: transparent;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, transform 0.12s ease;
+}
+
+.conn-channel-drawer-new:hover:not(:disabled) {
+  color: var(--ink-2);
+  background: transparent;
+  border-color: color-mix(in srgb, var(--ink-3) 55%, var(--line-strong));
+}
+
+.conn-channel-drawer-new:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.conn-channel-drawer-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.conn-channel-drawer-body .conn-channels {
+  gap: 12px;
+}
+
+.conn-channel-drawer-body .conn-gauge {
+  padding: 14px 16px;
+}
+
+.conn-open-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.conn-open-field .form-input {
+  width: 100%;
 }
 
 .conn-txhash {
@@ -5399,12 +6562,13 @@ button.ncp-start-tip {
 }
 
 .conn-liq-out {
-  color: var(--accent);
+  color: color-mix(in srgb, var(--flow-out) 94%, var(--ink-2));
   font-weight: 600;
 }
 
 .conn-liq-in {
-  color: var(--ink-3);
+  color: color-mix(in srgb, var(--flow-in) 94%, var(--ink-2));
+  font-weight: 600;
 }
 
 .conn-liq-sep {
@@ -5415,9 +6579,9 @@ button.ncp-start-tip {
   color: var(--ink-4);
 }
 
-/* Node KPI row — the unit rides the label, the number centers vertically.
-   Removing the bottom padding lets the flex value fill to the card edge, so
-   the number sits at the true vertical center of the card. */
+/* Node KPI row — number + unit stack in the remaining card height so the
+   figure stays vertically centered. Bottom padding stays off so the stack
+   can fill to the card edge. */
 .conn-kpis .kpi {
   justify-content: flex-start;
   padding-bottom: 0;
@@ -5427,13 +6591,6 @@ button.ncp-start-tip {
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-.conn-kpis .kpi-label-unit {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--ink-4);
-  letter-spacing: 0.02em;
 }
 
 .conn-kpis .kpi-value {
@@ -5462,19 +6619,25 @@ button.ncp-start-tip {
 }
 
 .ch-capacity-bar-local {
-  background: var(--accent);
+  background:
+    linear-gradient(180deg, var(--flow-highlight) 0%, transparent 70%),
+    color-mix(in srgb, var(--flow-out) 84%, var(--surface-2));
   border-radius: 2px 0 0 2px;
   transition: width 0.3s ease;
 }
 
 .ch-capacity-bar-remote {
-  background: var(--line-strong);
+  background:
+    linear-gradient(180deg, var(--flow-highlight) 0%, transparent 70%),
+    color-mix(in srgb, var(--flow-in) 84%, var(--surface-2));
   border-radius: 0 2px 2px 0;
 }
 
 .ch-balance-local {
   color: var(--accent);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* ── Peer table enhancements ──────────────────────────────────────────── */
@@ -5534,9 +6697,9 @@ button.ncp-start-tip {
 
 /* ── Node aside — KPI grid + wallet + logs modules ────────────────────── */
 
-/* Compact 2×2 KPI cards above the wallet module */
+/* Compact 2×2 KPI cluster beside the monitor card */
 .node-kpi-grid .kpi-grid {
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
   margin-bottom: 0;
 }
@@ -5546,26 +6709,67 @@ button.ncp-start-tip {
 }
 
 .node-kpi-grid .kpi {
-  min-height: 64px;
-  padding: 10px 12px;
+  min-height: 0;
+  padding: 12px 14px;
+}
+
+.node-kpi-grid .kpi-metric {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.node-kpi-grid .kpi-metric .kpi-value {
+  flex: none;
+  margin-top: 0;
+}
+
+.node-kpi-grid .kpi-value {
+  font-size: 22px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.node-kpi-grid .kpi-sub {
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-4);
+  line-height: 1.2;
+}
+
+.node-kpi-grid .kpi-hint {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Clickable KPI cards — 出金/入金 open the Fiber dialogs (like the wallet
    balance, hover reveals an action hint; the hint row is reserved space so
    nothing shifts on hover). */
 .node-kpi-grid .kpi-btn {
+  position: relative;
+  isolation: isolate;
   border: none;
   text-align: left;
   background: var(--surface);
   cursor: pointer;
   font-family: inherit;
   color: inherit;
-  transition: background-color 0.15s ease;
+  padding-right: 34px;
+  transition-property: transform, box-shadow, background-color, filter;
+  transition-duration: 180ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
 
 .node-kpi-grid .kpi-btn:hover,
 .node-kpi-grid .kpi-btn:focus-visible {
-  background: color-mix(in srgb, var(--accent-muted) 55%, var(--surface));
+  background-color: color-mix(in srgb, var(--accent-muted) 55%, var(--surface));
 }
 
 .node-kpi-grid .kpi-btn:focus-visible {
@@ -5576,6 +6780,13 @@ button.ncp-start-tip {
 .node-kpi-grid .kpi-btn:hover .kpi-label,
 .node-kpi-grid .kpi-btn:focus-visible .kpi-label {
   color: var(--accent);
+}
+
+.node-kpi-grid .kpi-btn .kpi-label,
+.node-kpi-grid .kpi-btn .kpi-metric,
+.node-kpi-grid .kpi-btn .kpi-hint {
+  position: relative;
+  z-index: 1;
 }
 
 .node-kpi-grid .kpi-hint {
@@ -5608,43 +6819,202 @@ button.ncp-start-tip {
   stroke-linejoin: round;
 }
 
-/* Role-tinted action cards — 出金 (send, amber) / 入金 (receive, green).
-   Default is a soft tint; hover deepens it. Label + hint carry the role
-   color so the two actions read as distinct at a glance. */
+.node-kpi-grid .kpi-role-icon {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+}
+
+.node-kpi-grid .kpi-role-icon svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.node-kpi-grid .kpi-btn.kpi-outbound .kpi-role-icon {
+  color: var(--flow-out-ink);
+}
+
+.node-kpi-grid .kpi-btn.kpi-inbound .kpi-role-icon {
+  color: var(--flow-in-ink);
+}
+
+/* Role-tinted action cards — layered wash + traveling sheen so I/O
+   reads as a live surface, not a flat fill. Titles/units use dedicated
+   ink tokens so they stay readable on the wash. */
+.node-kpi-grid .kpi-btn.kpi-outbound,
+.node-kpi-grid .kpi-btn.kpi-inbound {
+  background-repeat: no-repeat;
+  background-size: 240% 100%, 100% 100%, 100% 100%;
+  background-position: 160% 0, 0 0, 0 0;
+  /* Resting transform so hover/active only retarget the matrix — they
+     must not create/destroy a compositor layer (that restart is what
+     made the channel-foot sheen and fill flash). */
+  transform: translateY(0);
+}
+
 .node-kpi-grid .kpi-btn.kpi-outbound {
-  background: var(--warn-soft);
+  background-color: color-mix(in srgb, var(--flow-out) 28%, var(--flow-out-soft));
+  background-image:
+    linear-gradient(
+      108deg,
+      transparent 38%,
+      var(--flow-highlight) 50%,
+      transparent 62%
+    ),
+    radial-gradient(
+      130% 100% at 100% -10%,
+      color-mix(in srgb, var(--flow-out) 58%, transparent),
+      transparent 62%
+    ),
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--flow-out) 18%, var(--flow-out-soft)) 0%,
+      color-mix(in srgb, var(--flow-out) 36%, var(--flow-out-soft)) 100%
+    );
+  box-shadow:
+    inset 0 1px 0 var(--flow-highlight),
+    0 8px 18px color-mix(in srgb, var(--flow-out) 18%, transparent);
 }
 
-.node-kpi-grid .kpi-btn.kpi-outbound:hover,
-.node-kpi-grid .kpi-btn.kpi-outbound:focus-visible {
-  background: color-mix(in srgb, var(--warn) 22%, var(--warn-soft));
+.node-kpi-grid .kpi-btn.kpi-outbound:hover:not(:disabled),
+.node-kpi-grid .kpi-btn.kpi-outbound:focus-visible:not(:disabled) {
+  background-color: color-mix(in srgb, var(--flow-out) 38%, var(--flow-out-soft));
+  box-shadow:
+    inset 0 1px 0 var(--flow-highlight),
+    0 12px 26px color-mix(in srgb, var(--flow-out) 28%, transparent);
 }
 
 .node-kpi-grid .kpi-btn.kpi-outbound:focus-visible {
-  outline-color: color-mix(in srgb, var(--warn) 45%, transparent);
+  outline-color: color-mix(in srgb, var(--flow-out) 45%, transparent);
 }
 
 .node-kpi-grid .kpi-btn.kpi-outbound .kpi-label,
-.node-kpi-grid .kpi-btn.kpi-outbound .kpi-hint {
-  color: var(--warn);
+.node-kpi-grid .kpi-btn.kpi-outbound .kpi-hint,
+.node-kpi-grid .kpi-btn.kpi-outbound .kpi-sub {
+  color: var(--flow-out-ink);
+}
+
+.node-kpi-grid .kpi-btn.kpi-outbound .kpi-label {
+  font-weight: 750;
 }
 
 .node-kpi-grid .kpi-btn.kpi-inbound {
-  background: var(--ok-soft);
+  background-color: color-mix(in srgb, var(--flow-in) 28%, var(--flow-in-soft));
+  background-image:
+    linear-gradient(
+      108deg,
+      transparent 38%,
+      var(--flow-highlight) 50%,
+      transparent 62%
+    ),
+    radial-gradient(
+      130% 100% at 100% -10%,
+      color-mix(in srgb, var(--flow-in) 58%, transparent),
+      transparent 62%
+    ),
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--flow-in) 18%, var(--flow-in-soft)) 0%,
+      color-mix(in srgb, var(--flow-in) 36%, var(--flow-in-soft)) 100%
+    );
+  box-shadow:
+    inset 0 1px 0 var(--flow-highlight),
+    0 8px 18px color-mix(in srgb, var(--flow-in) 18%, transparent);
 }
 
-.node-kpi-grid .kpi-btn.kpi-inbound:hover,
-.node-kpi-grid .kpi-btn.kpi-inbound:focus-visible {
-  background: color-mix(in srgb, var(--ok) 22%, var(--ok-soft));
+.node-kpi-grid .kpi-btn.kpi-inbound:hover:not(:disabled),
+.node-kpi-grid .kpi-btn.kpi-inbound:focus-visible:not(:disabled) {
+  background-color: color-mix(in srgb, var(--flow-in) 38%, var(--flow-in-soft));
+  box-shadow:
+    inset 0 1px 0 var(--flow-highlight),
+    0 12px 26px color-mix(in srgb, var(--flow-in) 28%, transparent);
 }
 
 .node-kpi-grid .kpi-btn.kpi-inbound:focus-visible {
-  outline-color: color-mix(in srgb, var(--ok) 45%, transparent);
+  outline-color: color-mix(in srgb, var(--flow-in) 45%, transparent);
 }
 
 .node-kpi-grid .kpi-btn.kpi-inbound .kpi-label,
-.node-kpi-grid .kpi-btn.kpi-inbound .kpi-hint {
-  color: var(--ok);
+.node-kpi-grid .kpi-btn.kpi-inbound .kpi-hint,
+.node-kpi-grid .kpi-btn.kpi-inbound .kpi-sub {
+  color: var(--flow-in-ink);
+}
+
+.node-kpi-grid .kpi-btn.kpi-inbound .kpi-label {
+  font-weight: 750;
+}
+
+.node-kpi-grid .kpi-btn.kpi-outbound .kpi-sub,
+.node-kpi-grid .kpi-btn.kpi-inbound .kpi-sub {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.node-kpi-grid .kpi-btn.kpi-outbound:active:not(:disabled),
+.node-kpi-grid .kpi-btn.kpi-inbound:active:not(:disabled) {
+  transform: scale(0.96);
+  box-shadow:
+    inset 0 1px 0 var(--flow-highlight),
+    0 4px 10px color-mix(in srgb, var(--ink) 10%, transparent);
+}
+
+@keyframes flow-kpi-sheen {
+  0%, 38% { background-position: 160% 0, 0 0, 0 0; }
+  68% { background-position: -55% 0, 0 0, 0 0; }
+  100% { background-position: -55% 0, 0 0, 0 0; }
+}
+
+@keyframes flow-bar-sheen {
+  0%, 28% {
+    background-position: -40% 0;
+    opacity: 0;
+  }
+  40% { opacity: 1; }
+  72%, 100% {
+    background-position: 140% 0;
+    opacity: 0;
+  }
+}
+
+@keyframes flow-bar-sheen-in {
+  0%, 28% {
+    background-position: 140% 0;
+    opacity: 0;
+  }
+  40% { opacity: 1; }
+  72%, 100% {
+    background-position: -40% 0;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .node-kpi-grid .kpi-btn.kpi-outbound:not(:disabled),
+  .node-kpi-grid .kpi-btn.kpi-inbound:not(:disabled) {
+    animation: flow-kpi-sheen 8s ease-in-out infinite;
+  }
+
+  .conn-card-foot:not(.is-create) .conn-card-foot-fill::after {
+    animation: flow-bar-sheen 5.8s ease-in-out infinite both;
+  }
+
+  .conn-card-foot:not(.is-create)::before {
+    animation: flow-bar-sheen-in 5.8s ease-in-out 1.4s infinite both;
+  }
 }
 
 .wallet-module {
@@ -5882,7 +7252,17 @@ button.ncp-start-tip {
   white-space: nowrap;
 }
 
-/* Collapsible node logs console — below the node control panel */
+/* Collapsible node logs console — recessed well, same slate family as
+   neighboring cards but a step down so it reads as a tool strip, not a panel. */
+.node-logs-console {
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--page-bg) 38%, var(--surface) 62%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--ink) 5%, transparent),
+    0 0 0 1px var(--line);
+}
+
 .node-logs-console .nlc-bar {
   display: flex;
   align-items: stretch;
@@ -5911,9 +7291,23 @@ button.ncp-start-tip {
 }
 
 .node-logs-console .nlc-title {
+  flex-shrink: 0;
   font-size: 13px;
   font-weight: 800;
   color: var(--ink);
+}
+
+.node-logs-console .nlc-preview {
+  min-width: 0;
+  flex: 1 1 12rem;
+  max-width: min(88ch, 72%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--ink-4);
 }
 
 .node-logs-console .nlc-stats {
@@ -5921,6 +7315,7 @@ button.ncp-start-tip {
   align-items: center;
   gap: 6px;
   margin-left: auto;
+  flex-shrink: 0;
 }
 
 .node-logs-console .nlc-stat {
@@ -5932,7 +7327,7 @@ button.ncp-start-tip {
   font-size: 11px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  background: var(--surface-2);
+  background: var(--surface);
 }
 
 .node-logs-console .nlc-stat::before {
@@ -5980,7 +7375,11 @@ button.ncp-start-tip {
 }
 
 .node-logs-console .nlc-viewer {
-  margin-top: 14px;
+  margin-top: 12px;
+}
+
+.node-logs-console .nlc-viewer .log-viewer {
+  border-radius: 10px;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -6414,8 +7813,8 @@ button.ncp-start-tip {
 
 /* ═══════════════════════════════════════════════════════════════════════
    Liquidity Marketplace — Floating Cell Pool
-   Left column: top strip (per-tab dashboard) + square floating-cell pool.
-   Right sidebar: market dashboard. Orders are teal, matches are royal blue.
+   Node-page pane: cell pool is the canvas; order/match strip is a HUD
+   overlay. Orders are teal, matches are royal blue.
    ═══════════════════════════════════════════════════════════════════════ */
 
 /* Node-style page layout: main + sticky dashboard sidebar */
@@ -6452,7 +7851,7 @@ button.ncp-start-tip {
   --cell-glow-strong: var(--lm-glow-blue);
 }
 
-/* ── Top strip — tab switch + active-tab dashboard ─────────────────────── */
+/* ── Top strip — tab switch + active-tab dashboard (floats as .lm-pool-hud) */
 
 .lm-strip {
   position: relative;
@@ -7285,7 +8684,7 @@ button.ncp-start-tip {
 /* ── Help dialog — About Opticrum ────────────────────────────────────────── */
 
 .help-dialog {
-  max-width: 560px;
+  max-width: 600px;
 }
 
 .help-tabs {
@@ -7343,23 +8742,22 @@ button.ncp-start-tip {
 }
 
 .help-lead {
-  margin: 0 0 14px;
+  margin: 0 0 16px;
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.7;
   color: var(--ink-2);
 }
 
 .help-section + .help-section {
-  margin-top: 14px;
+  margin-top: 16px;
 }
 
 .help-section-title {
-  margin: 0 0 6px;
-  font-size: 11px;
+  margin: 0 0 8px;
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--ink-4);
+  letter-spacing: -0.01em;
+  color: var(--ink-2);
 }
 
 .help-section-list {
@@ -7368,7 +8766,7 @@ button.ncp-start-tip {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
 }
 
 .help-section-list li {
@@ -7744,12 +9142,10 @@ button.ncp-start-tip {
   color: var(--ink-4);
 }
 
-/* ── Order/match detail — right-side drawer in the aside ────────────────── */
+/* ── Order/match detail — right-side drawer body ────────────────────────── */
 
-/* Slides into the right sidebar, replacing the market overview when a cell
-   is selected; back button returns to the overview. */
-/* Order/match detail — a right-side drawer styled like the market-overview
-   panels (white card, section head, big figure, kpi tiles). */
+/* Slides in as a full-height right column via BottomDrawer `side="right"`.
+   Inner content has no enter animation of its own — the stack owns the slide. */
 .lm-drawer {
   display: flex;
   flex-direction: column;
@@ -7781,33 +9177,11 @@ button.ncp-start-tip {
   }
 }
 
-/* Drawer head — back button + title + status, like a section-head. */
+/* Drawer head — status sits on the right, like a section-head. */
 .lm-drawer-head {
   align-items: center;
   margin: 0;
   gap: 8px;
-}
-
-/* Minimal back control — a bare chevron, no button chrome. */
-.lm-drawer-back {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: none;
-  background: none;
-  border-radius: 50%;
-  color: var(--ink-3);
-  cursor: pointer;
-  transition: color 0.15s ease, background 0.15s ease;
-}
-
-.lm-drawer-back:hover {
-  color: var(--accent);
-  background: var(--accent-muted);
 }
 
 .lm-drawer-status {
@@ -7854,6 +9228,67 @@ button.ncp-start-tip {
 .lm-drawer-kpi {
   min-height: 72px;
   padding: 12px 14px;
+}
+
+.lm-drawer-kpi .kpi-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.lm-drawer-kpi-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+/* Closed window: the 0 stays in the same slot as 容量; the note sits in
+   the leftover right of this tile so the grid columns never shift. */
+.lm-drawer-kpi.is-closed {
+  flex-direction: row;
+  align-items: stretch;
+  gap: 10px;
+  background: color-mix(in srgb, var(--page-bg) 42%, var(--surface) 58%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.lm-drawer-kpi.is-closed .kpi-label,
+.lm-drawer-kpi.is-closed .kpi-sub {
+  color: var(--ink-4);
+}
+
+.lm-drawer-kpi.is-closed .kpi-value {
+  color: var(--ink-4);
+}
+
+.lm-drawer-kpi-note {
+  flex: 0 1 10.5em;
+  max-width: 11em;
+  min-width: 0;
+  margin: 0;
+  padding: 2px 0 2px 10px;
+  border-left: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--ink-4);
+  text-wrap: pretty;
+}
+
+.lm-drawer-kpi-note strong {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-3);
+}
+
+.lm-drawer-actions.is-flush {
+  border-top: none;
+  padding-top: 0;
 }
 
 /* Detail rows — low-contrast label/value list, split from the headline. */
@@ -8169,6 +9604,9 @@ button.ncp-start-tip {
   opacity: 0.55;
   cursor: not-allowed;
   transform: none;
+  animation: none;
+  box-shadow: none;
+  filter: none;
 }
 
 .node-kpi-grid .kpi-btn:disabled:hover,
@@ -8203,11 +9641,12 @@ button.ncp-start-tip {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 16%, transparent);
 }
 
-/* Fiber 端口 value — the URL itself is the 打开 fnn-cli trigger (rendered only
-   while the node is up). Hover/focus reveals a terminal icon + hint to the
-   right of the URL, mirroring CopyableText's hover reveal; clicking runs the
-   same flow as the old button (detect fnn-cli → open terminal / install guide).
-   The hint is `pointer-events: none` so it never intercepts the click. */
+/* Fiber 端口 value — the URL itself is the 打开 fnn-cli trigger. Builtin:
+   rendered only while the node is up. External: the creation URL is always
+   shown. Hover/focus reveals a terminal icon + hint to the right of the URL,
+   mirroring CopyableText's hover reveal; clicking runs detect fnn-cli → open
+   terminal / install guide. The hint is `pointer-events: none` so it never
+   intercepts the click. */
 .ncp-cli-trigger {
   display: inline-flex;
   align-items: center;
@@ -8244,38 +9683,6 @@ button.ncp-start-tip {
   height: 12px;
 }
 
-/* Cell-pool manual refresh — re-scans personal orders from the chain (normal
-   loads read the local cache). Floats at the pool's top-left, mirroring the
-   corner donut on the right. */
-.lm-refresh-btn {
-  position: absolute;
-  top: 12px;
-  left: 16px;
-  z-index: 3;
-  width: 34px;
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  color: var(--ink-3);
-  cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease;
-}
-.lm-refresh-btn:hover {
-  color: var(--accent);
-  border-color: var(--line-strong);
-}
-.lm-refresh-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.lm-refresh-btn svg {
-  width: 16px;
-  height: 16px;
-}
 
 /* Keep-alive page shell — the primary pages (node / liquidity) stay mounted in
    AppShell and are toggled by route, so switching pages never re-fetches their
@@ -8615,6 +10022,14 @@ button.ncp-start-tip {
   transition-timing-function: ease-out;
 }
 
+.nsm-wallet:hover {
+  background: var(--surface-hover);
+}
+
+.nsm-wallet:active {
+  transform: scale(0.96);
+}
+
 .nsm-wallet.is-locked {
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--warn) 42%, transparent),
@@ -8625,14 +10040,6 @@ button.ncp-start-tip {
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--ok) 38%, transparent),
     var(--shadow-elevate);
-}
-
-.nsm-wallet:hover {
-  background: var(--surface-hover);
-}
-
-.nsm-wallet:active {
-  transform: scale(0.96);
 }
 
 .nsm-wallet-icon {

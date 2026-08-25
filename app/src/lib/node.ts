@@ -19,6 +19,15 @@ export function logStats(logs: NodeLog[]): Record<LogLevel, number> {
   return stats
 }
 
+/** Ensure a Fiber RPC endpoint has an http(s) scheme so `fnn-cli -u` can
+ *  parse it. Creation forms accept `host:port` without a scheme. */
+export function withHttpScheme(url: string): string {
+  const trimmed = url.trim()
+  if (!trimmed) return trimmed
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  return `http://${trimmed}`
+}
+
 /** Local fiber RPC URL for the desktop CLI — `http://` + the configured
  *  `rpc.listening_addr`, with a wildcard listen host (`0.0.0.0` / `[::]` / `::`)
  *  normalized to loopback so `fnn-cli -u` on the same machine can reach it. */
@@ -28,7 +37,7 @@ export function fiberRpcUrl(config: NodeConfig): string {
     .replace(/^0\.0\.0\.0:/, '127.0.0.1:')
     .replace(/^\[::\]:/, '127.0.0.1:')
     .replace(/^::/, '127.0.0.1:')
-  return `http://${loopback}`
+  return withHttpScheme(loopback)
 }
 
 /** Locale-aware log timestamp formatting. */

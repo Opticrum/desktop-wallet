@@ -81,6 +81,8 @@ export type NodeRuntime = {
   watchtower: WatchtowerConfig
   kind: NodeKind
   targetId: string
+  /** Fiber JSON-RPC URL of the selected target. External: creation URL. Builtin: empty. */
+  rpcUrl: string
 }
 
 export type BuiltinTarget = {
@@ -190,6 +192,8 @@ export type Channel = {
   remoteBalanceShannons: number
   /** Fiber raw `state_name` — the frontend maps it to active|pending|closing. */
   state: string
+  /** Fiber `state_flags` when present (e.g. AWAITING_REMOTE_TX_COLLABORATION_MSG). */
+  stateFlags: string | null
   isPublic: boolean
   enabled: boolean
   createdAtMs: number

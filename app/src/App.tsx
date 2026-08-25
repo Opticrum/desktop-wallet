@@ -23,10 +23,9 @@ export default function App() {
                 <Route path="news" element={<NewsPage />} />
                 <Route path="changelog" element={<ChangelogPage />} />
 
-                {/* node + liquidity are keep-alive in AppShell (no re-fetch on switch) */}
+                {/* node stays keep-alive in AppShell (no re-fetch on leave) */}
                 <Route path="node" element={null} />
-
-                <Route path="liquidity" element={null} />
+                <Route path="liquidity" element={<Navigate to="/node" replace />} />
 
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>

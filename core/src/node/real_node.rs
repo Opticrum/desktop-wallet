@@ -320,6 +320,7 @@ impl RealNodeBackend {
       watchtower,
       kind: NodeKind::Builtin,
       target_id: BUILTIN_ID.into(),
+      rpc_url: String::new(),
     }
   }
 
@@ -328,6 +329,7 @@ impl RealNodeBackend {
     info: Option<&FiberNodeInfo>,
     target_id: &str,
     alias: &str,
+    rpc_url: &str,
   ) -> NodeRuntime {
     match info {
       Some(i) => NodeRuntime {
@@ -351,6 +353,7 @@ impl RealNodeBackend {
         },
         kind: NodeKind::External,
         target_id: target_id.into(),
+        rpc_url: rpc_url.to_string(),
       },
       None => NodeRuntime {
         running: false,
@@ -373,6 +376,7 @@ impl RealNodeBackend {
         },
         kind: NodeKind::External,
         target_id: target_id.into(),
+        rpc_url: rpc_url.to_string(),
       },
     }
   }
@@ -427,15 +431,15 @@ impl NodeBackend for RealNodeBackend {
   async fn get_runtime(&self) -> Result<NodeRuntime, CommandError> {
     if !self.is_builtin() {
       let id = self.active_id();
-      let alias = self
+      let (alias, rpc_url) = self
         .targets
         .lock()
         .unwrap()
         .find(&id)
-        .map(|e| e.alias.clone())
-        .unwrap_or_else(|| id.clone());
+        .map(|e| (e.alias.clone(), e.rpc_url.clone()))
+        .unwrap_or_else(|| (id.clone(), String::new()));
       let info = self.fiber.node_info().await.unwrap_or(None);
-      return Ok(self.external_runtime(info.as_ref(), &id, &alias));
+      return Ok(self.external_runtime(info.as_ref(), &id, &alias, &rpc_url));
     }
     let running = self.embedded.lock().await.is_some();
     let starting = self.starting.load(Ordering::SeqCst);
@@ -793,6 +797,21 @@ mod tests {
     assert_eq!(list.active_id, "builtin");
     assert!(list.externals.is_empty());
     assert!(!list.builtin.running);
+  }
+
+  #[tokio::test]
+  async fn external_runtime_exposes_creation_rpc_url() {
+    let (backend, _dir) = test_backend(Arc::new(MockFiberApi::new(None)));
+    backend.targets.lock().unwrap().externals.push(StoredExternal {
+      id: "ext1".into(),
+      alias: "remote".into(),
+      rpc_url: "10.0.0.2:8227".into(),
+      auth_token: None,
+    });
+    backend.targets.lock().unwrap().active_id = "ext1".into();
+    let r = backend.get_runtime().await.unwrap();
+    assert_eq!(r.kind, NodeKind::External);
+    assert_eq!(r.rpc_url, "10.0.0.2:8227");
   }
 
   #[tokio::test]

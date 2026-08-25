@@ -7,7 +7,7 @@ import { useNode } from '../node/NodeContext'
 import { node, wallet } from '../api/client'
 import { toCommandError } from '../api/types'
 import type { NodeConfig, NodeRuntime, WatchtowerConfig } from '../api/types'
-import { fiberRpcUrl } from '../lib/node'
+import { fiberRpcUrl, withHttpScheme } from '../lib/node'
 
 type Props = {
   onToast: (msg: string) => void
@@ -139,7 +139,7 @@ export function NodeControlPanel({
     let alive = true
     const check = () =>
       wallet
-        .getSummary()
+        .getStatus()
         .then((s) => {
           if (alive) setWalletGate({ hasWallet: s.hasWallet, unlocked: s.unlocked })
         })
@@ -201,15 +201,20 @@ export function NodeControlPanel({
     }
   }
 
-  // fnn-cli drives the node's RPC — pointless to open it while the node is
-  // down or still booting, so gate it like the other node-dependent actions.
-  // The RPC URL row follows the other FIBER rows (公钥/地址/版本): it shows —
-  // until the node is actually up, even though the config is always readable.
+  // fnn-cli drives the node's RPC. Builtin: only once the process is up (the
+  // local listen addr isn't answering while stopped/booting). External: the
+  // creation URL is always known, so the trigger stays available.
   const nodeReady = running && !starting
-  const rpcUrl = config && nodeReady ? fiberRpcUrl(config) : null
+  const rpcUrl = isExternal
+    ? runtime?.rpcUrl
+      ? withHttpScheme(runtime.rpcUrl)
+      : null
+    : config && nodeReady
+      ? fiberRpcUrl(config)
+      : null
 
   const handleOpenFnnCli = async () => {
-    if (!nodeReady || !rpcUrl) return
+    if (!rpcUrl) return
     try {
       const status = await node.fnnCliStatus()
       if (status.installed) {
@@ -325,36 +330,34 @@ export function NodeControlPanel({
           <span className="ncp-label">{t.fiberVersion}</span>
           <span className="ncp-value mono">{runtime?.version || '—'}</span>
         </div>
-        {!isExternal && (
-          <div className="ncp-detail-row">
-            <span className="ncp-label">{t.fiberPort}</span>
-            <span className="ncp-value mono ncp-pubkey">
-              {rpcUrl ? (
-                <span
-                  className="ncp-cli-trigger"
-                  role="button"
-                  tabIndex={0}
-                  aria-label={t.fnnCliOpen}
-                  onClick={handleOpenFnnCli}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      handleOpenFnnCli()
-                    }
-                  }}
-                >
-                  <span className="ncp-cli-trigger-text">{rpcUrl}</span>
-                  <span className="ncp-cli-trigger-hint" aria-hidden="true">
-                    <IconTerminal />
-                    {t.fnnCliOpen}
-                  </span>
+        <div className="ncp-detail-row">
+          <span className="ncp-label">{t.fiberPort}</span>
+          <span className="ncp-value mono ncp-pubkey">
+            {rpcUrl ? (
+              <span
+                className="ncp-cli-trigger"
+                role="button"
+                tabIndex={0}
+                aria-label={t.fnnCliOpen}
+                onClick={handleOpenFnnCli}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    handleOpenFnnCli()
+                  }
+                }}
+              >
+                <span className="ncp-cli-trigger-text">{rpcUrl}</span>
+                <span className="ncp-cli-trigger-hint" aria-hidden="true">
+                  <IconTerminal />
+                  {t.fnnCliOpen}
                 </span>
-              ) : (
-                '—'
-              )}
-            </span>
-          </div>
-        )}
+              </span>
+            ) : (
+              '—'
+            )}
+          </span>
+        </div>
       </div>
 
       {!isExternal && (

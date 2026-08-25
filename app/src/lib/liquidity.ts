@@ -203,6 +203,11 @@ export function formatApyShort(bps: number): string {
   return value.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
 }
 
+/** Bare APY number — the `%` unit rides in the tile's `.kpi-sub`. */
+export function formatBpsNum(bps: number): string {
+  return (bps / 100).toFixed(2)
+}
+
 const pad2 = (n: number) => String(n).padStart(2, '0')
 
 /** `1785289217000` → `07-29 09:40` — rendered in UTC+8 to match the +08:00
@@ -279,23 +284,24 @@ export function formatYieldRange(b: YieldBucketView): string {
 const trimPercent = (v: number) =>
   v >= 100 ? String(Math.round(v)) : v.toFixed(1).replace(/\.0$/, '')
 
-/** Outpoint without its `:index` suffix, then truncated for the detail row. */
-export function truncateOutpointNoIndex(outpoint: string): string {
+/** Outpoint without its `:index` suffix, then truncated in the middle.
+ *  Default `10…6` (cell tooltips); the detail drawer uses `20…12`. */
+export function truncateOutpointNoIndex(outpoint: string, head = 10, tail = 6): string {
   const base = outpoint.split(':')[0]
-  if (base.length <= 16) return base
-  return base.slice(0, 10) + '…' + base.slice(-6)
+  if (base.length <= head + tail) return base
+  return base.slice(0, head) + '…' + base.slice(-tail)
 }
 
-export function truncateOutpoint(outpoint: string): string {
-  return outpoint.slice(0, 10) + '…' + outpoint.slice(-6)
+export function truncateOutpoint(outpoint: string, head = 10, tail = 6): string {
+  if (outpoint.length <= head + tail) return outpoint
+  return outpoint.slice(0, head) + '…' + outpoint.slice(-tail)
 }
 
-/** Truncate a 66-hex fiber pubkey in the middle: `02ab91f4c5d…e3a9f8b6c1`.
- *  Empty (stale cache row from before the field existed) → `—`. */
-export function truncatePubkey(pubkey: string): string {
+/** Truncate a fiber pubkey in the middle. Empty (legacy cache) → `—`. */
+export function truncatePubkey(pubkey: string, head = 10, tail = 6): string {
   if (!pubkey) return '—'
-  if (pubkey.length <= 16) return pubkey
-  return pubkey.slice(0, 10) + '…' + pubkey.slice(-6)
+  if (pubkey.length <= head + tail) return pubkey
+  return pubkey.slice(0, head) + '…' + pubkey.slice(-tail)
 }
 
 /** Continuous green → yellow → red life color, driven by remaining lifetime pct. */
@@ -356,10 +362,22 @@ export type PoolCellData = {
   target: SheetTarget
 }
 
+/** Strip 0x and case so cache / RPC hex compares as the same identity. */
+export function normalizeFiberPubkey(hex: string): string {
+  return hex.trim().replace(/^0x/i, '').toLowerCase()
+}
+
+/** True only when both sides are non-empty and equal after normalize. */
+export function sameFiberPubkey(cellPubkey: string, nodeFiberPubkey: string): boolean {
+  const cell = normalizeFiberPubkey(cellPubkey)
+  const node = normalizeFiberPubkey(nodeFiberPubkey)
+  return cell.length > 0 && cell === node
+}
+
 /** Cell pubkey vs current node pubkey — only mismatches when the node pubkey
  *  is known (node down → unknown, not a mismatch). */
 const pubkeyMismatch = (cellPubkey: string, nodeFiberPubkey?: string) =>
-  !!nodeFiberPubkey && cellPubkey !== nodeFiberPubkey
+  !!nodeFiberPubkey && !sameFiberPubkey(cellPubkey, nodeFiberPubkey)
 
 /** Cells shown in the pool for one tab (cancelled orders are spent cells — hidden). */
 export function buildPoolCells(

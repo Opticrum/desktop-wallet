@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties } from 'react'
+import { type CSSProperties } from 'react'
 import { useLocale } from '../i18n/LocaleContext'
 import { CopyableText } from './CopyableText'
 import { MatchHealthBadge } from './MatchHealthBadge'
@@ -37,7 +37,6 @@ type LiquiditySheetProps = {
   /** The current fiber node's identity pubkey — a cell whose embedded pubkey
    *  differs was created under an older/different node identity. */
   nodeFiberPubkey?: string
-  onClose: () => void
   onCancelOrder: (o: LiquidityOrder) => void
   onInject: (m: LiquidityMatch) => void
   onExtract: (m: LiquidityMatch) => void
@@ -51,24 +50,12 @@ export function LiquiditySheet({
   matches,
   disabled,
   nodeFiberPubkey,
-  onClose,
   onCancelOrder,
   onInject,
   onExtract,
   onAbandon,
 }: LiquiditySheetProps) {
   const { t } = useLocale()
-  const closeRef = useRef<HTMLButtonElement>(null)
-
-  useEffect(() => {
-    if (!target) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    closeRef.current?.focus()
-    return () => document.removeEventListener('keydown', onKey)
-  }, [target, onClose])
 
   if (!target) return null
 
@@ -85,11 +72,6 @@ export function LiquiditySheet({
     return (
       <div className="lm-drawer lm-drawer-order" aria-label={t.mgDetails} style={{ '--tier': tier } as CSSProperties}>
         <div className="section-head lm-drawer-head">
-          <button ref={closeRef} type="button" className="lm-drawer-back" aria-label={t.lmBack} onClick={onClose}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M15 5l-7 7 7 7" />
-            </svg>
-          </button>
           <span className="lm-drawer-status">
             {order.status === 'cancelled' ? (
               <span className="mg-pill muted">{t.lmStatusCancelled}</span>
@@ -138,7 +120,7 @@ export function LiquiditySheet({
             <span className="ms-detail-label">{t.mgOrderTx}</span>
             <CopyableText
               value={order.outpoint}
-              display={truncateOutpointNoIndex(order.outpoint)}
+              display={truncateOutpointNoIndex(order.outpoint, 20, 12)}
               className="ms-detail-value mono lm-drawer-tx"
               iconPosition="leading"
             />
@@ -157,7 +139,7 @@ export function LiquiditySheet({
             <span className="ms-detail-label">{t.fiberPubkey}</span>
             <CopyableText
               value={order.fiberPubkey}
-              display={truncatePubkey(order.fiberPubkey)}
+              display={truncatePubkey(order.fiberPubkey, 20, 12)}
               className="ms-detail-value mono lm-drawer-tx"
               iconPosition="leading"
             />
@@ -202,6 +184,7 @@ export function LiquiditySheet({
   const life = matchLife(match)
   const phase = matchPhase(match)
   const hesitating = phase === 'hesitating'
+  const hesitationOverHint = match.role === 'buyer' && !hesitating && !life.isExhausted
   const hesitationLeft = hesitationRemainingMs(match)
   const extraction = extractionProgress(match)
   // Time until the service term expires, localized — `12天 3小时` / `3小时 45分`
@@ -221,11 +204,6 @@ export function LiquiditySheet({
   return (
     <div className="lm-drawer" aria-label={t.mgDetails} style={{ '--tier': hesitating ? 'var(--violet)' : lifeTierColor(life.pct) } as CSSProperties}>
       <div className="section-head lm-drawer-head">
-        <button ref={closeRef} type="button" className="btn-icon lm-drawer-back" aria-label={t.lmBack} onClick={onClose}>
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9.5 2.5 4 7l5.5 4.5" />
-          </svg>
-        </button>
         <span className="lm-drawer-status">
           {hesitating ? (
             <span className="mg-pill hesitate">
@@ -265,10 +243,18 @@ export function LiquiditySheet({
           <div className="kpi-value">{formatCkb(match.channelCapacityCkb)}</div>
           <div className="kpi-sub">{t.unitCkb}</div>
         </div>
-        <div className="kpi lm-drawer-kpi">
-          <div className="kpi-label">{t.lmWithdrawable}</div>
-          <div className="kpi-value">{formatCkb(match.withdrawableCkb)}</div>
-          <div className="kpi-sub">{t.unitCkb}</div>
+        <div className={`kpi lm-drawer-kpi${hesitationOverHint ? ' is-closed' : ''}`}>
+          <div className="lm-drawer-kpi-main">
+            <div className="kpi-label">{t.lmWithdrawable}</div>
+            <div className="kpi-value">{formatCkb(match.withdrawableCkb)}</div>
+            <div className="kpi-sub">{t.unitCkb}</div>
+          </div>
+          {hesitationOverHint && (
+            <p className="lm-drawer-kpi-note">
+              <strong>{t.lmHesitationOver}</strong>
+              {t.lmHesitationOverHint}
+            </p>
+          )}
         </div>
       </div>
 
@@ -277,7 +263,7 @@ export function LiquiditySheet({
           <span className="ms-detail-label">{t.mgChannelTx}</span>
           <CopyableText
             value={match.channelOutpoint}
-            display={truncateOutpointNoIndex(match.channelOutpoint)}
+            display={truncateOutpointNoIndex(match.channelOutpoint, 20, 12)}
             className="ms-detail-value mono lm-drawer-tx"
             iconPosition="leading"
           />
@@ -286,7 +272,7 @@ export function LiquiditySheet({
           <span className="ms-detail-label">{t.mgMatchTx}</span>
           <CopyableText
             value={match.outpoint}
-            display={truncateOutpointNoIndex(match.outpoint)}
+            display={truncateOutpointNoIndex(match.outpoint, 20, 12)}
             className="ms-detail-value mono lm-drawer-tx"
             iconPosition="leading"
           />
@@ -319,7 +305,7 @@ export function LiquiditySheet({
           <span className="ms-detail-label">{t.fiberPubkey}</span>
           <CopyableText
             value={match.fiberPubkey}
-            display={truncatePubkey(match.fiberPubkey)}
+            display={truncatePubkey(match.fiberPubkey, 20, 12)}
             className="ms-detail-value mono lm-drawer-tx"
             iconPosition="leading"
           />
@@ -388,7 +374,7 @@ export function LiquiditySheet({
         </div>
       )}
 
-      <div className="lm-drawer-actions">
+      <div className={`lm-drawer-actions${hesitationOverHint ? ' is-flush' : ''}`}>
         {disabled && <span className="lm-node-hint">{t.nodeNotRunning}</span>}
         {life.isExhausted ? (
           <button
@@ -418,20 +404,15 @@ export function LiquiditySheet({
             <div className="lm-drawer-action-status">{t.lmHesitationInStatus}</div>
           </>
         ) : (
-          <>
-            {/* Window closed → withdrawal is forbidden; injection is the only
-                buyer action, so withdraw is not shown at all. */}
-            <button
-              type="button"
-              className="btn-primary lm-buy-btn"
-              disabled={disabled}
-              title={disabled ? t.nodeNotRunning : undefined}
-              onClick={() => onInject(match)}
-            >
-              {t.lmInject}
-            </button>
-            <div className="lm-drawer-action-status">{t.lmHesitationOverStatus}</div>
-          </>
+          <button
+            type="button"
+            className="btn-primary lm-buy-btn"
+            disabled={disabled}
+            title={disabled ? t.nodeNotRunning : undefined}
+            onClick={() => onInject(match)}
+          >
+            {t.lmInject}
+          </button>
         )}
       </div>
     </div>

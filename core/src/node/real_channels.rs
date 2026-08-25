@@ -39,6 +39,7 @@ pub trait FiberChannelApi: Send + Sync {
     pubkey: &str,
     funding_amount_shannons: u64,
     address: Option<&str>,
+    tlc_fee_ppm: Option<u64>,
   ) -> Result<String, CommandError>;
   async fn shutdown_channel(&self, channel_id: &str, force: bool) -> Result<(), CommandError>;
   /// Generate a signed invoice for `amount_shannons`, paying into this node.
@@ -104,6 +105,7 @@ impl FiberChannelApi for RealFiberChannels {
     pubkey: &str,
     funding_amount_shannons: u64,
     address: Option<&str>,
+    tlc_fee_ppm: Option<u64>,
   ) -> Result<String, CommandError> {
     let mut params = serde_json::json!({
       "pubkey": pubkey,
@@ -111,6 +113,9 @@ impl FiberChannelApi for RealFiberChannels {
     });
     if let Some(a) = address {
       params["address"] = serde_json::json!(a);
+    }
+    if let Some(ppm) = tlc_fee_ppm {
+      params["tlc_fee_proportional_millionths"] = serde_json::json!(format!("0x{:x}", ppm));
     }
     let result: FiberOpenChannelResult = self.client().call_fiber("open_channel", &params).await?;
     Ok(hex::encode(result.temporary_channel_id.as_bytes()))
@@ -213,6 +218,7 @@ impl FiberChannelApi for MockFiberChannels {
     pubkey: &str,
     funding_amount_shannons: u64,
     _address: Option<&str>,
+    _tlc_fee_ppm: Option<u64>,
   ) -> Result<String, CommandError> {
     self
       .opened
@@ -257,6 +263,23 @@ fn channel_state_name(state: &ChannelState) -> String {
   name.to_string()
 }
 
+fn channel_state_flags(state: &ChannelState) -> Option<String> {
+  let value = match state {
+    ChannelState::NegotiatingFunding(f) => serde_json::to_value(f).ok()?,
+    ChannelState::CollaboratingFundingTx(f) => serde_json::to_value(f).ok()?,
+    ChannelState::SigningCommitment(f) => serde_json::to_value(f).ok()?,
+    ChannelState::AwaitingTxSignatures(f) => serde_json::to_value(f).ok()?,
+    ChannelState::AwaitingChannelReady(f) => serde_json::to_value(f).ok()?,
+    ChannelState::ShuttingDown(f) => serde_json::to_value(f).ok()?,
+    ChannelState::Closed(f) => serde_json::to_value(f).ok()?,
+    ChannelState::ChannelReady | ChannelState::Stale => return None,
+  };
+  match value {
+    serde_json::Value::String(s) if !s.is_empty() => Some(s),
+    _ => None,
+  }
+}
+
 fn channel_close_flags(state: &ChannelState) -> Option<u32> {
   match state {
     ChannelState::ShuttingDown(f) => Some(f.0),
@@ -289,13 +312,15 @@ fn channel_to_wire(c: &FiberChannel) -> Channel {
     remote_balance_ckb: c.remote_balance as f64 / 1e8,
     remote_balance_shannons: c.remote_balance as u64,
     state: channel_state_name(&c.state),
+    state_flags: channel_state_flags(&c.state),
     is_public: c.is_public,
     enabled: c.enabled,
     created_at_ms: c.created_at,
     close_flags: channel_close_flags(&c.state),
-    // fee policy isn't exposed by list_channels; a later `get_channel_info` refinement.
-    base_fee_mshannons: None,
-    fee_rate_ppm: None,
+    // Fiber has no Lightning-style per-payment base fee. The only forwarding
+    // fee `list_channels` exposes is `tlc_fee_proportional_millionths` (ppm).
+    base_fee_mshannons: Some(0),
+    fee_rate_ppm: Some(c.tlc_fee_proportional_millionths.min(u64::MAX as u128) as u64),
   }
 }
 
@@ -423,10 +448,12 @@ impl ChannelsBackend for RealChannelsBackend {
     base_fee_mshannons: Option<u64>,
     fee_rate_ppm: Option<u64>,
   ) -> Result<OpenChannelResult, CommandError> {
-    let _ = (base_fee_mshannons, fee_rate_ppm); // fee-at-open is a later refinement
+    // Fiber has no per-HTLC base fee; only the proportional ppm rate is applied
+    // at open via `tlc_fee_proportional_millionths`.
+    let _ = base_fee_mshannons;
     let temp_id = self
       .fiber
-      .open_channel(&peer_id, capacity_shannons, None)
+      .open_channel(&peer_id, capacity_shannons, None, fee_rate_ppm)
       .await?;
     Ok(OpenChannelResult {
       temp_id,
@@ -472,10 +499,31 @@ mod tests {
       created_at: 1_700_000_000_000,
       enabled: true,
       tlc_expiry_delta: 0,
-      tlc_fee_proportional_millionths: 0,
+      tlc_fee_proportional_millionths: 1000,
       shutdown_transaction_hash: None,
       failure_detail: None,
     }
+  }
+
+  #[test]
+  fn fiber_rpc_state_json_maps_collaborating_flags() {
+    let collaborating: ChannelState = serde_json::from_value(serde_json::json!({
+      "state_name": "CollaboratingFundingTx",
+      "state_flags": "AWAITING_REMOTE_TX_COLLABORATION_MSG"
+    }))
+    .expect("Fiber collaborating state JSON");
+    assert_eq!(channel_state_name(&collaborating), "CollaboratingFundingTx");
+    assert_eq!(
+      channel_state_flags(&collaborating).as_deref(),
+      Some("AWAITING_REMOTE_TX_COLLABORATION_MSG")
+    );
+
+    let ready: ChannelState = serde_json::from_value(serde_json::json!({
+      "state_name": "ChannelReady"
+    }))
+    .expect("Fiber ChannelReady JSON");
+    assert_eq!(channel_state_name(&ready), "ChannelReady");
+    assert_eq!(channel_state_flags(&ready), None);
   }
 
   #[test]
@@ -503,10 +551,13 @@ mod tests {
     assert_eq!(w.local_balance_ckb, 12_500.0);
     assert_eq!(w.remote_balance_ckb, 7_500.0);
     assert_eq!(w.state, "ChannelReady");
+    assert_eq!(w.state_flags, None);
     assert!(w.is_public);
     assert!(w.enabled);
     assert_eq!(w.created_at_ms, 1_700_000_000_000);
     assert_eq!(w.close_flags, None);
+    assert_eq!(w.base_fee_mshannons, Some(0));
+    assert_eq!(w.fee_rate_ppm, Some(1000));
     assert_eq!(
       w.channel_id,
       "1111111111111111111111111111111111111111111111111111111111111111"

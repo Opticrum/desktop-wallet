@@ -70,7 +70,8 @@ export function HelpDialog({ open, onClose }: { open: boolean; onClose: () => vo
               lead={t.hpLead}
               sections={[
                 { title: t.hpS1Title, lines: [t.hpS1a, t.hpS1b, t.hpS1c] },
-                { title: t.hpS2Title, lines: [t.hpS2a, t.hpS2b] },
+                { title: t.hpS2Title, lines: [t.hpS2a, t.hpS2b, t.hpS2c] },
+                { title: t.hpS3Title, lines: [t.hpS3a, t.hpS3b] },
               ]}
             />
           )}

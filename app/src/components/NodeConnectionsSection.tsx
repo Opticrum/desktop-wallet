@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ConfirmModal } from './ConfirmModal'
 import { CkbTxModal, useCkbTx } from './CkbTxModal'
+import { ChannelListDrawer } from './ChannelListDrawer'
+import { ChannelOpenModal, type ChannelOpenState } from './ChannelOpenModal'
 import { CopyableText } from './CopyableText'
 import { useLocale } from '../i18n/LocaleContext'
 import { channels } from '../api/client'
 import { toCommandError } from '../api/types'
 import { useNode } from '../node/NodeContext'
-import type { ChannelNode } from '../api/types'
+import type { Channel, ChannelNode } from '../api/types'
 import { stateToBucket } from '../lib/node'
+import { formatTimestamp } from '../lib/liquidity'
+import { commandErrorText } from '../lib/errors'
 import { shortHash } from '../lib/wallet'
 
 type Props = {
@@ -28,6 +32,41 @@ function IconPause() {
   )
 }
 
+/** Refresh control — same arrow as the peer-card / toolbar refresh. */
+function IconRefresh({ spinning }: { spinning?: boolean }) {
+  return (
+    <svg
+      className={spinning ? 'spin' : ''}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
+    </svg>
+  )
+}
+
+/** Close-channel control — a vivid X so the destructive action is findable. */
+function IconClose() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  )
+}
+
 /** Truncate a long hex/pubkey in the middle: `02ab91f4c5d…e3a9f8b6c1d2`. */
 const midTruncate = (s: string, max: number) => {
   if (s.length <= max) return s
@@ -39,27 +78,44 @@ const midTruncate = (s: string, max: number) => {
 /** Brief dwell so the "broadcast" step is legible before the confirm step. */
 const CHANNEL_STEP_DWELL_MS = 400
 
+/** Strip `0x` and lowercase so temp ids / pubkeys compare across encodings. */
+const normHex = (s: string) => s.replace(/^0x/i, '').toLowerCase()
+
 /**
- * The fiber node builds + broadcasts the channel's funding tx internally, so the
- * app can only observe the channel lifecycle. Poll `channels.list` until the
- * peer's channel reaches `ChannelReady` (funding tx confirmed on-chain); returns
- * the funding tx hash when available. Throws on timeout so the modal surfaces it.
+ * Fiber lists a new channel as soon as negotiation starts — often still
+ * pending, not `ChannelReady`. Poll until that row appears (new id, or the
+ * `open_channel` temp id). Throws `channel_open_timeout` so the open modal
+ * can localize it.
  */
-async function waitForChannelReady(peerId: string, timeoutMs = 120_000): Promise<string | null> {
+async function waitForChannelListed(
+  peerId: string,
+  knownIds: Set<string>,
+  tempId: string | null,
+  onList: (nodes: ChannelNode[]) => void,
+  timeoutMs = 60_000,
+): Promise<string> {
+  const peer = normHex(peerId)
+  const temp = tempId ? normHex(tempId) : ''
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     try {
       const list = await channels.list()
-      const ready = list.nodes
-        .find((n) => n.peer.id === peerId)
-        ?.channels.find((c) => c.state === 'ChannelReady')
-      if (ready) return ready.txHash || null
+      onList(list.nodes)
+      const found = (list.nodes.find((n) => normHex(n.peer.id) === peer)?.channels ?? []).find(
+        (c) => {
+          const id = normHex(c.channelId)
+          return (temp && id === temp) || !knownIds.has(id)
+        },
+      )
+      if (found) return found.channelId
     } catch {
       /* transient — keep polling */
     }
     await new Promise((r) => setTimeout(r, 2000))
   }
-  throw new Error('timeout waiting for the channel to open')
+  throw Object.assign(new Error('timeout waiting for the node to list the channel'), {
+    code: 'channel_open_timeout',
+  })
 }
 
 /** Poll `channels.list` until the channel leaves the list or is `Closed`. */
@@ -78,25 +134,167 @@ async function waitForChannelClosed(channelId: string, timeoutMs = 120_000): Pro
   throw new Error('timeout waiting for the channel to close')
 }
 
+function channelStateLabel(state: string, t: {
+  nodeStateActive: string
+  nodeStatePending: string
+  nodeStateClosing: string
+  nodeStateNegotiating: string
+  nodeStateCollaborating: string
+  nodeStateSigning: string
+  nodeStateAwaitingSigs: string
+  nodeStateAwaitingReady: string
+  nodeStateStale: string
+}) {
+  switch (state) {
+    case 'ChannelReady':
+      return t.nodeStateActive
+    case 'ShuttingDown':
+    case 'Closed':
+      return t.nodeStateClosing
+    case 'NegotiatingFunding':
+      return t.nodeStateNegotiating
+    case 'CollaboratingFundingTx':
+      return t.nodeStateCollaborating
+    case 'SigningCommitment':
+      return t.nodeStateSigning
+    case 'AwaitingTxSignatures':
+      return t.nodeStateAwaitingSigs
+    case 'AwaitingChannelReady':
+      return t.nodeStateAwaitingReady
+    case 'Stale':
+      return t.nodeStateStale
+    default:
+      return t.nodeStatePending
+  }
+}
+
+function ChannelGauge({
+  ch,
+  frozen,
+  refreshing,
+  onRefresh,
+  onClose,
+}: {
+  ch: Channel
+  frozen: boolean
+  refreshing: boolean
+  onRefresh: () => void
+  onClose: (channelId: string, force: boolean) => void
+}) {
+  const { t } = useLocale()
+  const bucket = stateToBucket(ch.state)
+  const localPct = ch.capacityCkb > 0 ? Math.round((ch.localBalanceCkb / ch.capacityCkb) * 100) : 0
+  const remotePct = 100 - localPct
+
+  return (
+    <div className="conn-gauge">
+      <div className="conn-gauge-top">
+        <div className="conn-gauge-id">
+          <span className="conn-gauge-id-k">{t.nodeChannelId}</span>
+          <CopyableText value={ch.channelId} className="mono" />
+        </div>
+        <span
+          className={`badge ${bucket}`}
+          title={[ch.state, ch.stateFlags].filter(Boolean).join(' · ')}
+        >
+          {channelStateLabel(ch.state, t)}
+        </span>
+        <span className={`conn-pill${ch.isPublic ? ' is-public' : ''}`}>
+          {ch.isPublic ? t.nodeChannelPublic : t.nodeChannelPrivate}
+        </span>
+        <div className="conn-gauge-actions">
+          <button
+            type="button"
+            className="conn-gauge-refresh"
+            onClick={onRefresh}
+            title={frozen ? t.connFrozen : t.nodeRefresh}
+            aria-label={frozen ? t.connFrozen : t.nodeRefresh}
+            disabled={frozen}
+          >
+            <IconRefresh spinning={refreshing} />
+          </button>
+          <button
+            type="button"
+            className="conn-gauge-close"
+            onClick={() => onClose(ch.channelId, bucket === 'closing')}
+            title={frozen ? t.connFrozen : t.nodeCloseChannel}
+            aria-label={frozen ? t.connFrozen : t.nodeCloseChannel}
+            disabled={frozen}
+          >
+            <IconClose />
+          </button>
+        </div>
+      </div>
+      <div className="conn-gauge-io">
+        <div className="conn-gauge-side is-local">
+          <span className="conn-gauge-k">{t.nodeOutbound}</span>
+          <span className="conn-gauge-v">
+            <span className="conn-gauge-n">{ch.localBalanceCkb.toLocaleString()}</span>
+            <span className="conn-gauge-unit">{t.unitCkb}</span>
+          </span>
+        </div>
+        <div className="conn-gauge-side is-remote">
+          <span className="conn-gauge-k">{t.nodeInbound}</span>
+          <span className="conn-gauge-v">
+            <span className="conn-gauge-n">{ch.remoteBalanceCkb.toLocaleString()}</span>
+            <span className="conn-gauge-unit">{t.unitCkb}</span>
+          </span>
+        </div>
+      </div>
+      <div className="conn-gauge-track">
+        <div className="ch-capacity-bar" aria-hidden="true">
+          <div className="ch-capacity-bar-local" style={{ width: `${localPct}%` }} />
+          <div className="ch-capacity-bar-remote" style={{ width: `${remotePct}%` }} />
+        </div>
+      </div>
+      <div className="conn-gauge-meta">
+        <span className="conn-gauge-meta-item">
+          <span className="conn-gauge-meta-label">{t.nodeOnchainTx}</span>
+          <CopyableText
+            value={ch.txHash}
+            display={shortHash(ch.txHash)}
+            className="mono"
+          />
+        </span>
+        <span className="conn-gauge-meta-item">
+          <span className="conn-gauge-meta-label">{t.capacity}</span>
+          <span className="conn-gauge-meta-value">
+            {ch.capacityCkb.toLocaleString()} CKB
+          </span>
+        </span>
+        <span className="conn-gauge-meta-item">
+          <span className="conn-gauge-meta-label">{t.nodeFeeRateShort}</span>
+          <span className="conn-gauge-meta-value">
+            {ch.feeRatePpm != null ? `${ch.feeRatePpm.toLocaleString()} ppm` : '—'}
+          </span>
+        </span>
+        <span className="conn-gauge-meta-item">
+          <span className="conn-gauge-meta-label">{t.nodeChannelCreated}</span>
+          <span className="conn-gauge-meta-value">{formatTimestamp(ch.createdAtMs)}</span>
+        </span>
+      </div>
+    </div>
+  )
+}
+
 export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
   const { t } = useLocale()
   // Runtime/frozen gating comes from the shared NodeContext (it polls
-  // `node.get_runtime`). The channel list itself refreshes only on demand — an
-  // interval refresh re-runs the default-expand and pops collapsed peers open.
+  // `node.get_runtime`). The channel list itself refreshes only on demand.
   const { running, targetId } = useNode()
   const [nodes, setNodes] = useState<ChannelNode[]>([])
   const [refreshing, setRefreshing] = useState(false)
   const [refreshingNode, setRefreshingNode] = useState<string | null>(null)
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [connectOpen, setConnectOpen] = useState(false)
   const [connectAlias, setConnectAlias] = useState('')
   const [connectAddr, setConnectAddr] = useState('')
-  const [channelFormOpen, setChannelFormOpen] = useState<string | null>(null)
-  const [channelCapacity, setChannelCapacity] = useState('1000')
-  const [channelBaseFee, setChannelBaseFee] = useState('1000')
-  const [channelFeeRate, setChannelFeeRate] = useState('100')
-  const [pendingCloseId, setPendingCloseId] = useState<{ channelId: string; force: boolean } | null>(null)
+  const [channelListOpen, setChannelListOpen] = useState<string | null>(null)
+  const [pendingCloseId, setPendingCloseId] = useState<{ channelId: string; force: boolean } | null>(
+    null,
+  )
   const [pendingRemoveId, setPendingRemoveId] = useState<string | null>(null)
+  const [channelOpen, setChannelOpen] = useState<ChannelOpenState>({ status: 'idle' })
+  const channelOpenRun = useRef(0)
 
   const frozen = !running
 
@@ -105,34 +303,28 @@ export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
   useEffect(() => {
     if (!frozen) return
     setConnectOpen(false)
-    setChannelFormOpen(null)
+    setChannelListOpen(null)
     setPendingCloseId(null)
     setPendingRemoveId(null)
+    channelOpenRun.current++
+    setChannelOpen({ status: 'idle' })
   }, [frozen])
 
-  // Auto-expand the first channel-bearing peer exactly once, on the first load
-  // — a later refresh must never re-run this and pop a collapsed peer open.
-  const initialExpandDone = useRef(false)
   const load = useCallback(async () => {
     try {
       const c = await channels.list()
       setNodes(c.nodes)
-      if (!initialExpandDone.current) {
-        initialExpandDone.current = true
-        const first = c.nodes.find((n) => n.channels.length > 0)
-        if (first) setExpanded(new Set([first.peer.id]))
-      }
     } catch {
       /* best-effort */
     }
   }, [])
 
-  // Channel open/close runs behind the 3-step confirmation modal; `load` (the
-  // channel list refresh) fires once the operation settles.
+  // Channel close runs behind the 3-step confirmation modal; `load` (the
+  // channel list refresh) fires once the operation settles. Open uses a
+  // separate node-list wait dialog — Fiber never surfaces the funding tx.
   const { ckbTxState, runCkbTx, closeCkbTx } = useCkbTx(load)
 
   useEffect(() => {
-    initialExpandDone.current = false
     load()
   }, [load, targetId])
 
@@ -203,56 +395,51 @@ export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
     onToast(t.nodeCreateToast)
   }
 
-  const toggle = (id: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
-  }
-
-  const openChannelForm = (node: ChannelNode) => {
-    // Opening a channel on a collapsed node expands it first.
-    setExpanded((prev) => new Set(prev).add(node.peer.id))
-    setChannelCapacity('1000')
-    setChannelBaseFee('1000')
-    setChannelFeeRate('100')
-    setChannelFormOpen(node.peer.id)
-  }
-
-  const handleCreateChannel = async (peerId: string) => {
-    setChannelFormOpen(null)
-    const capacityCkb = Number(channelCapacity.replace(/,/g, '')) || 0
+  const handleCreateChannel = async (peerId: string, capacity: string, baseFee: string, feeRate: string) => {
+    const capacityCkb = Number(capacity.replace(/,/g, '')) || 0
+    const runId = ++channelOpenRun.current
+    setChannelOpen({ status: 'submitting' })
     try {
-      await runCkbTx(t.channelOpenLabel, async ({ advance }) => {
-        await channels.openChannel(
-          peerId,
-          Math.round(capacityCkb * 1e8),
-          Number(channelBaseFee) || undefined,
-          Number(channelFeeRate) || undefined,
-        )
-        // The fiber node builds + broadcasts the funding tx internally — the app
-        // observes only the channel lifecycle, so steps 1-2 advance on the RPC
-        // returning and step 3 waits for the funding tx to confirm (ChannelReady).
-        advance('broadcasting')
-        await new Promise((r) => setTimeout(r, CHANNEL_STEP_DWELL_MS))
-        advance('confirming')
-        const fundingHash = await waitForChannelReady(peerId)
-        return fundingHash ? { txHash: fundingHash } : null
-      })
-      await load()
+      const snapshot = await channels.list()
+      if (runId !== channelOpenRun.current) return
+      setNodes(snapshot.nodes)
+      const knownIds = new Set(
+        (snapshot.nodes.find((n) => normHex(n.peer.id) === normHex(peerId))?.channels ?? []).map(
+          (c) => normHex(c.channelId),
+        ),
+      )
+      const opened = await channels.openChannel(
+        peerId,
+        Math.round(capacityCkb * 1e8),
+        Number(baseFee) || undefined,
+        Number(feeRate) || undefined,
+      )
+      if (runId !== channelOpenRun.current) return
+      setChannelOpen({ status: 'waiting' })
+      const channelId = await waitForChannelListed(
+        peerId,
+        knownIds,
+        opened.tempId || opened.channelId,
+        (next) => {
+          if (runId !== channelOpenRun.current) return
+          setNodes(next)
+        },
+      )
+      if (runId !== channelOpenRun.current) return
+      setChannelOpen({ status: 'ready', channelId })
       onToast(t.nodeCreateToast)
-    } catch {
-      /* best-effort — the 3-step modal surfaces the failure */
+    } catch (e) {
+      if (runId !== channelOpenRun.current) return
+      setChannelOpen({
+        status: 'failed',
+        error: commandErrorText(t, toCommandError(e)),
+      })
     }
   }
 
   const handleCloseChannel = async (id: string, force: boolean) => {
     setPendingCloseId(null)
+    setChannelListOpen(null)
     try {
       await runCkbTx(t.channelCloseLabel, async ({ advance }) => {
         await channels.closeChannel(id, force)
@@ -279,6 +466,10 @@ export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
       onToast(`${t.nodeDeleteFailed}${toCommandError(e).message}`)
     }
   }
+
+  const listNode = channelListOpen
+    ? (nodes.find((n) => n.peer.id === channelListOpen) ?? null)
+    : null
 
   return (
     <div className={`conn-section${frozen ? ' is-frozen' : ''}`}>
@@ -361,285 +552,148 @@ export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
         </div>
       )}
 
-      {/* Node list — each node expands to its nested channels */}
       <div className="conn-list">
         {nodes.map((node) => {
-          const isOpen = expanded.has(node.peer.id)
           const nodeOutboundCkb = node.channels.reduce((sum, c) => sum + c.localBalanceCkb, 0)
           const nodeInboundCkb = node.channels.reduce((sum, c) => sum + c.remoteBalanceCkb, 0)
+          const nodeCapacityCkb = nodeOutboundCkb + nodeInboundCkb
+          const localPct =
+            nodeCapacityCkb > 0 ? Math.round((nodeOutboundCkb / nodeCapacityCkb) * 100) : 0
           const nodeAlias = node.peer.alias ?? node.peer.id
           const nodeAliasDisplay = midTruncate(nodeAlias, 18)
           return (
-            <div key={node.peer.id} className={`conn-card${isOpen ? ' open' : ''}`}>
-              <div className="conn-card-head">
-                <button
-                  type="button"
-                  className="conn-card-main"
-                  aria-expanded={isOpen}
-                  aria-label={`${isOpen ? t.nodeCollapse : t.nodeExpand} ${nodeAlias}`}
-                  onClick={() => toggle(node.peer.id)}
-                >
-                  <span className="conn-expander" aria-hidden="true">
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.7"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M9 6l6 6-6 6" />
-                    </svg>
-                  </span>
-                  <span className="peer-dot connected" />
-                  <span className="conn-alias">{nodeAliasDisplay}</span>
-                  {node.peer.version && <span className="conn-version">v{node.peer.version}</span>}
-                  <span className="conn-count">
-                    {node.channels.length} {t.nodeChannelCount}
-                  </span>
-                  <span className="conn-liq">
-                    <span className="conn-liq-out">
-                      {t.nodeOutbound} {round1(nodeOutboundCkb).toLocaleString()}
-                    </span>
-                    <span className="conn-liq-sep">·</span>
-                    <span className="conn-liq-in">
-                      {t.nodeInbound} {round1(nodeInboundCkb).toLocaleString()}
-                    </span>
-                    <span className="conn-liq-unit">CKB</span>
-                  </span>
-                </button>
-
-                <div className="conn-actions">
-                  <button
-                    type="button"
-                    className="row-action-btn"
-                    onClick={() => refreshNode(node.peer.id)}
-                    aria-label={t.nodeRefresh}
-                    title={frozen ? t.connFrozen : t.nodeRefresh}
-                    disabled={frozen}
-                  >
-                    <svg
-                      className={refreshingNode === node.peer.id ? 'spin' : ''}
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.7"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                    >
-                      <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    className="row-action-btn"
-                    onClick={() => setPendingRemoveId(node.peer.id)}
-                    aria-label={t.nodeRemovePeer}
-                    title={frozen ? t.connFrozen : t.nodeRemovePeer}
-                    disabled={frozen}
-                  >
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.7"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                    >
-                      <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-
-              {isOpen && (
-                <div className="conn-panel">
-                  <div className="conn-panel-head">
-                    <div className="conn-panel-meta">
-                      <div className="conn-panel-pubkey">
-                        <span className="conn-panel-label">{t.nodePeerPubkey}</span>
-                        <CopyableText value={node.peer.id} />
-                      </div>
-                      <div className="conn-panel-addr">
-                        <span className="conn-panel-label">{t.nodePeerAddr}</span>
-                        <CopyableText value={node.peer.addr ?? ''} />
-                      </div>
-                    </div>
+            <div key={node.peer.id} className="conn-unit">
+              <div className="conn-card">
+                <div className="conn-card-head">
+                <div className="conn-card-top">
+                  <div className="conn-card-title">
+                    <span className="peer-dot connected" />
+                    <span className="conn-alias">{nodeAliasDisplay}</span>
                   </div>
-
-                  {node.channels.length > 0 && (
-                    <table className="data-table data-table-sm conn-ch-table">
-                      <thead>
-                        <tr>
-                          <th>{t.nodeOnchainTx}</th>
-                          <th>{t.capacity}</th>
-                          <th>{t.local}</th>
-                          <th>{t.remote}</th>
-                          <th>{t.state}</th>
-                          <th className="row-action" aria-label={t.nodeCloseChannel} />
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {node.channels.map((ch) => {
-                          const bucket = stateToBucket(ch.state)
-                          const localPct =
-                            ch.capacityCkb > 0
-                              ? Math.round((ch.localBalanceCkb / ch.capacityCkb) * 100)
-                              : 0
-                          const remotePct = 100 - localPct
-                          return (
-                            <tr key={ch.channelId}>
-                              <td>
-                                <CopyableText
-                                  value={ch.txHash}
-                                  display={ch.txHash.length > 20 ? shortHash(ch.txHash) : ch.txHash}
-                                  className="conn-txhash mono"
-                                />
-                              </td>
-                              <td>
-                                <div className="ch-capacity-val">
-                                  {ch.capacityCkb.toLocaleString()} CKB
-                                </div>
-                                <div className="ch-capacity-bar">
-                                  <div
-                                    className="ch-capacity-bar-local"
-                                    style={{ width: `${localPct}%` }}
-                                  />
-                                  <div
-                                    className="ch-capacity-bar-remote"
-                                    style={{ width: `${remotePct}%` }}
-                                  />
-                                </div>
-                              </td>
-                              <td className="ch-balance-local">
-                                {ch.localBalanceCkb.toLocaleString()} CKB
-                              </td>
-                              <td>{ch.remoteBalanceCkb.toLocaleString()} CKB</td>
-                              <td>
-                                <span className={`badge ${bucket}`}>{bucket}</span>
-                              </td>
-                              <td className="row-action">
-                                <button
-                                  className="row-action-btn"
-                                  onClick={() =>
-                                    setPendingCloseId({
-                                      channelId: ch.channelId,
-                                      // A channel already closing needs a force close to finish.
-                                      force: stateToBucket(ch.state) === 'closing',
-                                    })
-                                  }
-                                  aria-label={t.nodeCloseChannel}
-                                  title={frozen ? t.connFrozen : t.nodeCloseChannel}
-                                  disabled={frozen}
-                                >
-                                  <svg
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="1.7"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    aria-hidden="true"
-                                  >
-                                    <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" />
-                                  </svg>
-                                </button>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  )}
-
-                  <div className="conn-panel-actions">
+                  <div className="conn-actions">
                     <button
                       type="button"
-                      className="btn-secondary conn-new-channel"
-                      onClick={() => openChannelForm(node)}
+                      className="row-action-btn"
+                      onClick={() => refreshNode(node.peer.id)}
+                      aria-label={t.nodeRefresh}
+                      title={frozen ? t.connFrozen : t.nodeRefresh}
                       disabled={frozen}
-                      title={frozen ? t.connFrozen : undefined}
                     >
-                      + {t.nodeNewChannel}
+                      <svg
+                        className={refreshingNode === node.peer.id ? 'spin' : ''}
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.7"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      className="row-action-btn"
+                      onClick={() => setPendingRemoveId(node.peer.id)}
+                      aria-label={t.nodeRemovePeer}
+                      title={frozen ? t.connFrozen : t.nodeRemovePeer}
+                      disabled={frozen}
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.7"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" />
+                      </svg>
                     </button>
                   </div>
-
-                  {channelFormOpen === node.peer.id && (
-                    <div className="panel inline-form conn-form">
-                      <div className="form-row">
-                        <label className="form-label">{t.nodeFormCapacity}</label>
-                        <input
-                          className="form-input"
-                          placeholder="1000"
-                          inputMode="decimal"
-                          value={channelCapacity}
-                          onChange={(e) => setChannelCapacity(e.target.value)}
-                        />
-                      </div>
-                      <div className="form-row">
-                        <div className="form-label-line">
-                          <label className="form-label">{t.nodeFormBaseFee}</label>
-                          <span className="field-help">
-                            <button type="button" className="field-help-btn" aria-label={t.walletHelp}>
-                              ?
-                            </button>
-                            <span className="field-help-tip" role="tooltip">
-                              {t.nodeFormBaseFeeHelp}
-                            </span>
-                          </span>
-                        </div>
-                        <input
-                          className="form-input"
-                          placeholder="1000"
-                          inputMode="numeric"
-                          value={channelBaseFee}
-                          onChange={(e) => setChannelBaseFee(e.target.value)}
-                        />
-                      </div>
-                      <div className="form-row">
-                        <div className="form-label-line">
-                          <label className="form-label">{t.nodeFormFeeRate}</label>
-                          <span className="field-help">
-                            <button type="button" className="field-help-btn" aria-label={t.walletHelp}>
-                              ?
-                            </button>
-                            <span className="field-help-tip" role="tooltip">
-                              {t.nodeFormFeeRateHelp}
-                            </span>
-                          </span>
-                        </div>
-                        <input
-                          className="form-input"
-                          placeholder="100"
-                          inputMode="numeric"
-                          value={channelFeeRate}
-                          onChange={(e) => setChannelFeeRate(e.target.value)}
-                        />
-                      </div>
-                      <div className="form-actions">
-                        <button className="btn-secondary" onClick={() => setChannelFormOpen(null)}>
-                          {t.nodeFormCancel}
-                        </button>
-                        <button
-                          className="btn-primary"
-                          onClick={() => handleCreateChannel(node.peer.id)}
-                          disabled={frozen}
-                        >
-                          {t.nodeFormCreate}
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
-              )}
+
+                <div className="conn-card-sub">
+                  {node.peer.version && <span className="conn-sub-item">v{node.peer.version}</span>}
+                  <span className="conn-sub-item conn-liq-out">
+                    {t.nodeOutbound} {round1(nodeOutboundCkb).toLocaleString()}
+                  </span>
+                  <span className="conn-sub-item conn-liq-in">
+                    {t.nodeInbound} {round1(nodeInboundCkb).toLocaleString()}
+                  </span>
+                  <span className="conn-sub-item conn-liq-unit">{t.unitCkb}</span>
+                </div>
+
+                <div className="conn-card-endpoints">
+                  <div className="conn-chip">
+                    <span className="conn-chip-k">{t.nodePeerPubkey}</span>
+                    <CopyableText value={node.peer.id} />
+                  </div>
+                  <div className="conn-chip">
+                    <span className="conn-chip-k">{t.nodePeerAddr}</span>
+                    {node.peer.addr ? (
+                      <CopyableText value={node.peer.addr} />
+                    ) : (
+                      <span className="conn-chip-empty">—</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              </div>
+
+              <button
+                type="button"
+                className={`conn-card-foot${node.channels.length === 0 ? ' is-create' : ''}`}
+                onClick={() => setChannelListOpen(node.peer.id)}
+                disabled={frozen}
+                title={frozen ? t.connFrozen : undefined}
+              >
+                {node.channels.length > 0 && (
+                  <span
+                    className="conn-card-foot-fill"
+                    style={{ width: `${localPct}%` }}
+                    aria-hidden="true"
+                  />
+                )}
+                <span className="conn-card-foot-label">
+                  {node.channels.length === 0
+                    ? t.nodeNoChannels
+                    : `${node.channels.length} ${t.nodeChannelCount}`}
+                </span>
+              </button>
             </div>
           )
         })}
       </div>
 
-      {/* Close channel confirm */}
+      <ChannelListDrawer
+        open={channelListOpen !== null}
+        frozen={frozen}
+        node={listNode}
+        dismissible={pendingCloseId === null && channelOpen.status === 'idle'}
+        onClose={() => setChannelListOpen(null)}
+        onCreate={(capacity, baseFee, feeRate) => {
+          if (channelListOpen) handleCreateChannel(channelListOpen, capacity, baseFee, feeRate)
+        }}
+      >
+        <div className="conn-channels">
+          {listNode
+            ? listNode.channels.map((ch) => (
+                <ChannelGauge
+                  key={ch.channelId}
+                  ch={ch}
+                  frozen={frozen}
+                  refreshing={refreshingNode === listNode.peer.id}
+                  onRefresh={() => refreshNode(listNode.peer.id)}
+                  onClose={(channelId, force) => setPendingCloseId({ channelId, force })}
+                />
+              ))
+            : null}
+        </div>
+      </ChannelListDrawer>
+
       {/* Close channel confirm — force close when the channel is already closing */}
       <ConfirmModal
         open={pendingCloseId !== null}
@@ -648,6 +702,7 @@ export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
         confirmLabel={t.nodeDeleteConfirm}
         cancelLabel={t.nodeDeleteCancel}
         danger
+        overDrawer
         onCancel={() => setPendingCloseId(null)}
         onConfirm={() =>
           pendingCloseId && handleCloseChannel(pendingCloseId.channelId, pendingCloseId.force)
@@ -665,7 +720,19 @@ export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
         onCancel={() => setPendingRemoveId(null)}
         onConfirm={() => pendingRemoveId && handleDisconnect(pendingRemoveId)}
       />
-      <CkbTxModal state={ckbTxState} onClose={closeCkbTx} />
+      <CkbTxModal
+        state={ckbTxState}
+        onClose={closeCkbTx}
+        overDrawer={channelListOpen !== null}
+      />
+      <ChannelOpenModal
+        state={channelOpen}
+        onClose={() => {
+          channelOpenRun.current++
+          setChannelOpen({ status: 'idle' })
+        }}
+        overDrawer={channelListOpen !== null}
+      />
     </div>
   )
 }

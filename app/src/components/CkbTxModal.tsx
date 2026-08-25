@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Channel } from '@tauri-apps/api/core'
+import { node } from '../api/client'
 import { useLocale } from '../i18n/LocaleContext'
 import type { Messages } from '../i18n/types'
 import { toCommandError } from '../api/types'
 import type { CkbTxPhase, CkbTxProgress } from '../api/types'
+import { explorerTxUrl } from '../lib/wallet'
+import { useNode } from '../node/NodeContext'
 import { useScrollLock } from '../lib/useScrollLock'
 
 /**
@@ -37,7 +41,7 @@ export type CkbTxState =
 /**
  * Progress handle handed to the action — the frontend forwards `channel` to the
  * IPC call (Rust streams `broadcasting`/`confirming` back), and frontend-driven
- * flows (channel open/close) call `advance` directly.
+ * flows (channel close) call `advance` directly.
  */
 export interface CkbTxProgressHandle {
   channel: Channel<CkbTxProgress>
@@ -75,6 +79,16 @@ function IconCopy() {
     <svg viewBox="0 0 24 24" aria-hidden>
       <rect x="9" y="9" width="11" height="11" rx="2" />
       <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+    </svg>
+  )
+}
+
+function IconExternal() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path d="M14 5h5v5" />
+      <path d="M20 4 10 14" />
+      <path d="M9 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3" />
     </svg>
   )
 }
@@ -121,27 +135,39 @@ function stepStates(status: 'waiting' | 'confirmed' | 'rejected', phase?: CkbTxW
  * CKB transaction confirmation modal. Walks a 3-step lifecycle —
  * ① 构造交易 ② 发送上链 ③ 打包确认 — driven by progress events from the backend
  * (or `advance` calls from frontend-driven flows), then shows the confirmed tx
- * hash (copyable) or the failure. Non-dismissable while waiting (no close
- * button, no Escape) — the operation still completes in the background.
+ * hash (click to open the explorer; copy stays on the side) or the failure.
+ * Stays open after confirmation until the user clicks 确认. Non-dismissable
+ * while waiting (no close button, no Escape) — the operation still completes
+ * in the background.
  */
 export function CkbTxModal({
   state,
   onClose,
+  overDrawer = false,
 }: {
   state: CkbTxState
   onClose: () => void
+  /** Sit above the bottom / side drawer (z-index 300). */
+  overDrawer?: boolean
 }) {
   const { t } = useLocale()
+  const { chain } = useNode()
   const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    setCopied(false)
+  }, [state.status])
 
   useEffect(() => {
     if (state.status === 'idle') return
     const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
       // Non-dismissible while waiting — the tx is still being confirmed.
-      if (e.key === 'Escape' && state.status !== 'waiting') onClose()
+      if (state.status !== 'waiting') onClose()
     }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+    document.addEventListener('keydown', handler, true)
+    return () => document.removeEventListener('keydown', handler, true)
   }, [state.status, onClose])
 
   useScrollLock(state.status !== 'idle')
@@ -153,10 +179,18 @@ export function CkbTxModal({
   const rejected = state.status === 'rejected'
 
   const handleCopy = async () => {
-    if (state.status !== 'confirmed') return
+    if (state.status !== 'confirmed' || !state.txHash) return
     await copyText(state.txHash)
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1400)
+  }
+
+  const handleOpenExplorer = () => {
+    if (state.status !== 'confirmed' || !state.txHash) return
+    const url = explorerTxUrl(chain, state.txHash)
+    node.openUrl(url).catch(() => {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    })
   }
 
   const statusText = waiting
@@ -172,8 +206,11 @@ export function CkbTxModal({
   const steps = stepStates(waiting ? 'waiting' : confirmed ? 'confirmed' : 'rejected', state.status === 'waiting' || state.status === 'rejected' ? state.phase : undefined)
   const stepLabels = [t.ckbTxStepConstruct, t.ckbTxStepBroadcast, t.ckbTxStepConfirm]
 
-  return (
-    <div className="modal-backdrop ckb-tx-backdrop" role="presentation">
+  return createPortal(
+    <div
+      className={`modal-backdrop ckb-tx-backdrop${overDrawer ? ' is-over-drawer' : ''}`}
+      role="presentation"
+    >
       <div
         className="modal ckb-tx-modal"
         role="dialog"
@@ -215,16 +252,29 @@ export function CkbTxModal({
           <>
             <div className="ckb-tx-hint">{t.ckbTxConfirmedHint}</div>
             {state.txHash && (
-              <button
-                type="button"
-                className="ckb-tx-hash"
-                onClick={handleCopy}
-                title={`${t.copy}: ${state.txHash}`}
-              >
-                <span className="ckb-tx-hash-label">{t.ckbTxHash}</span>
-                <span className="ckb-tx-hash-value mono">{state.txHash}</span>
-                <span className="ckb-tx-hash-copy">{copied ? t.copied : <IconCopy />}</span>
-              </button>
+              <div className="ckb-tx-hash">
+                <div className="ckb-tx-hash-label">
+                  <span>{t.ckbTxHash}</span>
+                  <button
+                    type="button"
+                    className="ckb-tx-hash-copy"
+                    onClick={handleCopy}
+                    title={`${t.copy}: ${state.txHash}`}
+                    aria-label={`${t.copy}: ${state.txHash}`}
+                  >
+                    {copied ? t.copied : <IconCopy />}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="ckb-tx-hash-value mono"
+                  onClick={handleOpenExplorer}
+                  title={t.ckbTxViewExplorer}
+                >
+                  <span>{state.txHash}</span>
+                  <IconExternal />
+                </button>
+              </div>
             )}
           </>
         )}
@@ -233,11 +283,12 @@ export function CkbTxModal({
 
         {!waiting && (
           <button type="button" className="btn-primary ckb-tx-done" onClick={onClose}>
-            {t.close}
+            {confirmed ? t.ckbTxOk : t.close}
           </button>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -247,11 +298,11 @@ export function CkbTxModal({
  * Creates a per-invocation Tauri `Channel` and passes `{ channel, advance }` to
  * the action: Rust events stream `broadcasting` → `confirming` back (liquidity /
  * wallet flows forward `channel` to the IPC call), and frontend-driven flows
- * (channel open/close) call `advance` directly. `onConfirmed` fires the moment
+ * (channel close) call `advance` directly. `onConfirmed` fires the moment
  * the command resolves (the backend only resolves once the tx is confirmed
- * on-chain) so the page can refresh. The tx hash is printed to the browser
- * console on confirmation, and shown in the modal. Handles both camelCase
- * (`txHash`) and snake_case (`tx_hash`) result shapes.
+ * on-chain) so the page can refresh. The modal stays on the confirmed hash
+ * until the user clicks 确认. Handles both camelCase (`txHash`) and snake_case
+ * (`tx_hash`) result shapes.
  */
 export function useCkbTx(onConfirmed?: () => void) {
   const { t } = useLocale()
@@ -290,9 +341,6 @@ export function useCkbTx(onConfirmed?: () => void) {
         if (minWait > 0) await new Promise((r) => setTimeout(r, minWait))
         if (runId !== runIdRef.current) return
         setState({ status: 'confirmed', label, txHash })
-        window.setTimeout(() => {
-          if (runId === runIdRef.current) setState({ status: 'idle' })
-        }, 1800)
       } catch (e) {
         if (runId !== runIdRef.current) return
         const err = toCommandError(e)

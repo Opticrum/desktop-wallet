@@ -6,7 +6,7 @@ import type { ChannelList } from '../api/types'
 import { FiberSendModal } from './FiberSendModal'
 import { FiberInvoiceModal } from './FiberInvoiceModal'
 
-function IconArrowUpRight() {
+function IconSendOut() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden>
       <path d="M7 17 17 7" />
@@ -15,19 +15,18 @@ function IconArrowUpRight() {
   )
 }
 
-function IconReceive() {
+function IconRecvIn() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden>
-      <path d="M12 3v10" />
-      <path d="m7 9 5 5 5-5" />
-      <path d="M4 19h16" />
+      <path d="M17 7 7 17" />
+      <path d="M16 17H7V8" />
     </svg>
   )
 }
 
 /**
- * Node connection KPIs — a compact 4-column strip between the control panel
- * and the logs (outbound/inbound balance + node/channel counts).
+ * Node connection KPIs — a compact 2×2 cluster beside the control panel
+ * (outbound/inbound balance + node/channel counts).
  * Data comes from `channels.list`; the sums are frontend formulas.
  *
  * 出金/入金 are action cards: clicking opens a send-Fiber-transfer /
@@ -107,14 +106,18 @@ export function NodeKpiGrid({
           disabled={!running}
           title={running ? t.clickToSend : t.nodeNotRunning}
         >
-          <div className="kpi-label">
-            {t.nodeOutboundBalance} <span className="kpi-label-unit">CKB</span>
+          <span className="kpi-role-icon" aria-hidden>
+            <IconSendOut />
+          </span>
+          <div className="kpi-label">{t.nodeOutboundBalance}</div>
+          <div className="kpi-metric">
+            <div className="kpi-value">{outboundCkb.toLocaleString()}</div>
+            <div className="kpi-sub">{t.unitCkb}</div>
           </div>
-          <div className="kpi-value">{outboundCkb.toLocaleString()}</div>
           <span className="kpi-hint">
             {running ? (
               <>
-                <IconArrowUpRight />
+                <IconSendOut />
                 {t.clickToSend}
               </>
             ) : (
@@ -129,14 +132,18 @@ export function NodeKpiGrid({
           disabled={!running}
           title={running ? t.fiberInvoiceHint : t.nodeNotRunning}
         >
-          <div className="kpi-label">
-            {t.nodeInboundBalance} <span className="kpi-label-unit">CKB</span>
+          <span className="kpi-role-icon" aria-hidden>
+            <IconRecvIn />
+          </span>
+          <div className="kpi-label">{t.nodeInboundBalance}</div>
+          <div className="kpi-metric">
+            <div className="kpi-value">{inboundCkb.toLocaleString()}</div>
+            <div className="kpi-sub">{t.unitCkb}</div>
           </div>
-          <div className="kpi-value">{inboundCkb.toLocaleString()}</div>
           <span className="kpi-hint">
             {running ? (
               <>
-                <IconReceive />
+                <IconRecvIn />
                 {t.fiberInvoiceHint}
               </>
             ) : (
@@ -146,11 +153,17 @@ export function NodeKpiGrid({
         </button>
         <div className="kpi">
           <div className="kpi-label">{t.nodeKpiNodes}</div>
-          <div className="kpi-value">{nodes.length}</div>
+          <div className="kpi-metric">
+            <div className="kpi-value">{nodes.length}</div>
+            <div className="kpi-sub">{t.nodeKpiNodesUnit}</div>
+          </div>
         </div>
         <div className="kpi">
           <div className="kpi-label">{t.nodeKpiChannels}</div>
-          <div className="kpi-value">{all.length}</div>
+          <div className="kpi-metric">
+            <div className="kpi-value">{all.length}</div>
+            <div className="kpi-sub">{t.nodeKpiChannelsUnit}</div>
+          </div>
         </div>
       </div>
 

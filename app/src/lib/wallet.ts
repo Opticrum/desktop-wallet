@@ -1,7 +1,7 @@
 // Frontend wallet formulas — display/math kept on the frontend per
 // `docs/ipc/ipc-api.md` §6 (wallet domain).
 
-import type { WalletTx, WalletTxKind } from '../api/types'
+import type { Chain, WalletTx, WalletTxKind } from '../api/types'
 
 export type Tx = WalletTx
 export type TxType = WalletTxKind
@@ -23,6 +23,14 @@ export function typeCounts(txs: Tx[]): Record<TxType, number> {
 }
 
 export const TX_TYPE_ORDER: readonly TxType[] = TX_TYPES
+
+/** Official Nervos explorer page for a CKB transaction. */
+export function explorerTxUrl(chain: Chain, txHash: string): string {
+  const host =
+    chain === 'mainnet' ? 'https://explorer.nervos.org' : 'https://testnet.explorer.nervos.org'
+  const hash = txHash.startsWith('0x') ? txHash : `0x${txHash}`
+  return `${host}/transaction/${hash}`
+}
 
 /** Short hash — `0x7a1c9e2b…f8a0` (8 + 6 visible hex). */
 export function shortHash(hash: string): string {

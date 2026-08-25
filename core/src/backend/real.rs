@@ -114,26 +114,45 @@ impl<T: RPC> RealWalletBackend<T> {
 
   /// Compute the on-chain balance across every managed wallet address (shannons).
   ///
-  /// Each address query fails fast (3s timeout) so `get_summary` — and the
-  /// wallet unlock gate — never blocks on a slow/unreachable RPC. A stale 0
-  /// balance updates on the next poll once the chain responds.
-  async fn total_balance_shannons(&self) -> u64 {
+  /// Each address query fails fast (3s timeout) so `get_summary` never blocks
+  /// on a slow/unreachable RPC. Timeout / RPC failure is an error — not a
+  /// successful 0 — so the UI keeps its last balance (or the loading
+  /// placeholder) instead of flashing a fake empty wallet.
+  async fn total_balance_shannons(&self) -> Result<u64, CommandError> {
     let children = {
       let mut conn = self.db.lock().unwrap();
       wallets::list_wallets(&mut conn).unwrap_or_default()
     };
+    if children.is_empty() {
+      return Ok(0);
+    }
     let mut total = 0u64;
+    let mut any_ok = false;
     for child in &children {
-      let balance = tokio::time::timeout(
+      match tokio::time::timeout(
         std::time::Duration::from_secs(3),
         self.provider.get_balance_by_address(&child.ckb_address),
       )
       .await
-      .unwrap_or(Ok(0))
-      .unwrap_or(0);
-      total += balance;
+      {
+        Ok(Ok(balance)) => {
+          total += balance;
+          any_ok = true;
+        }
+        Ok(Err(e)) => {
+          log::warn!("balance query failed for {}: {e}", child.ckb_address);
+        }
+        Err(_) => {
+          log::warn!("balance query timed out for {}", child.ckb_address);
+        }
+      }
     }
-    total
+    if !any_ok {
+      return Err(CommandError::chain(
+        "wallet balance query timed out or failed",
+      ));
+    }
+    Ok(total)
   }
 
   fn require_unlocked(&self) -> Result<(), CommandError> {
@@ -234,7 +253,7 @@ impl<T: RPC + Send + Sync> WalletBackend for RealWalletBackend<T> {
       .first()
       .map(|(r, _)| r.ckb_address.clone())
       .unwrap_or_default();
-    let available_ckb = self.total_balance_shannons().await as f64 / 1e8;
+    let available_ckb = self.total_balance_shannons().await? as f64 / 1e8;
     Ok(WalletSummary {
       has_wallet,
       unlocked,

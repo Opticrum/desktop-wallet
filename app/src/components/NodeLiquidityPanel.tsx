@@ -3,24 +3,23 @@ import { useScrollLock } from '../lib/useScrollLock'
 import { useLocale } from '../i18n/LocaleContext'
 import { useNode } from '../node/NodeContext'
 import { liquidity, wallet } from '../api/client'
-import { CkbTxModal, useCkbTx } from '../components/CkbTxModal'
+import { CkbTxModal, useCkbTx } from './CkbTxModal'
 import {
   costAndDaysToRateShPerBlock,
   dwellHours,
   formatCkb,
-  formatYieldRange,
-  mapDashboardData,
   matchLife,
+  sameFiberPubkey,
   shannonsPerBlockToApyBps,
   type LiquidityMatch,
   type LiquidityOrder,
-  type MappedDashboard,
   type SheetTarget,
 } from '../lib/liquidity'
-import { LiquidityCellField } from '../components/LiquidityCellField'
-import { LiquiditySheet } from '../components/LiquiditySheet'
-import { ConfirmModal } from '../components/ConfirmModal'
-import { Toast } from '../components/Toast'
+import { LiquidityCellField } from './LiquidityCellField'
+import { LiquiditySheet } from './LiquiditySheet'
+import { BottomDrawer } from './BottomDrawer'
+import { ConfirmModal } from './ConfirmModal'
+import { Toast } from './Toast'
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -30,11 +29,6 @@ const AUTOREFRESH_MS = 15_000
 /** Value-only APY (no unit suffix) — for labels that already carry a unit. */
 function formatBpsValue(bps: number): string {
   return (bps / 100).toFixed(2) + '%'
-}
-
-/** Bare APY number — the `%` unit rides in the tile's `.kpi-sub`. */
-function formatBpsNum(bps: number): string {
-  return (bps / 100).toFixed(2)
 }
 
 // ── Buy order modal ───────────────────────────────────────────────────────
@@ -227,23 +221,27 @@ function AdjustDepositModal({ open, match, disabled, onClose, onConfirm }: Adjus
   )
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────
-
-export function LiquidityMarket() {
+/**
+ * Inbound-liquidity pool for the currently selected node — the former
+ * liquidity-page left column, scoped by that node's fiber pubkey.
+ */
+export function NodeLiquidityPanel({ visible = true }: { visible?: boolean }) {
   const { t } = useLocale()
-  const { chain, running, starting, fiberPubkey } = useNode()
+  const { running, starting, fiberPubkey, targetId } = useNode()
 
   // Every on-chain action (发布/撤销/注入/抽离/提取) needs the node up.
   const nodeReady = running && !starting
 
   // Wallet lock gates the market — a locked wallet can't place trades, so the
-  // cell pool freezes and shows an unlock hint.
+  // cell pool freezes and shows an unlock hint. Local status only: a chain
+  // balance poll here would starve the wallet drawer on the same CKB RPC.
   const [walletLocked, setWalletLocked] = useState(false)
   useEffect(() => {
+    if (!visible) return
     let alive = true
     const poll = () =>
       wallet
-        .getSummary()
+        .getStatus()
         .then((s) => {
           if (alive) setWalletLocked(!s.unlocked)
         })
@@ -254,7 +252,7 @@ export function LiquidityMarket() {
       alive = false
       window.clearInterval(id)
     }
-  }, [])
+  }, [visible])
 
   const [orders, setOrders] = useState<LiquidityOrder[]>([])
   const [matches, setMatches] = useState<LiquidityMatch[]>([])
@@ -268,9 +266,6 @@ export function LiquidityMarket() {
   const [extractTarget, setExtractTarget] = useState<LiquidityMatch | null>(null)
   // Buyer abandon during the hesitation window — withdraws ALL rent.
   const [abandonTarget, setAbandonTarget] = useState<LiquidityMatch | null>(null)
-  // Global whole-chain market overview — `null` until the first load; a loaded
-  // all-zero value (node offline) still renders real numbers.
-  const [dashboard, setDashboard] = useState<MappedDashboard | null>(null)
 
   // Shared market fetch. `rescan` re-scans personal orders from the chain (the
   // manual button + background auto-refresh) so a matched/cancelled order leaves
@@ -281,16 +276,12 @@ export function LiquidityMarket() {
   const fetchMarket = useCallback(
     async (rescan: boolean) => {
       try {
-        const [o, m, d] = await Promise.all([
+        const [o, m] = await Promise.all([
           walletLocked || !rescan ? liquidity.getOrders() : liquidity.refreshOrders(),
           liquidity.getMatches(),
-          // Whole-chain scan — best-effort so a scan failure can't sink the
-          // personal orders/matches update.
-          liquidity.getDashboard().catch(() => null),
         ])
         setOrders(o)
         setMatches(m)
-        if (d) setDashboard(mapDashboardData(d))
       } catch {
         /* best-effort */
       }
@@ -301,15 +292,23 @@ export function LiquidityMarket() {
   const reload = useCallback(() => fetchMarket(false), [fetchMarket])
 
   useEffect(() => {
+    if (!visible) return
     reload()
-  }, [reload])
+  }, [reload, visible])
+
+  // Switching nodes (or losing the pubkey) drops the open sheet — the
+  // previous cell no longer belongs to this view.
+  useEffect(() => {
+    setActive(null)
+  }, [targetId, fiberPubkey])
 
   // Background auto-refresh — every tick re-scans personal orders from the chain
-  // (cache reads would keep matched/cancelled orders ghosted), refreshes matches
-  // + the whole-chain dashboard, and re-renders. A tick is skipped while a
-  // refresh is still in flight or the window is hidden (minimized).
+  // (cache reads would keep matched/cancelled orders ghosted) and refreshes
+  // matches. A tick is skipped while a refresh is still in flight or the
+  // window is hidden (minimized).
   const pollInFlightRef = useRef(false)
   useEffect(() => {
+    if (!visible) return
     const poll = async () => {
       if (pollInFlightRef.current || document.hidden) return
       pollInFlightRef.current = true
@@ -323,7 +322,7 @@ export function LiquidityMarket() {
     }
     const id = window.setInterval(poll, AUTOREFRESH_MS)
     return () => window.clearInterval(id)
-  }, [fetchMarket])
+  }, [fetchMarket, visible])
 
   // On the lock→unlock transition, re-fetch — while locked the backend returns
   // no orders, so fresh data arrives once the wallet can filter again.
@@ -346,35 +345,24 @@ export function LiquidityMarket() {
     }
   }
 
-  // Manual refresh — immediate chain re-scan (the background auto-refresh does
-  // the same silently). Rendered by the cell pool at its top-left.
-  const refreshButton = (
-    <button
-      type="button"
-      className="lm-refresh-btn"
-      onClick={handleRefresh}
-      disabled={refreshing}
-      aria-label={t.nodeRefresh}
-      title={t.nodeRefresh}
-    >
-      <svg
-        className={refreshing ? 'spin' : ''}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
-      </svg>
-    </button>
+  // Hold the last selected cell so the sheet stays painted while the drawer
+  // slides out (clearing `active` would unmount it mid-transition).
+  const sheetTargetRef = useRef<SheetTarget | null>(null)
+  if (active) sheetTargetRef.current = active
+  const sheetTarget = active ?? sheetTargetRef.current
+
+  const nodeOrders = useMemo(
+    () => orders.filter((o) => sameFiberPubkey(o.fiberPubkey, fiberPubkey)),
+    [orders, fiberPubkey],
+  )
+  const nodeMatches = useMemo(
+    () => matches.filter((m) => sameFiberPubkey(m.fiberPubkey, fiberPubkey)),
+    [matches, fiberPubkey],
   )
 
-  // ── Strip dashboard — per-tab KPIs ────────────────────────────────────────
+  // ── Strip dashboard — per-tab KPIs, scoped to this node's cells ──────────
   const orderStats = useMemo(() => {
-    const open = orders.filter((o) => o.status !== 'cancelled')
+    const open = nodeOrders.filter((o) => o.status !== 'cancelled')
     const totalDemand = open.reduce((s, o) => s + o.channelCapacityCkb, 0)
     const avgApy = open.length
       ? Math.round(open.reduce((s, o) => s + o.annualYieldBps, 0) / open.length)
@@ -383,19 +371,23 @@ export function LiquidityMarket() {
       ? open.reduce((s, o) => s + dwellHours(o.createdAtMs ?? 0), 0) / open.length
       : 0
     return { totalDemand, avgApy, pending: open.length, avgDwell }
-  }, [orders])
+  }, [nodeOrders])
 
   const matchStats = useMemo(() => {
-    const active = matches.filter((m) => !matchLife(m).isExhausted)
-    const totalDeposit = matches.reduce((s, m) => s + m.depositCkb, 0)
-    const avgRate = active.length
-      ? Math.round(active.reduce((s, m) => s + m.annualYieldBps, 0) / active.length)
+    const activeMatches = nodeMatches.filter((m) => !matchLife(m).isExhausted)
+    const totalDeposit = nodeMatches.reduce((s, m) => s + m.depositCkb, 0)
+    const avgRate = activeMatches.length
+      ? Math.round(activeMatches.reduce((s, m) => s + m.annualYieldBps, 0) / activeMatches.length)
       : 0
-    const avgRemaining = matches.length
-      ? Math.round(matches.reduce((s, m) => s + matchLife(m).pct, 0) / matches.length)
+    const avgRemaining = nodeMatches.length
+      ? Math.round(nodeMatches.reduce((s, m) => s + matchLife(m).pct, 0) / nodeMatches.length)
       : 0
-    return { active: active.length, totalDeposit, avgRate, avgRemaining }
-  }, [matches])
+    return { active: activeMatches.length, totalDeposit, avgRate, avgRemaining }
+  }, [nodeMatches])
+
+  const emptyHint = fiberPubkey ? t.lmNoOrdersForNode : t.nodeNotRunning
+  const poolEmpty =
+    poolTab === 'orders' ? orderStats.pending === 0 : nodeMatches.length === 0
 
   // Every CKB tx write resolves only once confirmed on-chain; the modal walks
   // the user through the wait, prints the tx hash, and reloads when it lands.
@@ -494,206 +486,166 @@ export function LiquidityMarket() {
     })
   }
 
+  const sheetBusy =
+    buyOpen || adjust !== null || cancelTarget !== null || abandonTarget !== null || extractTarget !== null
+
   return (
-    <div className="page-wide">
-      <div className="lm-layout">
-        {/* Left — top strip (per-tab dashboard) + floating cell pool */}
-        <div className={`lm-main is-${poolTab}`}>
-          <section className="lm-strip" aria-label={t.liquidityMarket}>
-            <div className="lm-switch" role="tablist" aria-label={t.liquidityMarket}>
-              <button
-                type="button"
-                id="pool-tab-orders"
-                role="tab"
-                aria-selected={poolTab === 'orders'}
-                aria-controls="pool-panel"
-                className={poolTab === 'orders' ? 'lm-switch-btn is-active' : 'lm-switch-btn'}
-                onClick={() => {
-                  setPoolTab('orders')
-                  setActive(null)
-                }}
-              >
-                {t.mgOrderTag}
-                <span className="lm-switch-count">{orderStats.pending}</span>
-              </button>
-              <button
-                type="button"
-                id="pool-tab-matches"
-                role="tab"
-                aria-selected={poolTab === 'matches'}
-                aria-controls="pool-panel"
-                className={poolTab === 'matches' ? 'lm-switch-btn is-active' : 'lm-switch-btn'}
-                onClick={() => {
-                  setPoolTab('matches')
-                  setActive(null)
-                }}
-              >
-                {t.mgMatchTag}
-                <span className="lm-switch-count">{matchStats.active}</span>
-              </button>
-            </div>
+    <>
+    <div className="node-tabbar">
+      <button
+        type="button"
+        className="node-refresh-btn"
+        onClick={handleRefresh}
+        disabled={refreshing}
+        aria-label={t.nodeRefresh}
+        title={t.nodeRefresh}
+      >
+        <svg
+          className={refreshing ? 'spin' : ''}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        className="node-tabbar-action btn-primary"
+        disabled={!nodeReady}
+        title={nodeReady ? undefined : t.nodeNotRunning}
+        onClick={() => setBuyOpen(true)}
+      >
+        + {t.lmBuyLiquidity}
+      </button>
+    </div>
+    <div className={`node-liq-panel lm-main is-${poolTab}`}>
+      <LiquidityCellField
+        orders={nodeOrders}
+        matches={nodeMatches}
+        mode={poolTab}
+        selected={active ? active.item.outpoint : null}
+        onSelect={setActive}
+        disabled={walletLocked}
+        nodeFiberPubkey={fiberPubkey}
+        overlay={
+          <>
+            <section className="lm-strip lm-pool-hud" aria-label={t.liquidityMarket}>
+              <div className="lm-switch" role="tablist" aria-label={t.liquidityMarket}>
+                <button
+                  type="button"
+                  id="pool-tab-orders"
+                  role="tab"
+                  aria-selected={poolTab === 'orders'}
+                  aria-controls="pool-panel"
+                  className={poolTab === 'orders' ? 'lm-switch-btn is-active' : 'lm-switch-btn'}
+                  onClick={() => {
+                    setPoolTab('orders')
+                    setActive(null)
+                  }}
+                >
+                  {t.mgOrderTag}
+                  <span className="lm-switch-count">{orderStats.pending}</span>
+                </button>
+                <button
+                  type="button"
+                  id="pool-tab-matches"
+                  role="tab"
+                  aria-selected={poolTab === 'matches'}
+                  aria-controls="pool-panel"
+                  className={poolTab === 'matches' ? 'lm-switch-btn is-active' : 'lm-switch-btn'}
+                  onClick={() => {
+                    setPoolTab('matches')
+                    setActive(null)
+                  }}
+                >
+                  {t.mgMatchTag}
+                  <span className="lm-switch-count">{matchStats.active}</span>
+                </button>
+              </div>
 
-            <div className="lm-strip-kpis" key={poolTab}>
-              {poolTab === 'orders' ? (
-                <>
-                  <div className="lm-kpi">
-                    <span className="lm-kpi-label">{t.lmTotalDemand}</span>
-                    <span className="lm-kpi-value">
-                      {formatCkb(orderStats.totalDemand)} <small>CKB</small>
-                    </span>
-                  </div>
-                  <div className="lm-kpi">
-                    <span className="lm-kpi-label">{t.lmAvgApy}</span>
-                    <span className="lm-kpi-value">{formatBpsValue(orderStats.avgApy)}</span>
-                  </div>
-                  <div className="lm-kpi">
-                    <span className="lm-kpi-label">{t.lmPendingOrders}</span>
-                    <span className="lm-kpi-value">{orderStats.pending}</span>
-                  </div>
-                  <div className="lm-kpi">
-                    <span className="lm-kpi-label">{t.lmAvgDwell}</span>
-                    <span className="lm-kpi-value">
-                      {Math.round(orderStats.avgDwell)}<small>h</small>
-                    </span>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="lm-kpi">
-                    <span className="lm-kpi-label">{t.lmActiveMatches}</span>
-                    <span className="lm-kpi-value">{matchStats.active}</span>
-                  </div>
-                  <div className="lm-kpi">
-                    <span className="lm-kpi-label">{t.lmTotalDeposit}</span>
-                    <span className="lm-kpi-value">
-                      {formatCkb(matchStats.totalDeposit)} <small>CKB</small>
-                    </span>
-                  </div>
-                  <div className="lm-kpi">
-                    <span className="lm-kpi-label">{t.lmAvgRate}</span>
-                    <span className="lm-kpi-value">{formatBpsValue(matchStats.avgRate)}</span>
-                  </div>
-                  <div className="lm-kpi">
-                    <span className="lm-kpi-label">{t.lmAvgRemaining}</span>
-                    <span className="lm-kpi-value">{matchStats.avgRemaining}%</span>
-                  </div>
-                </>
-              )}
-            </div>
-          </section>
+              <div className="lm-strip-kpis" key={poolTab}>
+                {poolTab === 'orders' ? (
+                  <>
+                    <div className="lm-kpi">
+                      <span className="lm-kpi-label">{t.lmTotalDemand}</span>
+                      <span className="lm-kpi-value">
+                        {formatCkb(orderStats.totalDemand)} <small>CKB</small>
+                      </span>
+                    </div>
+                    <div className="lm-kpi">
+                      <span className="lm-kpi-label">{t.lmAvgApy}</span>
+                      <span className="lm-kpi-value">{formatBpsValue(orderStats.avgApy)}</span>
+                    </div>
+                    <div className="lm-kpi">
+                      <span className="lm-kpi-label">{t.lmPendingOrders}</span>
+                      <span className="lm-kpi-value">{orderStats.pending}</span>
+                    </div>
+                    <div className="lm-kpi">
+                      <span className="lm-kpi-label">{t.lmAvgDwell}</span>
+                      <span className="lm-kpi-value">
+                        {Math.round(orderStats.avgDwell)}<small>h</small>
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="lm-kpi">
+                      <span className="lm-kpi-label">{t.lmActiveMatches}</span>
+                      <span className="lm-kpi-value">{matchStats.active}</span>
+                    </div>
+                    <div className="lm-kpi">
+                      <span className="lm-kpi-label">{t.lmTotalDeposit}</span>
+                      <span className="lm-kpi-value">
+                        {formatCkb(matchStats.totalDeposit)} <small>CKB</small>
+                      </span>
+                    </div>
+                    <div className="lm-kpi">
+                      <span className="lm-kpi-label">{t.lmAvgRate}</span>
+                      <span className="lm-kpi-value">{formatBpsValue(matchStats.avgRate)}</span>
+                    </div>
+                    <div className="lm-kpi">
+                      <span className="lm-kpi-label">{t.lmAvgRemaining}</span>
+                      <span className="lm-kpi-value">{matchStats.avgRemaining}%</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </section>
+            {poolEmpty && !walletLocked && (
+              <p className="lm-node-hint" role="status">
+                {emptyHint}
+              </p>
+            )}
+          </>
+        }
+      />
 
-          {/* Square floating-cell pool */}
-          <LiquidityCellField
-            orders={orders}
-            matches={matches}
-            mode={poolTab}
-            selected={active ? active.item.outpoint : null}
-            onSelect={setActive}
-            refreshButton={refreshButton}
-            disabled={walletLocked}
+      <BottomDrawer
+        open={active !== null}
+        onClose={() => setActive(null)}
+        ariaLabel={t.mgDetails}
+        side="right"
+        dismissible={!sheetBusy}
+      >
+        <div className="node-liq-sheet">
+          <LiquiditySheet
+            target={sheetTarget}
+            orders={nodeOrders}
+            matches={nodeMatches}
+            disabled={!nodeReady}
             nodeFiberPubkey={fiberPubkey}
+            onCancelOrder={setCancelTarget}
+            onInject={setAdjust}
+            onExtract={setExtractTarget}
+            onAbandon={setAbandonTarget}
           />
         </div>
-
-        {/* Right — market dashboard, or the selected cell's detail drawer */}
-        <aside className="lm-aside">
-          {active ? (
-            <LiquiditySheet
-              target={active}
-              orders={orders}
-              matches={matches}
-              disabled={!nodeReady}
-              nodeFiberPubkey={fiberPubkey}
-              onClose={() => setActive(null)}
-              onCancelOrder={setCancelTarget}
-              onInject={setAdjust}
-              onExtract={setExtractTarget}
-              onAbandon={setAbandonTarget}
-            />
-          ) : (
-            <>
-          <section className="panel lm-dash">
-            <div className="section-head">
-              <h2 className="lm-title">{t.lmMarketOverview}</h2>
-              <span className={`lm-net-badge net-${chain}`}>
-                {chain === 'mainnet' ? t.networkMainnet : t.networkTestnet}
-              </span>
-            </div>
-
-            {/* Hero — global order demand (whole-chain) */}
-            <div className="lm-dash-figure">
-              <span className="stat-label">{t.lmGlobalOrderDemand}</span>
-              <div className="lm-dash-value">
-                {dashboard ? formatCkb(dashboard.totalOrdersCapacityCkb) : '—'}
-                <span className="lm-dash-unit">{t.unitCkb}</span>
-              </div>
-            </div>
-
-            {/* 2×2 KPI grid — global chain-wide numbers */}
-            <div className="kpi-grid kpi-grid-2 conn-kpis lm-dash-kpis">
-              <div className="kpi">
-                <div className="kpi-label">{t.lmTotalOrders}</div>
-                <div className="kpi-value">{dashboard ? dashboard.totalOrders.toLocaleString() : '—'}</div>
-                <div className="kpi-sub">{t.lmOrdersUnit}</div>
-              </div>
-              <div className="kpi">
-                <div className="kpi-label">{t.lmLockedCapacity}</div>
-                <div className="kpi-value">{dashboard ? formatCkb(dashboard.totalCapacityLockedCkb) : '—'}</div>
-                <div className="kpi-sub">{t.unitCkb}</div>
-              </div>
-              <div className="kpi">
-                <div className="kpi-label">{t.lmAvgApy}</div>
-                <div className="kpi-value">{dashboard ? formatBpsNum(dashboard.avgAnnualYieldBps) : '—'}</div>
-                <div className="kpi-sub">%</div>
-              </div>
-              <div className="kpi">
-                <div className="kpi-label">{t.lmAvgRate}</div>
-                <div className="kpi-value">{dashboard ? dashboard.avgShannonsPerBlock.toLocaleString() : '—'}</div>
-                <div className="kpi-sub">{t.shannonsPerBlock}</div>
-              </div>
-            </div>
-
-            {/* Yield distribution mini histogram */}
-            <div className="lm-yield">
-              <div className="lm-yield-head">
-                <span className="stat-label">{t.lmYieldDistribution}</span>
-              </div>
-              {dashboard?.hasYieldData ? (
-                <div className="lm-yield-bars">
-                  {dashboard.yieldBuckets.map((b) => (
-                    <div
-                      key={`${b.lowBps}-${b.highBps}`}
-                      className="lm-yield-row"
-                      title={`${formatYieldRange(b)} · ${b.count} ${t.mgOrderTag} · ${formatCkb(b.capacityCkb)} ${t.unitCkb}`}
-                    >
-                      <span className="lm-yield-row-label">{formatYieldRange(b)}</span>
-                      <div className="lm-yield-track">
-                        <div className="lm-yield-fill" style={{ width: `${Math.round(b.share * 100)}%` }} />
-                      </div>
-                      <span className="lm-yield-row-count">{b.count.toLocaleString()}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="lm-yield-empty">{t.lmNoYieldData}</div>
-              )}
-            </div>
-
-            <button
-              type="button"
-              className="btn-primary lm-buy-btn"
-              disabled={!nodeReady}
-              title={nodeReady ? undefined : t.nodeNotRunning}
-              onClick={() => setBuyOpen(true)}
-            >
-              + {t.lmBuyLiquidity}
-            </button>
-            {!nodeReady && <span className="lm-node-hint">{t.nodeNotRunning}</span>}
-          </section>
-            </>
-          )}
-        </aside>
-      </div>
+      </BottomDrawer>
 
       <BuyOrderModal
         open={buyOpen}
@@ -714,6 +666,7 @@ export function LiquidityMarket() {
         body={t.lmCancelOrderBody}
         confirmLabel={t.lmCancelOrder}
         cancelLabel={t.nodeDeleteCancel}
+        overDrawer
         onCancel={() => setCancelTarget(null)}
         onConfirm={handleCancelOrder}
       />
@@ -724,6 +677,7 @@ export function LiquidityMarket() {
         confirmLabel={t.lmAbandonOrder}
         cancelLabel={t.nodeDeleteCancel}
         danger
+        overDrawer
         onCancel={() => setAbandonTarget(null)}
         onConfirm={handleAbandon}
       />
@@ -734,11 +688,13 @@ export function LiquidityMarket() {
         confirmLabel={t.lmExtractDelete}
         cancelLabel={t.nodeDeleteCancel}
         danger
+        overDrawer
         onCancel={() => setExtractTarget(null)}
         onConfirm={handleExtract}
       />
       <Toast message={toast} onDismiss={() => setToast(null)} />
-      <CkbTxModal state={ckbTxState} onClose={closeCkbTx} />
+      <CkbTxModal state={ckbTxState} onClose={closeCkbTx} overDrawer />
     </div>
+    </>
   )
 }

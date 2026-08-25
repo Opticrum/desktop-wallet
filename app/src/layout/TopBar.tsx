@@ -1,50 +1,21 @@
 import { useState } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
 import { useLocale } from '../i18n/LocaleContext'
 import { useTheme } from '../theme/ThemeContext'
+import { node } from '../api/client'
 import { HelpDialog } from '../components/HelpDialog'
+import { MarketOverviewChip } from '../components/MarketOverviewChip'
 
-type NavItem = {
-  to: string
-  glyph: string
-  labelKey: 'marketplace' | 'nodeLabel' | 'liquidityMarket'
-  isActive: (pathname: string) => boolean
-  disabled?: boolean
-}
+const GITHUB_REPO_URL = 'https://github.com/Opticrum/desktop-wallet'
 
 export function TopBar() {
   const { t, locale, setLocale } = useLocale()
   const { theme, setTheme } = useTheme()
-  const { pathname } = useLocation()
   // "关于 Opticrum" help dialog — opened from the top-right About button.
   const [helpOpen, setHelpOpen] = useState(false)
 
   // Brand lockup suffix ("Desktop" from "Opticrum Desktop") — the wordmark's
   // two-tone split (Optic|rum) is a visual-design constant, not content.
   const brandSuffix = t.brand.split(' ').slice(1).join(' ')
-
-  const navItems: NavItem[] = [
-    {
-      to: '/',
-      glyph: 'M',
-      labelKey: 'marketplace',
-      disabled: true,
-      isActive: (p) =>
-        p === '/' || p.startsWith('/apps/') || p === '/news' || p === '/changelog',
-    },
-    {
-      to: '/node',
-      glyph: 'N',
-      labelKey: 'nodeLabel',
-      isActive: (p) => p === '/node' || p.startsWith('/node/'),
-    },
-    {
-      to: '/liquidity',
-      glyph: 'L',
-      labelKey: 'liquidityMarket',
-      isActive: (p) => p === '/liquidity' || p.startsWith('/liquidity'),
-    },
-  ]
 
   return (
     <div className="top-bar-wrapper">
@@ -89,33 +60,8 @@ export function TopBar() {
             </span>
           </div>
 
-          <nav className="top-bar-nav" aria-label="Main navigation">
-            {navItems.map((item) => {
-              const active = item.isActive(pathname)
-              const className = `top-bar-nav-item${active ? ' active' : ''}${item.disabled ? ' disabled' : ''}`
-              const content = (
-                <>
-                  <span className="top-bar-nav-glyph">{item.glyph}</span>
-                  <span className="top-bar-nav-label">{t[item.labelKey]}</span>
-                  {item.disabled ? <LockIcon /> : null}
-                </>
-              )
-              if (item.disabled) {
-                return (
-                  <span key={item.to} className={className} aria-disabled="true">
-                    {content}
-                  </span>
-                )
-              }
-              return (
-                <NavLink key={item.to} to={item.to} className={className}>
-                  {content}
-                </NavLink>
-              )
-            })}
-          </nav>
-
           <div className="top-bar-right">
+            <MarketOverviewChip />
             <button
               type="button"
               className="top-bar-quick-btn"
@@ -140,6 +86,17 @@ export function TopBar() {
               onClick={() => setHelpOpen(true)}
             >
               {t.aboutButton}
+            </button>
+            <button
+              type="button"
+              className="top-bar-github"
+              title={t.githubLinkTitle}
+              aria-label={t.githubLinkTitle}
+              onClick={() => {
+                node.openUrl(GITHUB_REPO_URL).catch(() => {})
+              }}
+            >
+              <GithubIcon />
             </button>
           </div>
         </div>
@@ -188,23 +145,10 @@ function MoonIcon() {
   )
 }
 
-/* Small lock glyph — revealed on hover of a disabled nav entry */
-function LockIcon() {
+function GithubIcon() {
   return (
-    <span className="top-bar-lock" aria-hidden="true">
-      <svg
-        width="12"
-        height="12"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <rect x="4" y="11" width="16" height="10" rx="2" />
-        <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-      </svg>
-    </span>
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.688 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+    </svg>
   )
 }

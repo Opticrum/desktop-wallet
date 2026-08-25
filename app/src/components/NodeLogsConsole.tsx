@@ -108,6 +108,8 @@ export function NodeLogsConsole() {
 
   const stats = logStats(logs)
   const visibleLogs = logs.filter((line) => activeLevels[line.level])
+  const latestLog = !expanded && logs.length > 0 ? logs[logs.length - 1] : null
+  const latestPreview = latestLog?.msg.replace(/\s+/g, ' ').trim() ?? ''
 
   const toggleLevel = (level: LogLevel) =>
     setActiveLevels((prev) => ({ ...prev, [level]: !prev[level] }))
@@ -123,6 +125,11 @@ export function NodeLogsConsole() {
         >
           <ConsoleIcon />
           <span className="nlc-title">{t.nodeLogsSection}</span>
+          {latestPreview ? (
+            <span className="nlc-preview" title={latestLog?.msg}>
+              {latestPreview}
+            </span>
+          ) : null}
           <span className="nlc-stats">
             <span className="nlc-stat nlc-stat-info">INFO {stats.INFO}</span>
             <span className="nlc-stat nlc-stat-warn">WARN {stats.WARN}</span>
@@ -152,6 +159,7 @@ export function NodeLogsConsole() {
         open={logsOpen}
         onClose={() => setLogsOpen(false)}
         ariaLabel={t.recentLogs}
+        wide
       >
         <div className="drawer-filter" role="group" aria-label={t.logFilterLabel}>
           {LOG_LEVELS.map((level) => {

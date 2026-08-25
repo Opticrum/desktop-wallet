@@ -10,6 +10,8 @@ type ConfirmModalProps = {
   onConfirm: () => void
   onCancel: () => void
   danger?: boolean
+  /** Sit above the bottom drawer (z-index 300). */
+  overDrawer?: boolean
 }
 
 export function ConfirmModal({
@@ -21,14 +23,17 @@ export function ConfirmModal({
   onConfirm,
   onCancel,
   danger = false,
+  overDrawer = false,
 }: ConfirmModalProps) {
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel()
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      onCancel()
     }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
   }, [open, onCancel])
 
   useScrollLock(open)
@@ -37,7 +42,7 @@ export function ConfirmModal({
 
   return (
     <div
-      className="modal-backdrop"
+      className={`modal-backdrop${overDrawer ? ' is-over-drawer' : ''}`}
       role="dialog"
       aria-modal="true"
       aria-label={title}

@@ -191,6 +191,10 @@ pub struct NodeRuntime {
   /// `"builtin"` or the external target's id. Default keeps older test fixtures compiling.
   #[serde(default = "default_builtin_id")]
   pub target_id: String,
+  /// Fiber JSON-RPC URL of the selected target. External: the URL entered when
+  /// adding the node. Builtin: empty — the frontend derives it from config.
+  #[serde(default)]
+  pub rpc_url: String,
 }
 
 fn default_builtin_id() -> String {
@@ -387,6 +391,9 @@ pub struct Channel {
   pub remote_balance_shannons: u64,
   /// Fiber raw `state_name` — the frontend maps it to active|pending|closing.
   pub state: String,
+  /// Fiber `state_flags` string when the variant carries flags (e.g.
+  /// `AWAITING_REMOTE_TX_COLLABORATION_MSG`); `None` for `ChannelReady`.
+  pub state_flags: Option<String>,
   pub is_public: bool,
   pub enabled: bool,
   pub created_at_ms: u64,

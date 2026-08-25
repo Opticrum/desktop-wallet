@@ -68,17 +68,36 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
   const [txs, setTxs] = useState<WalletTx[]>([])
   const [refreshing, setRefreshing] = useState(false)
   const refreshTimer = useRef<number | null>(null)
+  const txsInFlight = useRef(false)
 
-  const refresh = useCallback(() => {
+  const loadSummary = useCallback(
+    () =>
+      wallet.getSummary().then((next) => {
+        setSummary(next)
+      }),
+    [],
+  )
+
+  const loadTxs = useCallback(() => {
+    if (txsInFlight.current) return Promise.resolve()
+    txsInFlight.current = true
     if (refreshTimer.current) window.clearTimeout(refreshTimer.current)
     refreshTimer.current = window.setTimeout(() => setRefreshing(true), 3000)
-    const summary = wallet.getSummary().then(setSummary).catch(() => {})
-    const txs = wallet.getTransactions().then(setTxs).catch(() => {})
-    Promise.all([summary, txs]).finally(() => {
-      if (refreshTimer.current) window.clearTimeout(refreshTimer.current)
-      setRefreshing(false)
-    })
+    return wallet
+      .getTransactions({})
+      .then(setTxs)
+      .catch(() => {})
+      .finally(() => {
+        if (refreshTimer.current) window.clearTimeout(refreshTimer.current)
+        setRefreshing(false)
+        txsInFlight.current = false
+      })
   }, [])
+
+  const refresh = useCallback(() => {
+    void loadSummary().catch(() => {})
+    void loadTxs()
+  }, [loadSummary, loadTxs])
 
   const { ckbTxState, runCkbTx, closeCkbTx } = useCkbTx(refresh)
 
@@ -94,10 +113,23 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
   )
 
   useEffect(() => {
-    refresh()
-    const id = window.setInterval(refresh, 15_000)
-    return () => window.clearInterval(id)
-  }, [refresh, refreshKey])
+    let cancelled = false
+    void (async () => {
+      try {
+        await loadSummary()
+      } catch {
+        /* timeout/error: keep the placeholder, never a fake 0 */
+      }
+      if (!cancelled) await loadTxs()
+    })()
+    const id = window.setInterval(() => {
+      void loadSummary().catch(() => {})
+    }, 15_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
+    }
+  }, [loadSummary, loadTxs, refreshKey])
 
   useEffect(() => {
     let alive = true
@@ -237,7 +269,7 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
         busy={ckbTxState.status !== 'idle'}
         onSubmit={handleSend}
       />
-      <CkbTxModal state={ckbTxState} onClose={closeCkbTx} />
+      <CkbTxModal state={ckbTxState} onClose={closeCkbTx} overDrawer />
       <QrModal open={qrOpen} onClose={() => setQrOpen(false)} address={summary?.address ?? ''} />
       {refreshing && (
         <div className="wallet-refreshing" role="status">

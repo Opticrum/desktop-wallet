@@ -19,6 +19,8 @@ type Props = {
   editRequest?: number
   /** Bumped after unlock so the lock/unlock badge updates immediately. */
   walletEpoch?: number
+  /** After add / edit / remove so the console's Fiber port row refreshes. */
+  onTargetsChanged?: () => void
 }
 
 function IconPlus() {
@@ -77,10 +79,17 @@ function IconChevron() {
 }
 
 /**
- * Node-page rail: built-in node, user-added external Fiber RPCs, wallet at the
- * bottom. Selecting a node calls `node.set_active` (backend is source of truth).
+ * Node-page rail: built-in node, user-added external Fiber RPCs, wallet
+ * at the bottom. Selecting a node calls `node.set_active` (backend is
+ * source of truth).
  */
-export function NodeSideMenu({ onWallet, onToast, editRequest = 0, walletEpoch = 0 }: Props) {
+export function NodeSideMenu({
+  onWallet,
+  onToast,
+  editRequest = 0,
+  walletEpoch = 0,
+  onTargetsChanged,
+}: Props) {
   const { t } = useLocale()
   const { running, starting, kind, targetId, applyRuntime } = useNode()
   const [list, setList] = useState<NodeTargetList | null>(null)
@@ -181,6 +190,7 @@ export function NodeSideMenu({ onWallet, onToast, editRequest = 0, walletEpoch =
         }
       }
       setDialog({ mode: 'closed' })
+      onTargetsChanged?.()
     } catch (e) {
       const err = toCommandError(e)
       setFormError(commandErrorText(t, err))
@@ -195,6 +205,7 @@ export function NodeSideMenu({ onWallet, onToast, editRequest = 0, walletEpoch =
       setList(next)
       const rt = await node.getRuntime()
       applyRuntime(rt)
+      onTargetsChanged?.()
     } catch (e) {
       onToast(commandErrorText(t, toCommandError(e)))
     }

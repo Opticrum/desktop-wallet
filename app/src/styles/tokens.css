@@ -30,7 +30,36 @@
   --info: #0891b2;
   --info-soft: #e0f7fa;
 
+  /* Node flow — coral-terracotta send / sea-teal receive.
+     High chroma so I/O reads live on the slate page; still not candy
+     red/green and not --danger / --ok.
+     Ink / unit sit darker than the wash so titles and CKB stay readable. */
+  --flow-out: #ee5c3e;
+  --flow-out-soft: #ffc4b5;
+  --flow-out-ink: #7c2216;
+  --flow-out-unit: #b83622;
+  --flow-in: #0ab396;
+  --flow-in-soft: #b3f3e7;
+  --flow-in-ink: #075448;
+  --flow-in-unit: #0a7a66;
+  --flow-highlight: rgba(255, 255, 255, 0.42);
+
+  /* Channel foot — same pair, quieter washes than the KPI cards. */
+  --conn-foot-track: color-mix(in srgb, var(--flow-in) 36%, var(--surface-2));
+  --conn-foot-fill: color-mix(in srgb, var(--flow-out) 52%, var(--surface));
+  --conn-foot-ink: var(--ink-2);
+  --conn-foot-track-hover: color-mix(in srgb, var(--flow-in) 48%, var(--surface-2));
+  --conn-foot-fill-hover: color-mix(in srgb, var(--flow-out) 66%, var(--surface));
+  --conn-foot-line: color-mix(in srgb, var(--flow-out) 36%, var(--line));
+  /* Empty-channel foot — dashed, disabled-looking, not a CTA. */
+  --conn-foot-create: transparent;
+  --conn-foot-create-hover: transparent;
+  --conn-foot-create-ink: var(--ink-4);
+  --conn-foot-create-ink-hover: var(--ink-3);
+  --conn-foot-create-line: var(--line-strong);
+
   --orange: #ff6b1a;
+  --orange-soft: #fff0e6;
   --violet: #633de8;
   --cyan: #15b8ed;
 
@@ -41,6 +70,25 @@
   --me-accent-ink: #ffffff;
   --me-glow: rgba(15, 118, 110, 0.28);
   --me-glow-strong: rgba(15, 118, 110, 0.42);
+
+  /* Top-bar market chip + flyout — own material, not chrome / not page cards. */
+  --tb-market-chip-bg: color-mix(in srgb, var(--me-accent) 14%, var(--surface));
+  --tb-market-chip-bg-hover: color-mix(in srgb, var(--me-accent) 22%, var(--surface));
+  --tb-market-chip-ink: var(--me-accent);
+  --tb-market-chip-ink-hover: var(--me-accent-hover);
+  --tb-market-chip-shadow:
+    0 0 0 1px color-mix(in srgb, var(--me-accent) 32%, transparent),
+    0 1px 2px color-mix(in srgb, var(--me-accent) 12%, transparent);
+  --tb-market-chip-shadow-hover:
+    0 0 0 1px color-mix(in srgb, var(--me-accent) 48%, transparent),
+    0 1px 3px color-mix(in srgb, var(--me-accent) 18%, transparent);
+  --tb-market-flyout-bg: #ffffff;
+  --tb-market-flyout-well: var(--surface-2);
+  --tb-market-flyout-track: color-mix(in srgb, var(--ink) 8%, var(--surface));
+  --tb-market-flyout-line: color-mix(in srgb, var(--me-accent) 68%, transparent);
+  --tb-market-flyout-shadow:
+    0 18px 44px rgba(15, 70, 66, 0.20),
+    0 6px 16px rgba(15, 17, 23, 0.10);
 
   /* Brand wordmark — the light pulse riding the optic ring */
   --brand-pulse: #ffffff;
@@ -127,7 +175,34 @@
   --info: #22d3ee;
   --info-soft: #0c2830;
 
+  /* Node flow — coral-terracotta send / sea-teal receive, high chroma.
+     Ink / unit sit lighter than the wash so titles and CKB stay readable. */
+  --flow-out: #ff7a62;
+  --flow-out-soft: #8a3226;
+  --flow-out-ink: #ffe4dc;
+  --flow-out-unit: #ffd8cc;
+  --flow-in: #2eecd4;
+  --flow-in-soft: #0e5f52;
+  --flow-in-ink: #d8fff6;
+  --flow-in-unit: #c8fff4;
+  --flow-highlight: rgba(255, 255, 255, 0.22);
+
+  /* Channel foot — same pair, quieter washes than the KPI cards. */
+  --conn-foot-track: color-mix(in srgb, var(--flow-in) 36%, var(--surface-2));
+  --conn-foot-fill: color-mix(in srgb, var(--flow-out) 52%, var(--surface));
+  --conn-foot-ink: var(--ink);
+  --conn-foot-track-hover: color-mix(in srgb, var(--flow-in) 48%, var(--surface-2));
+  --conn-foot-fill-hover: color-mix(in srgb, var(--flow-out) 66%, var(--surface));
+  --conn-foot-line: color-mix(in srgb, var(--flow-out) 36%, var(--line));
+  /* Empty-channel foot — dashed, disabled-looking, not a CTA. */
+  --conn-foot-create: transparent;
+  --conn-foot-create-hover: transparent;
+  --conn-foot-create-ink: var(--ink-4);
+  --conn-foot-create-ink-hover: var(--ink-3);
+  --conn-foot-create-line: var(--line-strong);
+
   --orange: #ff8040;
+  --orange-soft: #2a1810;
   --violet: #8b7cff;
   --cyan: #22c5f0;
 
@@ -138,6 +213,24 @@
   --me-accent-ink: #04211d;
   --me-glow: rgba(45, 212, 191, 0.30);
   --me-glow-strong: rgba(45, 212, 191, 0.45);
+
+  /* Top-bar market chip + flyout — lifted cool slate so it won't
+     camouflage on the sea-teal inbound KPI the panel overlays. */
+  --tb-market-chip-bg: color-mix(in srgb, var(--me-accent) 32%, var(--surface-2));
+  --tb-market-chip-bg-hover: color-mix(in srgb, var(--me-accent) 44%, var(--surface-2));
+  --tb-market-chip-ink: var(--me-accent);
+  --tb-market-chip-ink-hover: var(--me-accent-hover);
+  --tb-market-chip-shadow:
+    0 0 0 1px color-mix(in srgb, var(--me-accent) 55%, transparent);
+  --tb-market-chip-shadow-hover:
+    0 0 0 1px color-mix(in srgb, var(--me-accent) 80%, transparent);
+  --tb-market-flyout-bg: #3f4956;
+  --tb-market-flyout-well: #2a313c;
+  --tb-market-flyout-track: #1c222c;
+  --tb-market-flyout-line: color-mix(in srgb, var(--me-accent) 72%, transparent);
+  --tb-market-flyout-shadow:
+    0 22px 56px rgba(0, 0, 0, 0.62),
+    0 6px 18px rgba(0, 0, 0, 0.36);
 
   /* Brand wordmark — the light pulse riding the optic ring */
   --brand-pulse: #d9fff5;

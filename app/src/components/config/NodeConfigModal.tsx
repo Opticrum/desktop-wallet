@@ -4,9 +4,8 @@ import { useNode } from '../../node/NodeContext'
 import { node } from '../../api/client'
 import type { NodeConfig, ScriptCellDep, WatchtowerConfig } from '../../api/types'
 import { defaultNodeConfig, detectChainFromRpc, serializeConfigYaml } from '../../lib/config'
-import { useScrollLock } from '../../lib/useScrollLock'
+import { BottomDrawer } from '../BottomDrawer'
 import { ConfigFormContext, type ConfigFormApi, type DetectState } from './ConfigFormContext'
-import { IconClose } from './configFields'
 import {
   AdvancedPanel,
   CkbSection,
@@ -24,7 +23,7 @@ type Props = {
   onWatchtowerChange: (config: WatchtowerConfig) => void
 }
 
-/** Large modal for editing the node's runtime config as structured fields.
+/** Bottom-up drawer for editing the node's runtime config as structured fields.
  *  Loaded from `node.get_config` and persisted via `node.save_config`, which
  *  returns the applied chain + watchtower so the badge needs no re-fetch. */
 export function NodeConfigModal({
@@ -42,7 +41,7 @@ export function NodeConfigModal({
   const [tab, setTab] = useState<'form' | 'preview'>('form')
   const [copied, setCopied] = useState(false)
 
-  // Load the authoritative config from the shell whenever the modal opens.
+  // Load the authoritative config from the shell whenever the drawer opens.
   useEffect(() => {
     if (!open) return
     let alive = true
@@ -63,17 +62,6 @@ export function NodeConfigModal({
       alive = false
     }
   }, [open])
-
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [open, onClose])
-
-  useScrollLock(open)
 
   const yaml = useMemo(() => serializeConfigYaml(config), [config])
   const yamlBytes = new Blob([yaml]).size
@@ -211,8 +199,6 @@ export function NodeConfigModal({
     setAdvancedOpen,
   }
 
-  if (!open) return null
-
   const handleReset = () => {
     setConfig(defaultNodeConfig)
     setDetect({ status: 'idle', chain: defaultNodeConfig.fiber.chain === 'mainnet' ? 'mainnet' : 'testnet' })
@@ -232,14 +218,8 @@ export function NodeConfigModal({
 
   return (
     <ConfigFormContext.Provider value={api}>
-      <div className="modal-backdrop" role="presentation">
-        <div
-          className="config-modal"
-          role="dialog"
-          aria-modal="true"
-          aria-label={t.nodeConfig}
-          onClick={(e) => e.stopPropagation()}
-        >
+      <BottomDrawer open={open} onClose={onClose} ariaLabel={t.nodeConfig} wide flush>
+        <div className="config-drawer">
           <div className="config-modal-head">
             <div className="config-modal-head-left">
               <div className="config-modal-title">{t.nodeConfig}</div>
@@ -250,9 +230,6 @@ export function NodeConfigModal({
                 <span className="config-modal-sub-path mono">config.yml</span>
               </div>
             </div>
-            <button type="button" className="config-modal-close" aria-label={t.close} onClick={onClose}>
-              <IconClose />
-            </button>
           </div>
 
           <div className="config-modal-tabs" role="tablist" aria-label={t.nodeConfig}>
@@ -322,7 +299,7 @@ export function NodeConfigModal({
             </div>
           </div>
         </div>
-      </div>
+      </BottomDrawer>
     </ConfigFormContext.Provider>
   )
 }

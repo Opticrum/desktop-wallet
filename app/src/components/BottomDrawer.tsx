@@ -15,27 +15,36 @@ function IconClose() {
 }
 
 /**
- * Bottom-up drawer ("big picture" sheet) for the node page's secondary views
- * (full logs, full transaction history). Slides up from the bottom edge and
- * carries the caller's content directly. Closes via the circular X sitting
- * outside the sheet's top-center, or Escape (the backdrop does not close it,
- * to avoid accidental dismissal). Exit animation is the reverse of enter.
- * Rendered through a portal into `document.body` so no ancestor stacking
- * context can trap the fixed overlay beneath the top bar.
+ * Page-level overlay sheet. Default `side="bottom"` slides up from the bottom
+ * (wallet, full logs). `side="right"` docks a full-height column that slides
+ * in from the right (channel list). Closes via the circular X sitting outside
+ * the sheet (top-center on bottom sheets, vertically centered on the left
+ * edge of a right-hand column), or Escape — the backdrop does not dismiss.
+ * Exit animation is the reverse of enter. Portaled to `document.body` so no
+ * ancestor stacking context can trap the overlay beneath the top bar.
  */
 export function BottomDrawer({
   open,
   onClose,
   ariaLabel,
   wide = false,
+  side = 'bottom',
+  dismissible = true,
+  flush = false,
   children,
 }: {
   open: boolean
   onClose: () => void
   /** Accessible name for the dialog (not rendered visually). */
   ariaLabel: string
-  /** Wider sheet — used for the wallet module. */
+  /** Wider sheet — used for the wallet module and full log viewer. */
   wide?: boolean
+  /** `right` docks a full-height column that slides in from the right. */
+  side?: 'bottom' | 'right'
+  /** When false, Escape does not dismiss (a nested confirm is open). */
+  dismissible?: boolean
+  /** Drop inner padding so the child (e.g. node config) owns the layout. */
+  flush?: boolean
   children: ReactNode
 }) {
   const { t } = useLocale()
@@ -61,13 +70,13 @@ export function BottomDrawer({
   }, [shown, open])
 
   useEffect(() => {
-    if (!shown) return
+    if (!shown || !dismissible) return
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [shown, onClose])
+  }, [shown, onClose, dismissible])
 
   useScrollLock(shown)
 
@@ -79,13 +88,15 @@ export function BottomDrawer({
 
   if (!shown) return null
 
+  const isSide = side === 'right'
+
   return createPortal(
     <div
-      className={`drawer-backdrop${entered ? ' is-open' : ''}`}
+      className={`drawer-backdrop${entered ? ' is-open' : ''}${isSide ? ' is-side' : ''}`}
       role="presentation"
     >
       <div
-        className={`bottom-drawer-stack${wide ? ' is-wide' : ''}`}
+        className={`bottom-drawer-stack${isSide ? ' is-side' : wide ? ' is-wide' : ''}${flush ? ' is-flush' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
@@ -101,9 +112,11 @@ export function BottomDrawer({
           <IconClose />
         </button>
         <div className="bottom-drawer">
-          <div className="drawer-chrome">
-            <span className="drawer-handle" aria-hidden="true" />
-          </div>
+          {!isSide && (
+            <div className="drawer-chrome">
+              <span className="drawer-handle" aria-hidden="true" />
+            </div>
+          )}
           <div className="drawer-inner">
             <div className="drawer-content">{children}</div>
           </div>

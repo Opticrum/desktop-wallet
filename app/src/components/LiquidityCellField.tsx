@@ -418,8 +418,8 @@ export type LiquidityCellFieldProps = {
   selected?: string | null
   /** `null` clears the selection (the clicked cell is selected again). */
   onSelect: (t: SheetTarget | null) => void
-  /** Optional manual-refresh control, rendered at the pool's top-left. */
-  refreshButton?: ReactNode
+  /** Overlay inside the pool (floating HUD, empty hint). */
+  overlay?: ReactNode
   /** Wallet locked — the cell drift freezes and the pool dims with a hint. */
   disabled?: boolean
   /** The current fiber node's identity pubkey — cells whose embedded pubkey
@@ -433,7 +433,7 @@ export function LiquidityCellField({
   mode,
   selected,
   onSelect,
-  refreshButton,
+  overlay,
   disabled = false,
   nodeFiberPubkey,
 }: LiquidityCellFieldProps) {
@@ -470,37 +470,23 @@ export function LiquidityCellField({
   const savedPositions = useRef(new Map<string, { x: number; y: number; vx: number; vy: number }>())
   const writeAllRef = useRef<() => void>(() => {})
 
-  // The hovered cell freezes in place while a detailed tooltip is shown; the
-  // selected cell (detail drawer open) shows the same tooltip persistently.
+  // The hovered cell freezes in place while a detailed tooltip is shown.
+  // Selecting a cell opens the right-side detail drawer and drops the tooltip.
   const [hovered, setHovered] = useState<HoverState | null>(null)
-  const [selectedTooltip, setSelectedTooltip] = useState<HoverState | null>(null)
   const hoveredRef = useRef<string | null>(null)
 
-  // Anchor the selected cell's tooltip to it (the cell freezes on selection).
+  // Clear hover the moment a cell is selected so the tooltip never lingers
+  // over the opening drawer.
   useEffect(() => {
-    if (!selected) {
-      setSelectedTooltip(null)
-      return
-    }
-    const el = cellEls.current.get(selected)
-    const cell = cells.find((c) => c.key === selected)
-    if (el && cell) {
-      const r = el.getBoundingClientRect()
-      const below = r.top < 200
-      setSelectedTooltip({
-        key: selected,
-        data: cell,
-        x: Math.max(16, Math.min(r.left + r.width / 2, window.innerWidth - 16)),
-        y: below ? r.bottom : r.top,
-        below,
-      })
-    }
-  }, [selected, cells])
+    if (!selected) return
+    hoveredRef.current = selected
+    setHovered(null)
+  }, [selected])
 
-  // Re-anchor the fixed-position tooltips while the page scrolls. The hovered /
-  // selected cell is frozen by the physics loop, so scrolling is its only
-  // movement — re-reading its live `getBoundingClientRect()` (viewport-relative)
-  // keeps the tooltip glued to the cell instead of stuck where it first appeared.
+  // Re-anchor the fixed-position tooltip while the page scrolls. The hovered
+  // cell is frozen by the physics loop, so scrolling is its only movement —
+  // re-reading its live `getBoundingClientRect()` (viewport-relative) keeps
+  // the tooltip glued to the cell instead of stuck where it first appeared.
   useEffect(() => {
     const reanchor = () => {
       const recompute = (s: HoverState | null): HoverState | null => {
@@ -517,7 +503,6 @@ export function LiquidityCellField({
         return { ...s, x, y, below }
       }
       setHovered(recompute)
-      setSelectedTooltip(recompute)
     }
     // Capture phase catches scrolls from any nested container, not just the window.
     window.addEventListener('scroll', reanchor, true)
@@ -710,11 +695,11 @@ export function LiquidityCellField({
   }, [cells])
 
   const themeClass = mode === 'orders' ? 'is-orders' : 'is-matches'
-  // The hovered or selected cell freezes while its tooltip is shown.
+  // Freeze the hovered cell, or the selected one (drawer open, no tooltip).
   hoveredRef.current = hovered?.key ?? selected ?? null
 
-  // Merged tooltip source — the hovered cell wins, otherwise the selected one.
-  const tooltip = hovered ?? selectedTooltip
+  // Hover tooltip only — a selected cell's details live in the right drawer.
+  const tooltip = selected ? null : hovered
   const tooltipOrder = tooltip && tooltip.data.kind === 'order' ? (tooltip.data.target.item as LiquidityOrder) : null
   // Share of total demand for the inspected order — shown in the tooltip + pie.
   const hoveredOrderShare =
@@ -771,12 +756,14 @@ export function LiquidityCellField({
                 className={`cell cell-${c.kind} ${c.life?.isExhausted ? 'is-exhausted' : ''} ${hesitating ? 'is-hesitating' : ''} ${frozen ? 'is-frozen' : ''} ${selected === c.key ? 'is-selected' : ''} ${dimmed ? 'is-dimmed' : ''}`}
                 style={style}
                 onClick={() => {
-                  // Clicking the open cell again closes the tooltip + detail
-                  // drawer; clicking a fresh cell selects it.
+                  // Clicking the open cell again closes the detail drawer;
+                  // clicking a fresh cell selects it. Tooltip is hover-only.
+                  setHovered(null)
                   if (selected === c.key) onSelect(null)
                   else if (!selected) onSelect(c.target)
                 }}
                 onMouseEnter={() => {
+                  if (selected) return
                   const el = cellEls.current.get(c.key)
                   hoveredRef.current = c.key
                   if (el) {
@@ -897,7 +884,7 @@ export function LiquidityCellField({
             )
           })}
         </div>
-        {refreshButton}
+        {overlay}
         <OverviewChart orders={orders} matches={matches} mode={mode} hoverKey={hovered?.key ?? null} />
       </div>
 

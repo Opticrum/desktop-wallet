@@ -4,6 +4,7 @@ export type Messages = {
   brand: string
   brandSub: string
   nodeLabel: string
+  nodeListTab: string
   nodeBuiltin: string
   nodeExternals: string
   nodeAddExternal: string
@@ -121,6 +122,7 @@ export type Messages = {
   lmTotalDeposit: string
   lmAvgRate: string
   lmBuyLiquidity: string
+  lmNoOrdersForNode: string
 
   // Liquidity — buy order modal
   lmNewOrder: string
@@ -170,7 +172,8 @@ export type Messages = {
   lmHesitationLeft: string
   lmHesitationEndsAt: string
   lmHesitationInStatus: string
-  lmHesitationOverStatus: string
+  lmHesitationOver: string
+  lmHesitationOverHint: string
   lmAbandonOrder: string
   lmAbandonOrderFull: string
   lmAbandonOrderTitle: string
@@ -191,6 +194,7 @@ export type Messages = {
 
   // Help dialog — About Opticrum (protocol / buyer / seller)
   aboutButton: string
+  githubLinkTitle: string
   helpTitle: string
   helpTabProtocol: string
   helpTabBuyer: string
@@ -203,6 +207,10 @@ export type Messages = {
   hpS2Title: string
   hpS2a: string
   hpS2b: string
+  hpS2c: string
+  hpS3Title: string
+  hpS3a: string
+  hpS3b: string
   hbLead: string
   hbS1Title: string
   hbS1a: string
@@ -263,6 +271,12 @@ export type Messages = {
   lmLockedCapacity: string
   lmYieldDistribution: string
   lmNoYieldData: string
+  /** Chip click — re-scan the whole-chain dashboard. */
+  lmRefreshMarket: string
+  /** Idle face of the top-bar market chip. */
+  lmMarketChipLabel: string
+  /** Hover face of the top-bar market chip. */
+  lmClickToRefresh: string
 
   // Liquidity — cell anatomy
   lmApyLabel: string
@@ -275,7 +289,6 @@ export type Messages = {
   lmRent: string
   lmRevokeOrder: string
   lmDaysUnit: string
-  lmBack: string
   /** Pool notice shown while the wallet is locked (cells frozen). */
   lmWalletLockedHint: string
   lmDwell: string
@@ -359,6 +372,8 @@ export type Messages = {
   ckbTxConfirmedHint: string
   ckbTxFailed: string
   ckbTxHash: string
+  ckbTxViewExplorer: string
+  ckbTxOk: string
   ckbTxStepConstruct: string
   ckbTxStepBroadcast: string
   ckbTxStepConfirm: string
@@ -368,9 +383,23 @@ export type Messages = {
 
   // Node page — sections + redesigned sidebar
   nodeConnectionsSection: string
-  nodeExpand: string
-  nodeCollapse: string
   nodeNoChannels: string
+  nodeChannelListTitle: string
+  nodeChannelId: string
+  nodeChannelPublic: string
+  nodeChannelPrivate: string
+  nodeChannelCreated: string
+  nodeStateActive: string
+  nodeStatePending: string
+  nodeStateClosing: string
+  nodeStateNegotiating: string
+  nodeStateCollaborating: string
+  nodeStateSigning: string
+  nodeStateAwaitingSigs: string
+  nodeStateAwaitingReady: string
+  nodeStateStale: string
+  nodeBaseFeeShort: string
+  nodeFeeRateShort: string
   nodeOnchainTx: string
   nodeOutbound: string
   nodeInbound: string
@@ -378,6 +407,8 @@ export type Messages = {
   nodeInboundBalance: string
   nodeKpiNodes: string
   nodeKpiChannels: string
+  nodeKpiNodesUnit: string
+  nodeKpiChannelsUnit: string
   hubConnect: string
   hubConnected: string
   hubLocal: string
@@ -433,6 +464,13 @@ export type Messages = {
   nodeFormCreate: string
   nodeCreateToast: string
   channelOpenLabel: string
+  channelOpenSubmitting: string
+  channelOpenWaiting: string
+  channelOpenReady: string
+  channelOpenHint: string
+  channelOpenReadyHint: string
+  channelOpenFailed: string
+  channelOpenTimeout: string
   channelCloseLabel: string
   nodeCloseChannel: string
   nodeRemovePeer: string
