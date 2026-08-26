@@ -30,6 +30,15 @@
   --info: #0891b2;
   --info-soft: #e0f7fa;
 
+  /* Wallet / node network surfaces only — not global brand buttons.
+     Mainnet teal, testnet amber, mismatch danger. */
+  --net-mainnet: #0f766e;
+  --net-mainnet-soft: #e0f4f2;
+  --net-testnet: #d97706;
+  --net-testnet-soft: #fff4e5;
+  --net-mismatch: var(--danger);
+  --net-mismatch-soft: var(--danger-soft);
+
   /* Node flow — coral-terracotta send / sea-teal receive.
      High chroma so I/O reads live on the slate page; still not candy
      red/green and not --danger / --ok.
@@ -148,32 +157,40 @@
 }
 
 [data-theme='dark'] {
-  /* Cool-slate palette: one notch brighter, lower contrast, softer shadows. */
-  --page-bg: #111419;
-  --shell-bg: #161a21;
-  --surface: #1d222c;
-  --surface-2: #242a36;
-  --surface-hover: #2b3446;
+  /* Cool-slate palette: lifted charcoal, not near-black. */
+  --page-bg: #1a1f28;
+  --shell-bg: #212731;
+  --surface: #2a313c;
+  --surface-2: #333c4a;
+  --surface-hover: #3c4658;
   --ink: #eceef3;
-  --ink-2: #c3c8d3;
-  --ink-3: #969dae;
-  --ink-4: #6b7286;
-  --line: rgba(255, 255, 255, 0.09);
-  --line-strong: rgba(255, 255, 255, 0.16);
+  --ink-2: #c8cdd8;
+  --ink-3: #9aa1b2;
+  --ink-4: #7a8294;
+  --line: rgba(255, 255, 255, 0.10);
+  --line-strong: rgba(255, 255, 255, 0.18);
 
   --accent: #5b7aff;
   --accent-hover: #7a94ff;
-  --accent-muted: #1b2447;
+  --accent-muted: #27345c;
   --accent-ink: #ffffff;
 
   --ok: #34d399;
-  --ok-soft: #0f2a20;
+  --ok-soft: #17362a;
   --warn: #fbbf24;
-  --warn-soft: #2a2210;
+  --warn-soft: #3a3016;
   --danger: #f87171;
-  --danger-soft: #2a1414;
+  --danger-soft: #3a1c1c;
   --info: #22d3ee;
-  --info-soft: #0c2830;
+  --info-soft: #163640;
+
+  /* Wallet / node network surfaces only — not global brand buttons. */
+  --net-mainnet: #2dd4bf;
+  --net-mainnet-soft: #163834;
+  --net-testnet: #fbbf24;
+  --net-testnet-soft: #3a3016;
+  --net-mismatch: var(--danger);
+  --net-mismatch-soft: var(--danger-soft);
 
   /* Node flow — coral-terracotta send / sea-teal receive, high chroma.
      Ink / unit sit lighter than the wash so titles and CKB stay readable. */
@@ -182,7 +199,7 @@
   --flow-out-ink: #ffe4dc;
   --flow-out-unit: #ffd8cc;
   --flow-in: #2eecd4;
-  --flow-in-soft: #0e5f52;
+  --flow-in-soft: #147060;
   --flow-in-ink: #d8fff6;
   --flow-in-unit: #c8fff4;
   --flow-highlight: rgba(255, 255, 255, 0.22);
@@ -202,14 +219,14 @@
   --conn-foot-create-line: var(--line-strong);
 
   --orange: #ff8040;
-  --orange-soft: #2a1810;
+  --orange-soft: #3a2418;
   --violet: #8b7cff;
   --cyan: #22c5f0;
 
   /* Liquidity-market accent (teal) — the market's own visuals; buttons keep --accent */
   --me-accent: #2dd4bf;
   --me-accent-hover: #5eead4;
-  --me-accent-soft: #0e2a28;
+  --me-accent-soft: #163834;
   --me-accent-ink: #04211d;
   --me-glow: rgba(45, 212, 191, 0.30);
   --me-glow-strong: rgba(45, 212, 191, 0.45);
@@ -224,13 +241,13 @@
     0 0 0 1px color-mix(in srgb, var(--me-accent) 55%, transparent);
   --tb-market-chip-shadow-hover:
     0 0 0 1px color-mix(in srgb, var(--me-accent) 80%, transparent);
-  --tb-market-flyout-bg: #3f4956;
-  --tb-market-flyout-well: #2a313c;
-  --tb-market-flyout-track: #1c222c;
+  --tb-market-flyout-bg: #4a5564;
+  --tb-market-flyout-well: #333c4a;
+  --tb-market-flyout-track: #1a1f28;
   --tb-market-flyout-line: color-mix(in srgb, var(--me-accent) 72%, transparent);
   --tb-market-flyout-shadow:
-    0 22px 56px rgba(0, 0, 0, 0.62),
-    0 6px 18px rgba(0, 0, 0, 0.36);
+    0 22px 56px rgba(0, 0, 0, 0.42),
+    0 6px 18px rgba(0, 0, 0, 0.24);
 
   /* Brand wordmark — the light pulse riding the optic ring */
   --brand-pulse: #d9fff5;
@@ -244,23 +261,23 @@
   --donut-4: #22c5f0;
   --donut-track: rgba(255, 255, 255, 0.10);
 
-  --modal-backdrop: rgba(0, 0, 0, 0.58);
+  --modal-backdrop: rgba(0, 0, 0, 0.48);
 
-  /* Log console terminal — brightened a step to match the lifted surfaces */
-  --log-bg: #161a22;
-  --log-chrome-bg: #1c2230;
-  --log-title: #969dae;
-  --log-ink: #b7bdc9;
-  --log-time: #6b7286;
+  /* Log console terminal — recessed well, one step below surface */
+  --log-bg: #1a1f28;
+  --log-chrome-bg: #222834;
+  --log-title: #9aa1b2;
+  --log-ink: #c0c6d2;
+  --log-time: #7a8294;
   --log-info: #7aa2d4;
   --log-warn: #e0b35c;
   --log-error: #e06c75;
   --log-line: rgba(255, 255, 255, 0.05);
 
   --shadow-soft: none;
-  --shadow-panel: 0 24px 60px rgba(0, 0, 0, 0.32);
+  --shadow-panel: 0 24px 60px rgba(0, 0, 0, 0.22);
   --shadow-accent: 0 12px 28px rgba(63, 97, 255, 0.32);
-  --shadow-elevate: 0 6px 18px rgba(0, 0, 0, 0.30);
+  --shadow-elevate: 0 6px 18px rgba(0, 0, 0, 0.20);
 
   --bg: var(--page-bg);
   --bg-elevated: var(--surface);

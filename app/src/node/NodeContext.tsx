@@ -6,7 +6,7 @@ import type { Chain, NodeKind, NodeRuntime } from '../api/types'
 export type NodeChain = Chain
 
 type NodeCtx = {
-  /** CKB chain the *selected* node is on — drives the liquidity market network. */
+  /** CKB chain the *selected* node is on — independent of wallet network. */
   chain: Chain
   setChain: (chain: Chain) => void
   /** Whether the selected Fiber RPC is reachable / the builtin process is up. */

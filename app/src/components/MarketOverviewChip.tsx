@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocale } from '../i18n/LocaleContext'
+import { useWalletNetwork } from '../wallet/WalletNetworkContext'
 import {
   ensureMarketDashboard,
+  isMarketAvailable,
   refreshMarketDashboard,
   useMarketDashboard,
 } from '../lib/useMarketDashboard'
@@ -26,15 +28,22 @@ function IconRefresh() {
 }
 
 /** Top-bar market chip: idle names the market; hover opens the dashboard
- *  and swaps the face to a refresh hint; click re-scans the chain. */
+ *  and swaps the face to a refresh hint; click re-scans the chain.
+ *  Follows the wallet network — mainnet shows an unavailable state. */
 export function MarketOverviewChip() {
   const { t } = useLocale()
-  const dashboard = useMarketDashboard()
+  const { chain } = useWalletNetwork()
+  const dashboard = useMarketDashboard(chain)
   const [open, setOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const available = isMarketAvailable(chain)
+
+  useEffect(() => {
+    // Keep the shared cache pointed at the wallet chain even when not hovering.
+  }, [chain])
 
   const refresh = async () => {
-    if (refreshing) return
+    if (refreshing || !available) return
     setRefreshing(true)
     await refreshMarketDashboard()
     setRefreshing(false)
@@ -42,31 +51,52 @@ export function MarketOverviewChip() {
 
   return (
     <div
-      className={`tb-market${open ? ' is-open' : ''}`}
+      className={`tb-market${open ? ' is-open' : ''}${!available ? ' is-unavailable' : ''}`}
       onMouseEnter={() => {
         setOpen(true)
-        ensureMarketDashboard()
+        if (available) ensureMarketDashboard()
       }}
       onMouseLeave={() => setOpen(false)}
     >
       <div className="tb-market-flyout">
         <div className="tb-market-flyout-head">
           <h2 className="tb-market-flyout-title">{t.lmMarketOverview}</h2>
+          <span className={`tb-net-pill net-${chain}`}>
+            {chain === 'mainnet' ? t.networkMainnet : t.networkTestnet}
+          </span>
         </div>
-        <MarketOverviewPanel dashboard={dashboard} />
+        {available ? (
+          <MarketOverviewPanel dashboard={dashboard} />
+        ) : (
+          <div className="tb-market-unavailable">
+            <p className="tb-market-unavailable-title">{t.lmMarketUnavailableTitle}</p>
+            <p className="tb-market-unavailable-body">{t.lmMarketUnavailableBody}</p>
+          </div>
+        )}
       </div>
       <button
         type="button"
         className={`tb-market-btn${refreshing ? ' is-refreshing' : ''}`}
-        aria-label={`${t.lmMarketChipLabel}. ${t.lmRefreshMarket}`}
+        aria-label={
+          available
+            ? `${t.lmMarketChipLabel}. ${t.lmRefreshMarket}`
+            : `${t.lmMarketChipLabel}. ${t.lmMarketUnavailableTitle}`
+        }
         onClick={refresh}
+        disabled={!available}
       >
         <IconMark />
         <span className="tb-market-faces">
           <span className="tb-market-label">{t.lmMarketChipLabel}</span>
           <span className="tb-market-hint">
-            <IconRefresh />
-            {t.lmClickToRefresh}
+            {available ? (
+              <>
+                <IconRefresh />
+                {t.lmClickToRefresh}
+              </>
+            ) : (
+              t.lmMarketUnavailableTitle
+            )}
           </span>
         </span>
       </button>

@@ -7,7 +7,7 @@ import type { Messages } from '../i18n/types'
 import { toCommandError } from '../api/types'
 import type { CkbTxPhase, CkbTxProgress } from '../api/types'
 import { explorerTxUrl } from '../lib/wallet'
-import { useNode } from '../node/NodeContext'
+import { useWalletNetwork } from '../wallet/WalletNetworkContext'
 import { useScrollLock } from '../lib/useScrollLock'
 
 /**
@@ -151,7 +151,7 @@ export function CkbTxModal({
   overDrawer?: boolean
 }) {
   const { t } = useLocale()
-  const { chain } = useNode()
+  const { chain } = useWalletNetwork()
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {

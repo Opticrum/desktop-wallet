@@ -386,6 +386,57 @@
   color: var(--ink-3);
 }
 
+/* TopBar wallet-network pill removed — network lives on the side-menu wallet row. */
+
+.tb-net-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.tb-net-pill.net-mainnet {
+  color: var(--net-mainnet);
+  border-color: color-mix(in srgb, var(--net-mainnet) 45%, transparent);
+  background: color-mix(in srgb, var(--net-mainnet) 14%, transparent);
+}
+
+.tb-net-pill.net-testnet {
+  color: var(--net-testnet);
+  border-color: color-mix(in srgb, var(--net-testnet) 45%, transparent);
+  background: color-mix(in srgb, var(--net-testnet) 14%, transparent);
+}
+
+.tb-market.is-unavailable .tb-market-btn {
+  opacity: 0.92;
+}
+
+.tb-market-unavailable {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 2px 2px;
+}
+
+.tb-market-unavailable-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.tb-market-unavailable-body {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+
 .top-bar-quick-btn {
   display: inline-flex;
   align-items: center;
@@ -5397,23 +5448,85 @@ body:has(.modal-backdrop, .send-modal-backdrop, .drawer-backdrop) .center-panel 
 }
 
 .ncp-net-badge.net-mainnet {
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  background: var(--accent-muted);
+  color: var(--net-mainnet);
+  border-color: color-mix(in srgb, var(--net-mainnet) 40%, transparent);
+  background: var(--net-mainnet-soft);
 }
 
 .ncp-net-badge.net-mainnet::before {
-  background: var(--accent);
+  background: var(--net-mainnet);
 }
 
 .ncp-net-badge.net-testnet {
-  color: var(--info);
-  border-color: color-mix(in srgb, var(--info) 40%, transparent);
-  background: var(--info-soft);
+  color: var(--net-testnet);
+  border-color: color-mix(in srgb, var(--net-testnet) 40%, transparent);
+  background: var(--net-testnet-soft);
 }
 
 .ncp-net-badge.net-testnet::before {
-  background: var(--info);
+  background: var(--net-testnet);
+}
+
+.ncp-net-badge.is-mismatch {
+  color: var(--net-mismatch);
+  border-color: color-mix(in srgb, var(--net-mismatch) 50%, transparent);
+  background: var(--net-mismatch-soft);
+}
+
+.ncp-net-badge.is-mismatch::before {
+  background: var(--net-mismatch);
+}
+
+.ncp-net-mismatch-mark {
+  margin-left: 2px;
+  font-weight: 900;
+}
+
+.ncp-mismatch {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--net-mismatch) 40%, var(--line-strong));
+  background: color-mix(in srgb, var(--net-mismatch-soft) 72%, var(--surface));
+}
+
+.ncp-mismatch-mark {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--net-mismatch);
+  background: color-mix(in srgb, var(--net-mismatch) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--net-mismatch) 45%, transparent);
+}
+
+.ncp-mismatch-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ncp-mismatch-title {
+  font-size: 13px;
+  font-weight: 750;
+  color: var(--ink);
+}
+
+.ncp-mismatch-hint {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-3);
 }
 
 .ncp-meta-line {
@@ -5858,6 +5971,11 @@ button.ncp-start-tip {
 .conn-frozen-hint {
   font-size: 12px;
   color: var(--ink-3);
+}
+
+.conn-frozen.is-mismatch {
+  border-color: color-mix(in srgb, var(--net-mismatch) 35%, var(--line-strong));
+  background: color-mix(in srgb, var(--net-mismatch-soft) 70%, var(--surface));
 }
 
 .conn-list {
@@ -9877,6 +9995,23 @@ button.ncp-start-tip {
   background: var(--line-strong);
 }
 
+.nsm-warn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--net-mismatch);
+  background: var(--net-mismatch-soft);
+  border: 1px solid color-mix(in srgb, var(--net-mismatch) 45%, transparent);
+}
+
 .nsm-externals {
   display: flex;
   flex-direction: column;
@@ -10072,6 +10207,35 @@ button.ncp-start-tip {
   letter-spacing: -0.02em;
 }
 
+/* Quiet network line under 钱包 — colored ink + dot, not a TopBar-style pill. */
+.nsm-wallet-net {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 1px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.nsm-wallet-net-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: currentColor;
+}
+
+.nsm-wallet-net.net-mainnet {
+  color: var(--net-mainnet);
+}
+
+.nsm-wallet-net.net-testnet {
+  color: var(--net-testnet);
+}
+
 .nsm-wallet-chevron {
   display: inline-flex;
   color: var(--ink-4);
@@ -10119,6 +10283,51 @@ button.ncp-start-tip {
 
 .wallet-page-head-main {
   min-width: 0;
+}
+
+.wallet-net-switch {
+  display: inline-flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--page-bg) 55%, var(--surface-2));
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.wallet-net-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 6px 11px;
+  border-radius: 7px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.wallet-net-btn:disabled:not(.is-active) {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.wallet-net-btn.is-active.net-testnet {
+  color: var(--net-testnet);
+  background: var(--net-testnet-soft);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--net-testnet) 35%, transparent);
+  cursor: default;
+}
+
+.wallet-net-btn.is-active.net-mainnet {
+  color: var(--net-mainnet);
+  background: var(--net-mainnet-soft);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--net-mainnet) 35%, transparent);
+  cursor: default;
 }
 
 .wallet-page-title {

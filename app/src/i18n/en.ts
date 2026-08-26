@@ -90,6 +90,7 @@ export const en: Messages = {
   walletImportFailed: 'Import failed',
   walletPasswordRequired: 'Password required',
   walletPasswordWrong: 'Wrong password',
+  unsupportedNetwork: 'This action is not available on the current network',
   walletNone: 'No wallet',
   walletNoneHint: 'Create one in the dialog above',
   walletRefreshing: 'Refreshing…',
@@ -107,10 +108,19 @@ export const en: Messages = {
   nodeNavPeers: 'Peers',
   nodeNavRuntime: 'Runtime',
 
-  // Liquidity — network (follows the node's configured chain)
+  // Liquidity — network
   networkMainnet: 'Mainnet',
   networkTestnet: 'Testnet',
   rpcUrlLabel: 'RPC URL',
+  walletNetworkSwitch: 'Wallet network',
+  walletNetworkSwitching: 'Switching network…',
+  walletNetworkBadge: 'Current wallet network',
+  lmMarketUnavailableTitle: 'Mainnet market not yet available',
+  lmMarketUnavailableBody: 'Opticrum contracts are deployed on testnet only. Switch to a testnet wallet to view the market overview and inbound liquidity.',
+  networkMismatchTitle: 'Wallet and node networks differ',
+  networkMismatchTip: 'The wallet CKB network does not match the selected Fiber node. Switch the wallet network or reconfigure the node before on-chain actions.',
+  networkMismatchBlocked: 'Wallet and node networks differ — this action is blocked',
+  networkMismatchBadge: 'Network mismatch',
 
   // Liquidity — KPI labels + buy action
   lmActiveMatches: 'Active matches',

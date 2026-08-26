@@ -35,6 +35,8 @@ export type WalletStatus = {
   hasWallet: boolean
   unlocked: boolean
   address: string
+  /** Active wallet CKB network — drives address HRP and Opticrum market. */
+  chain: Chain
 }
 
 export type WalletAddress = {
@@ -98,6 +100,8 @@ export type ExternalTarget = {
   alias: string
   rpcUrl: string
   authToken?: string | null
+  /** Probed CKB network for this remote (`node_info.chain_hash`). */
+  chain?: Chain
 }
 
 export type NodeTargetList = {

@@ -13,6 +13,8 @@ const DEFAULT_FEE_RATE = '100'
 type Props = {
   open: boolean
   frozen?: boolean
+  /** Tooltip when create is disabled (node down / network mismatch). */
+  frozenTitle?: string
   node: ChannelNode | null
   /** When false, Escape does not dismiss — used while a nested confirm is open. */
   dismissible?: boolean
@@ -25,6 +27,7 @@ type Props = {
 export function ChannelListDrawer({
   open,
   frozen,
+  frozenTitle,
   node,
   dismissible = true,
   onClose,
@@ -32,6 +35,7 @@ export function ChannelListDrawer({
   children,
 }: Props) {
   const { t } = useLocale()
+  const createBlockedTitle = frozenTitle ?? t.connFrozen
   const outbound = node?.channels.reduce((sum, c) => sum + c.localBalanceCkb, 0) ?? 0
   const inbound = node?.channels.reduce((sum, c) => sum + c.remoteBalanceCkb, 0) ?? 0
 
@@ -182,7 +186,7 @@ export function ChannelListDrawer({
                   type="submit"
                   className="btn-primary"
                   disabled={frozen}
-                  title={frozen ? t.connFrozen : undefined}
+                  title={frozen ? createBlockedTitle : undefined}
                 >
                   {t.nodeFormCreate}
                 </button>
@@ -194,7 +198,7 @@ export function ChannelListDrawer({
               className="conn-channel-drawer-new"
               onClick={openForm}
               disabled={frozen}
-              title={frozen ? t.connFrozen : undefined}
+              title={frozen ? createBlockedTitle : undefined}
             >
               + {t.nodeNewChannel}
             </button>

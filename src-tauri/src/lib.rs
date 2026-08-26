@@ -35,20 +35,32 @@ fn backend_config(app: &tauri::App) -> BackendConfig {
     .expect("app data dir must resolve");
   std::fs::create_dir_all(&data_dir).ok();
 
-  let network = if env_or("OPTICRUM_NETWORK", "testnet") == "mainnet" {
+  let initial = if env_or("OPTICRUM_NETWORK", "testnet") == "mainnet" {
     Chain::Mainnet
   } else {
     Chain::Testnet
   };
 
   BackendConfig {
+    data_dir: data_dir.display().to_string(),
     database_url: data_dir.join("opticrum.db").display().to_string(),
     keystore_path: data_dir.join("keystore.json").display().to_string(),
     node_config_path: data_dir.join("node-config.json").display().to_string(),
-    ckb_rpc_url: env_or("OPTICRUM_CKB_RPC", "https://testnet.ckbapp.dev"),
-    ckb_indexer_url: env_or("OPTICRUM_CKB_INDEXER", "https://testnet.ckb.dev/indexer"),
+    testnet_rpc_url: env_or(
+      "OPTICRUM_CKB_RPC_TESTNET",
+      &env_or("OPTICRUM_CKB_RPC", "https://testnet.ckbapp.dev"),
+    ),
+    testnet_indexer_url: env_or(
+      "OPTICRUM_CKB_INDEXER_TESTNET",
+      &env_or("OPTICRUM_CKB_INDEXER", "https://testnet.ckb.dev/indexer"),
+    ),
+    mainnet_rpc_url: env_or("OPTICRUM_CKB_RPC_MAINNET", "https://mainnet.ckbapp.dev"),
+    mainnet_indexer_url: env_or(
+      "OPTICRUM_CKB_INDEXER_MAINNET",
+      "https://mainnet.ckb.dev/indexer",
+    ),
     fee_rate: 1000,
-    network,
+    network: initial,
   }
 }
 
@@ -132,6 +144,7 @@ pub fn run() {
       commands::wallet_import_private_key,
       commands::wallet_derive_addresses,
       commands::wallet_send_ckb,
+      commands::wallet_set_network,
       // node
       commands::node_get_runtime,
       commands::node_start,

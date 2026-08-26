@@ -118,6 +118,13 @@ pub struct WalletStatus {
   pub has_wallet: bool,
   pub unlocked: bool,
   pub address: String,
+  /// Active wallet CKB network — drives address HRP and Opticrum market.
+  #[serde(default = "default_wallet_chain")]
+  pub chain: Chain,
+}
+
+fn default_wallet_chain() -> Chain {
+  Chain::Testnet
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -221,6 +228,13 @@ pub struct ExternalTarget {
   pub rpc_url: String,
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub auth_token: Option<String>,
+  /// Probed CKB network for this remote (`node_info.chain_hash`).
+  #[serde(default = "default_external_chain")]
+  pub chain: Chain,
+}
+
+fn default_external_chain() -> Chain {
+  Chain::Testnet
 }
 
 /// `node.list_targets` / add / update / remove return this snapshot.
@@ -627,6 +641,8 @@ pub enum CommandError {
   Config(String),
   Io(String),
   Internal(String),
+  /// Feature not available on the active CKB network (e.g. Opticrum mainnet).
+  UnsupportedNetwork(String),
 }
 
 impl CommandError {
@@ -654,6 +670,9 @@ impl CommandError {
   pub fn scan(msg: impl Into<String>) -> Self {
     CommandError::Scan(msg.into())
   }
+  pub fn unsupported_network(msg: impl Into<String>) -> Self {
+    CommandError::UnsupportedNetwork(msg.into())
+  }
 }
 
 impl std::fmt::Display for CommandError {
@@ -678,6 +697,7 @@ impl std::fmt::Display for CommandError {
       CommandError::Config(m) => ("config", m),
       CommandError::Io(m) => ("io", m),
       CommandError::Internal(m) => ("internal", m),
+      CommandError::UnsupportedNetwork(m) => ("unsupported_network", m),
     };
     write!(f, "{code}: {msg}")
   }

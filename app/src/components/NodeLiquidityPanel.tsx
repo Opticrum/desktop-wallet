@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useScrollLock } from '../lib/useScrollLock'
 import { useLocale } from '../i18n/LocaleContext'
 import { useNode } from '../node/NodeContext'
-import { liquidity, wallet } from '../api/client'
+import { useWalletNetwork } from '../wallet/WalletNetworkContext'
+import { liquidity } from '../api/client'
 import { CkbTxModal, useCkbTx } from './CkbTxModal'
 import {
   costAndDaysToRateShPerBlock,
@@ -45,8 +46,9 @@ type BuyOrderModalProps = {
   open: boolean
   onClose: () => void
   onPublish: (values: PublishValues) => void
-  /** Node is down/starting — publishing is inert. */
+  /** Node is down/starting / network mismatch — publishing is inert. */
   disabled?: boolean
+  disabledTitle?: string
 }
 
 /**
@@ -54,7 +56,7 @@ type BuyOrderModalProps = {
  * duration); the per-block rate and APY are derived from those and shown as
  * hints, so the user never has to reason about `sh/block` directly.
  */
-function BuyOrderModal({ open, onClose, onPublish, disabled }: BuyOrderModalProps) {
+function BuyOrderModal({ open, onClose, onPublish, disabled, disabledTitle }: BuyOrderModalProps) {
   const { t } = useLocale()
   const [capacity, setCapacity] = useState('25,000')
   const [cost, setCost] = useState('250')
@@ -151,7 +153,7 @@ function BuyOrderModal({ open, onClose, onPublish, disabled }: BuyOrderModalProp
           <button
             className="btn-primary"
             disabled={!valid || disabled}
-            title={disabled ? t.nodeNotRunning : undefined}
+            title={disabled ? disabledTitle ?? t.nodeNotRunning : undefined}
             onClick={handlePublish}
           >
             {t.lmPublishOrder}
@@ -168,13 +170,21 @@ function BuyOrderModal({ open, onClose, onPublish, disabled }: BuyOrderModalProp
 type AdjustDepositModalProps = {
   open: boolean
   match: LiquidityMatch | null
-  /** Node is down/starting — 注入 is inert. */
+  /** Node is down/starting / network mismatch — 注入 is inert. */
   disabled?: boolean
+  disabledTitle?: string
   onClose: () => void
   onConfirm: (match: LiquidityMatch, amount: number) => void
 }
 
-function AdjustDepositModal({ open, match, disabled, onClose, onConfirm }: AdjustDepositModalProps) {
+function AdjustDepositModal({
+  open,
+  match,
+  disabled,
+  disabledTitle,
+  onClose,
+  onConfirm,
+}: AdjustDepositModalProps) {
   const { t } = useLocale()
   const [amount, setAmount] = useState('')
 
@@ -210,7 +220,7 @@ function AdjustDepositModal({ open, match, disabled, onClose, onConfirm }: Adjus
           <button
             className="btn-primary"
             disabled={!valid || disabled}
-            title={disabled ? t.nodeNotRunning : undefined}
+            title={disabled ? disabledTitle ?? t.nodeNotRunning : undefined}
             onClick={handleConfirm}
           >
             {t.lmInject}
@@ -227,32 +237,22 @@ function AdjustDepositModal({ open, match, disabled, onClose, onConfirm }: Adjus
  */
 export function NodeLiquidityPanel({ visible = true }: { visible?: boolean }) {
   const { t } = useLocale()
-  const { running, starting, fiberPubkey, targetId } = useNode()
+  const { running, starting, fiberPubkey, targetId, chain: nodeChain } = useNode()
+  const { chain: walletChain, status: walletStatus } = useWalletNetwork()
 
-  // Every on-chain action (发布/撤销/注入/抽离/提取) needs the node up.
-  const nodeReady = running && !starting
+  // Every on-chain action (发布/撤销/注入/抽离/提取) needs the node up and
+  // wallet CKB network matching the selected Fiber node.
+  const networkMatched = walletChain === nodeChain
+  const nodeReady = running && !starting && networkMatched
+  const actionBlockedTitle = !running || starting
+    ? t.nodeNotRunning
+    : !networkMatched
+      ? t.networkMismatchBlocked
+      : undefined
 
   // Wallet lock gates the market — a locked wallet can't place trades, so the
-  // cell pool freezes and shows an unlock hint. Local status only: a chain
-  // balance poll here would starve the wallet drawer on the same CKB RPC.
-  const [walletLocked, setWalletLocked] = useState(false)
-  useEffect(() => {
-    if (!visible) return
-    let alive = true
-    const poll = () =>
-      wallet
-        .getStatus()
-        .then((s) => {
-          if (alive) setWalletLocked(!s.unlocked)
-        })
-        .catch(() => {})
-    poll()
-    const id = window.setInterval(poll, 5000)
-    return () => {
-      alive = false
-      window.clearInterval(id)
-    }
-  }, [visible])
+  // cell pool freezes and shows an unlock hint.
+  const walletLocked = !(walletStatus?.unlocked ?? false)
 
   const [orders, setOrders] = useState<LiquidityOrder[]>([])
   const [matches, setMatches] = useState<LiquidityMatch[]>([])
@@ -517,7 +517,7 @@ export function NodeLiquidityPanel({ visible = true }: { visible?: boolean }) {
         type="button"
         className="node-tabbar-action btn-primary"
         disabled={!nodeReady}
-        title={nodeReady ? undefined : t.nodeNotRunning}
+        title={actionBlockedTitle}
         onClick={() => setBuyOpen(true)}
       >
         + {t.lmBuyLiquidity}
@@ -650,12 +650,14 @@ export function NodeLiquidityPanel({ visible = true }: { visible?: boolean }) {
       <BuyOrderModal
         open={buyOpen}
         disabled={!nodeReady}
+        disabledTitle={actionBlockedTitle}
         onClose={() => setBuyOpen(false)}
         onPublish={handlePublish}
       />
       <AdjustDepositModal
         open={adjust !== null}
         disabled={!nodeReady}
+        disabledTitle={actionBlockedTitle}
         match={adjust ?? null}
         onClose={() => setAdjust(null)}
         onConfirm={handleAdjust}

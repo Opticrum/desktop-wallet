@@ -8,6 +8,7 @@ import { useLocale } from '../i18n/LocaleContext'
 import { channels } from '../api/client'
 import { toCommandError } from '../api/types'
 import { useNode } from '../node/NodeContext'
+import { useWalletNetwork } from '../wallet/WalletNetworkContext'
 import type { Channel, ChannelNode } from '../api/types'
 import { stateToBucket } from '../lib/node'
 import { formatTimestamp } from '../lib/liquidity'
@@ -171,12 +172,15 @@ function channelStateLabel(state: string, t: {
 function ChannelGauge({
   ch,
   frozen,
+  closeDisabled,
   refreshing,
   onRefresh,
   onClose,
 }: {
   ch: Channel
   frozen: boolean
+  /** Extra gate for close (e.g. wallet↔node network mismatch). */
+  closeDisabled?: boolean
   refreshing: boolean
   onRefresh: () => void
   onClose: (channelId: string, force: boolean) => void
@@ -185,6 +189,12 @@ function ChannelGauge({
   const bucket = stateToBucket(ch.state)
   const localPct = ch.capacityCkb > 0 ? Math.round((ch.localBalanceCkb / ch.capacityCkb) * 100) : 0
   const remotePct = 100 - localPct
+  const closeBlocked = frozen || !!closeDisabled
+  const closeTitle = frozen
+    ? t.connFrozen
+    : closeDisabled
+      ? t.networkMismatchBlocked
+      : t.nodeCloseChannel
 
   return (
     <div className="conn-gauge">
@@ -217,9 +227,9 @@ function ChannelGauge({
             type="button"
             className="conn-gauge-close"
             onClick={() => onClose(ch.channelId, bucket === 'closing')}
-            title={frozen ? t.connFrozen : t.nodeCloseChannel}
-            aria-label={frozen ? t.connFrozen : t.nodeCloseChannel}
-            disabled={frozen}
+            title={closeTitle}
+            aria-label={closeTitle}
+            disabled={closeBlocked}
           >
             <IconClose />
           </button>
@@ -281,7 +291,8 @@ export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
   const { t } = useLocale()
   // Runtime/frozen gating comes from the shared NodeContext (it polls
   // `node.get_runtime`). The channel list itself refreshes only on demand.
-  const { running, targetId } = useNode()
+  const { running, targetId, chain: nodeChain, kind } = useNode()
+  const { chain: walletChain } = useWalletNetwork()
   const [nodes, setNodes] = useState<ChannelNode[]>([])
   const [refreshing, setRefreshing] = useState(false)
   const [refreshingNode, setRefreshingNode] = useState<string | null>(null)
@@ -297,6 +308,10 @@ export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
   const channelOpenRun = useRef(0)
 
   const frozen = !running
+  const networkMatched = walletChain === nodeChain
+  const channelActionsFrozen = frozen || !networkMatched
+  const showNetworkMismatch =
+    !networkMatched && (kind === 'external' ? true : running)
 
   // The instant the node stops, dismiss in-flight forms/confirmations so no
   // half-open action lingers in the frozen state.
@@ -518,6 +533,14 @@ export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
           </div>
         </div>
       )}
+      {showNetworkMismatch && (
+        <div className="conn-frozen is-mismatch" role="status">
+          <div className="conn-frozen-text">
+            <span className="conn-frozen-title">{t.networkMismatchTitle}</span>
+            <span className="conn-frozen-hint">{t.networkMismatchTip}</span>
+          </div>
+        </div>
+      )}
 
       {/* Create node connection form */}
       {connectOpen && (
@@ -670,7 +693,10 @@ export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
 
       <ChannelListDrawer
         open={channelListOpen !== null}
-        frozen={frozen}
+        frozen={channelActionsFrozen}
+        frozenTitle={
+          frozen ? t.connFrozen : !networkMatched ? t.networkMismatchBlocked : undefined
+        }
         node={listNode}
         dismissible={pendingCloseId === null && channelOpen.status === 'idle'}
         onClose={() => setChannelListOpen(null)}
@@ -685,6 +711,7 @@ export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
                   key={ch.channelId}
                   ch={ch}
                   frozen={frozen}
+                  closeDisabled={!networkMatched}
                   refreshing={refreshingNode === listNode.peer.id}
                   onRefresh={() => refreshNode(listNode.peer.id)}
                   onClose={(channelId, force) => setPendingCloseId({ channelId, force })}

@@ -61,6 +61,8 @@ pub trait WalletBackend: Send + Sync {
     amount_shannons: u64,
     progress: &dyn TxProgressReporter,
   ) -> Result<TxHashResult, CommandError>;
+  /// Hot-swap the wallet CKB network (same mnemonic → re-encoded addresses).
+  async fn set_network(&self, chain: Chain) -> Result<WalletStatus, CommandError>;
 }
 
 #[async_trait]
@@ -162,4 +164,6 @@ pub trait LiquidityBackend: Send + Sync {
     match_outpoint: String,
     progress: &dyn TxProgressReporter,
   ) -> Result<ExtractResult, CommandError>;
+  /// Follow the wallet network switch (swap RPC/provider; no address work).
+  fn apply_network(&self, chain: Chain) -> Result<(), CommandError>;
 }

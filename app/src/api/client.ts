@@ -50,6 +50,8 @@ export const wallet = {
   deriveAddresses: (count: number) => call<string[]>('wallet.derive_addresses', { count }),
   sendCkb: (address: string, amountShannons: number, progress?: Channel<CkbTxProgress>) =>
     call<{ txHash: string }>('wallet.send_ckb', { address, amountShannons }, progress),
+  /** Hot-swap wallet (+ liquidity) CKB network; same mnemonic, new HRP. */
+  setNetwork: (chain: Chain) => call<WalletStatus>('wallet.set_network', { chain }),
 }
 
 // ── node ──────────────────────────────────────────────────────────────────

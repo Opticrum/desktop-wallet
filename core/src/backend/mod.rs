@@ -4,6 +4,7 @@
 //! the matching domain. The runtime mock layer was removed; every domain is
 //! served by the real backend.
 
+pub mod network;
 pub mod real;
 pub mod real_liquidity;
 pub mod traits;
@@ -20,9 +21,13 @@ pub struct BackendConfig {
   pub database_url: String,
   pub keystore_path: String,
   pub node_config_path: String,
-  pub ckb_rpc_url: String,
-  pub ckb_indexer_url: String,
+  pub data_dir: String,
+  pub testnet_rpc_url: String,
+  pub testnet_indexer_url: String,
+  pub mainnet_rpc_url: String,
+  pub mainnet_indexer_url: String,
   pub fee_rate: u64,
+  /// Initial fallback before `wallet-network.json` is loaded.
   pub network: Chain,
 }
 
@@ -32,8 +37,11 @@ impl Default for BackendConfig {
       database_url: "data/opticrum.db".to_string(),
       keystore_path: "data/keystore.json".to_string(),
       node_config_path: "data/node-config.json".to_string(),
-      ckb_rpc_url: "https://testnet.ckbapp.dev".to_string(),
-      ckb_indexer_url: "https://testnet.ckb.dev/indexer".to_string(),
+      data_dir: "data".to_string(),
+      testnet_rpc_url: network::TESTNET_RPC.to_string(),
+      testnet_indexer_url: network::TESTNET_INDEXER.to_string(),
+      mainnet_rpc_url: network::MAINNET_RPC.to_string(),
+      mainnet_indexer_url: network::MAINNET_INDEXER.to_string(),
       fee_rate: 1000,
       network: Chain::Testnet,
     }
@@ -81,32 +89,26 @@ pub struct BackendBundle {
 impl BackendBundle {
   /// Compose the four real domain backends.
   pub async fn real(cfg: BackendConfig) -> Result<Self, CommandError> {
-    use crate::chain::chain_provider::ChainProvider;
-    use crate::chain::real_chain_provider::RealChainProvider;
     use crate::db;
+    use network::NetworkController;
 
-    let mut rpc =
-      ckb_cinnabar_calculator::rpc::RpcClient::new(&cfg.ckb_rpc_url, Some(&cfg.ckb_indexer_url));
-    // `RpcClient::new` marks the network as `Network::Custom`; the SDK's
-    // `opticrum_contract_type_id` panics on Custom. Resolve it by asking the
-    // chain (cinnabar maps the official testnet/mainnet chain id to Testnet/
-    // Mainnet). If the node is unreachable at startup, keep the configured
-    // network as a fallback so the app still boots to honest empty states.
-    if let Err(e) = rpc.update_network().await {
-      log::warn!("ckb network detection failed (node unreachable?): {e:#}");
-      let fallback = if cfg.network == Chain::Testnet {
-        ckb_cinnabar_calculator::rpc::Network::Testnet
-      } else {
-        ckb_cinnabar_calculator::rpc::Network::Mainnet
-      };
-      rpc.set_network(fallback);
-    }
-    let provider: Arc<dyn ChainProvider> = Arc::new(RealChainProvider::new(
-      &cfg.ckb_rpc_url,
-      &cfg.ckb_indexer_url,
-    ));
+    let data_dir = std::path::Path::new(&cfg.data_dir);
+    std::fs::create_dir_all(data_dir).map_err(|e| CommandError::io(e.to_string()))?;
+
+    let network = NetworkController::bootstrap(
+      data_dir,
+      cfg.network,
+      &cfg.testnet_rpc_url,
+      &cfg.testnet_indexer_url,
+      &cfg.mainnet_rpc_url,
+      &cfg.mainnet_indexer_url,
+    )
+    .await?;
+    let resources = network.resources();
+    let rpc = resources.rpc.clone();
+    let provider = resources.provider.clone();
+    let testnet = resources.testnet;
     let db = db::init_db(&cfg.database_url)?;
-    let testnet = cfg.network == Chain::Testnet;
 
     // One live node config shared by the node backend (owns save) and the
     // wallet backend (reads fiber contract scripts for tx classification).
@@ -117,7 +119,7 @@ impl BackendBundle {
     // it on start) and the liquidity backend (attributes new orders to it).
     let node_pubkey = Arc::new(Mutex::new(None::<String>));
 
-    let wallet = Arc::new(crate::backend::real::RealWalletBackend::new(
+    let wallet = Arc::new(crate::backend::real::RealWalletBackend::new_with_network(
       rpc.clone(),
       provider.clone(),
       db,
@@ -125,16 +127,20 @@ impl BackendBundle {
       testnet,
       cfg.fee_rate,
       node_config.clone(),
+      Some(network.clone()),
     ));
-    let liquidity = Arc::new(crate::backend::real_liquidity::RealLiquidityBackend::new(
-      rpc,
-      provider.clone(),
-      wallet.clone(),
-      testnet,
-      node_pubkey.clone(),
-      // Separate connection for the personal-order cache (SQLite is cheap).
-      Some(db::init_db(&cfg.database_url)?),
-    ));
+    let liquidity = Arc::new(
+      crate::backend::real_liquidity::RealLiquidityBackend::new_with_network(
+        rpc,
+        provider,
+        wallet.clone(),
+        testnet,
+        node_pubkey.clone(),
+        // Separate connection for the personal-order cache (SQLite is cheap).
+        Some(db::init_db(&cfg.database_url)?),
+        Some(network),
+      ),
+    );
 
     // Node + channels share a hot-swappable Fiber RPC client so set_active
     // retargets every Fiber call without rebuilding the backends.

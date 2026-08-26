@@ -6,6 +6,7 @@
 //! keys (`keyring`), the derivation seed, and the password-derived AES key.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
@@ -21,6 +22,7 @@ use diesel::sqlite::SqliteConnection;
 use opticrum_calculator::config::opticrum_contract_type_id;
 use opticrum_calculator::types::{MatchArgs, OrderArgs};
 
+use crate::backend::network::NetworkController;
 use crate::chain::chain_provider::{ChainProvider, TransactionInfo};
 use crate::db::txs_cache;
 use crate::db::wallets::{self, WalletRecord};
@@ -48,11 +50,11 @@ const STABLE_CONFIRMATIONS: u64 = 10;
 /// The real wallet backend, generic over the cinnabar RPC backend so tests
 /// can drive it with `FakeRpcClient` (offline).
 pub struct RealWalletBackend<T: RPC> {
-  rpc: T,
-  provider: Arc<dyn ChainProvider>,
+  rpc: Mutex<T>,
+  provider: Mutex<Arc<dyn ChainProvider>>,
   db: Mutex<SqliteConnection>,
   keystore_path: PathBuf,
-  testnet: bool,
+  testnet: AtomicBool,
   fee_rate: u64,
   /// Live node config, shared with the node backend — the `scripts[]` list is
   /// the fiber contract set used to classify txs as channel open/close.
@@ -63,6 +65,8 @@ pub struct RealWalletBackend<T: RPC> {
   seed: Mutex<Option<[u8; 64]>>,
   /// SHA-256(password) AES key — RAM only, re-encrypts newly derived children.
   enc_key: Mutex<Option<[u8; 32]>>,
+  /// Production network controller — enables hot-swap. `None` in unit tests.
+  network: Option<Arc<NetworkController>>,
 }
 
 impl<T: RPC> RealWalletBackend<T> {
@@ -75,17 +79,41 @@ impl<T: RPC> RealWalletBackend<T> {
     fee_rate: u64,
     node_config: Arc<Mutex<NodeConfig>>,
   ) -> Self {
-    Self {
+    Self::new_with_network(
       rpc,
       provider,
-      db: Mutex::new(db),
+      db,
       keystore_path,
       testnet,
+      fee_rate,
+      node_config,
+      None,
+    )
+  }
+
+  #[allow(clippy::too_many_arguments)]
+  pub fn new_with_network(
+    rpc: T,
+    provider: Arc<dyn ChainProvider>,
+    db: SqliteConnection,
+    keystore_path: PathBuf,
+    testnet: bool,
+    fee_rate: u64,
+    node_config: Arc<Mutex<NodeConfig>>,
+    network: Option<Arc<NetworkController>>,
+  ) -> Self {
+    Self {
+      rpc: Mutex::new(rpc),
+      provider: Mutex::new(provider),
+      db: Mutex::new(db),
+      keystore_path,
+      testnet: AtomicBool::new(testnet),
       fee_rate,
       node_config,
       keyring: Mutex::new(Vec::new()),
       seed: Mutex::new(None),
       enc_key: Mutex::new(None),
+      network,
     }
   }
 
@@ -93,12 +121,20 @@ impl<T: RPC> RealWalletBackend<T> {
     !self.keyring.lock().unwrap().is_empty()
   }
 
+  fn is_testnet(&self) -> bool {
+    self.testnet.load(Ordering::SeqCst)
+  }
+
   fn chain(&self) -> Chain {
-    if self.testnet {
+    if self.is_testnet() {
       Chain::Testnet
     } else {
       Chain::Mainnet
     }
+  }
+
+  fn provider(&self) -> Arc<dyn ChainProvider> {
+    self.provider.lock().unwrap().clone()
   }
 
   /// Decrypt every child's key into the in-memory keyring.
@@ -131,7 +167,7 @@ impl<T: RPC> RealWalletBackend<T> {
     for child in &children {
       match tokio::time::timeout(
         std::time::Duration::from_secs(3),
-        self.provider.get_balance_by_address(&child.ckb_address),
+        self.provider().get_balance_by_address(&child.ckb_address),
       )
       .await
       {
@@ -169,10 +205,11 @@ impl<T: RPC> RealWalletBackend<T> {
   /// rows. The DB lock is held only for short synchronous SQL batches; the RPC
   /// awaits happen outside it.
   async fn load_tx(&self, tx_hash: &str, stable_bound: u64) -> Result<LoadedTx, CommandError> {
+    let chain = self.chain();
     // (a) cache read — brief lock, no await
     let cached = {
       let mut conn = self.db.lock().unwrap();
-      txs_cache::get_cached(&mut conn, tx_hash)?
+      txs_cache::get_cached(&mut conn, chain, tx_hash)?
     };
     if let Some(row) = cached {
       let bn = row.block_number as u64;
@@ -184,21 +221,21 @@ impl<T: RPC> RealWalletBackend<T> {
       }
     }
     // (b) miss / near-tip → chain, no db lock held across the await
-    let info = self
-      .provider
+    let provider = self.provider();
+    let info = provider
       .get_transaction(tx_hash)
       .await
       .map_err(|e| CommandError::chain(format!("get_transaction {tx_hash}: {e}")))?;
     let bn = info.block_number;
     let ts = if bn > 0 {
-      self.provider.get_block_timestamp(bn).await.unwrap_or(0)
+      provider.get_block_timestamp(bn).await.unwrap_or(0)
     } else {
       0
     };
     // (c) cache write — confirmed AND stable only, brief lock, best-effort
     if bn > 0 && bn <= stable_bound {
       let mut conn = self.db.lock().unwrap();
-      let _ = txs_cache::upsert_cached(&mut conn, &info, ts);
+      let _ = txs_cache::upsert_cached(&mut conn, chain, &info, ts);
     }
     Ok(LoadedTx {
       info,
@@ -222,8 +259,36 @@ impl<T: RPC> SigningWallet for RealWalletBackend<T> {
   }
 }
 
+/// Hot-swap helper — production `RpcClient` copies the active endpoint; fakes no-op.
+pub trait HotSwapRpc: RPC + Clone {
+  fn assign_rpc(
+    slot: &Mutex<Self>,
+    from: &ckb_cinnabar_calculator::rpc::RpcClient,
+  ) -> Result<(), CommandError>;
+}
+
+impl HotSwapRpc for ckb_cinnabar_calculator::rpc::RpcClient {
+  fn assign_rpc(
+    slot: &Mutex<Self>,
+    from: &ckb_cinnabar_calculator::rpc::RpcClient,
+  ) -> Result<(), CommandError> {
+    *slot.lock().unwrap() = from.clone();
+    Ok(())
+  }
+}
+
+#[cfg(test)]
+impl HotSwapRpc for ckb_cinnabar_calculator::simulation::FakeRpcClient {
+  fn assign_rpc(
+    _slot: &Mutex<Self>,
+    _from: &ckb_cinnabar_calculator::rpc::RpcClient,
+  ) -> Result<(), CommandError> {
+    Ok(())
+  }
+}
+
 #[async_trait]
-impl<T: RPC + Send + Sync> WalletBackend for RealWalletBackend<T> {
+impl<T: HotSwapRpc + Send + Sync> WalletBackend for RealWalletBackend<T> {
   /// Fast local wallet state — no chain query, so the unlock form renders
   /// immediately without waiting for the balance.
   async fn get_status(&self) -> Result<WalletStatus, CommandError> {
@@ -240,6 +305,7 @@ impl<T: RPC + Send + Sync> WalletBackend for RealWalletBackend<T> {
       has_wallet,
       unlocked,
       address,
+      chain: self.chain(),
     })
   }
 
@@ -297,7 +363,7 @@ impl<T: RPC + Send + Sync> WalletBackend for RealWalletBackend<T> {
     // Reorg guard: only trust/cache txs confirmed at least STABLE_CONFIRMATIONS
     // blocks below the tip. Near-tip txs are re-traced each refresh and
     // re-verified; once stable they're served from the DB cache.
-    let stable_bound = match self.provider.get_tip_block_number().await {
+    let stable_bound = match self.provider().get_tip_block_number().await {
       Ok(tip) => tip.saturating_sub(STABLE_CONFIRMATIONS),
       Err(e) => {
         log::warn!("get_tip_block_number failed ({e}); trusting cached history");
@@ -334,8 +400,8 @@ impl<T: RPC + Send + Sync> WalletBackend for RealWalletBackend<T> {
       let mut top_hash: Option<String> = None;
       let mut top_block: u64 = 0;
       loop {
-        let page = self
-          .rpc
+        let rpc = self.rpc.lock().unwrap().clone();
+        let page = rpc
           .get_transactions(search_key.clone(), 1000, cursor.clone())
           .await
           .map_err(|e| CommandError::chain(format!("indexer get_transactions: {e}")))?;
@@ -398,7 +464,7 @@ impl<T: RPC + Send + Sync> WalletBackend for RealWalletBackend<T> {
     // contract's type script `(TYPE_ID, Type, opticrum_contract_type_id)`. The
     // calculator only implements the testnet type_id — mainnet would panic, so
     // Opticrum classification is testnet-only for now.
-    let opticrum_lock_hash: Option<String> = if self.testnet {
+    let opticrum_lock_hash: Option<String> = if self.is_testnet() {
       let type_id = opticrum_contract_type_id(Network::Testnet);
       let type_script = Script::new_builder()
         .code_hash(TYPE_ID_CODE_HASH.pack())
@@ -501,10 +567,16 @@ impl<T: RPC + Send + Sync> WalletBackend for RealWalletBackend<T> {
 
     // Persist the per-address frontier ("top") — one brief lock, no awaits.
     {
+      let chain = self.chain();
       let mut conn = self.db.lock().unwrap();
       for (wallet_id, top_hash, top_block) in &child_tops {
-        let _ =
-          txs_cache::upsert_tx_top(&mut conn, *wallet_id, top_hash.as_str(), *top_block as i64);
+        let _ = txs_cache::upsert_tx_top(
+          &mut conn,
+          chain,
+          *wallet_id,
+          top_hash.as_str(),
+          *top_block as i64,
+        );
       }
     }
 
@@ -530,7 +602,7 @@ impl<T: RPC + Send + Sync> WalletBackend for RealWalletBackend<T> {
     }
     let (keystore, children) = {
       let mut conn = self.db.lock().unwrap();
-      wallet_service::unlock_keystore(&mut conn, self.testnet, &self.keystore_path, &password)?
+      wallet_service::unlock_keystore(&mut conn, self.is_testnet(), &self.keystore_path, &password)?
     };
     let mnemonic = keystore::decrypt_mnemonic(&keystore, &password)?;
     let seed = hd_wallet::mnemonic_to_seed(&mnemonic, "");
@@ -562,7 +634,7 @@ impl<T: RPC + Send + Sync> WalletBackend for RealWalletBackend<T> {
       let mut conn = self.db.lock().unwrap();
       wallet_service::create_hd_wallet(
         &mut conn,
-        self.testnet,
+        self.is_testnet(),
         &self.keystore_path,
         &label,
         &password,
@@ -599,7 +671,7 @@ impl<T: RPC + Send + Sync> WalletBackend for RealWalletBackend<T> {
       let mut conn = self.db.lock().unwrap();
       wallet_service::import_hd_from_mnemonic(
         &mut conn,
-        self.testnet,
+        self.is_testnet(),
         &self.keystore_path,
         &mnemonic,
         &label,
@@ -631,7 +703,7 @@ impl<T: RPC + Send + Sync> WalletBackend for RealWalletBackend<T> {
       let mut conn = self.db.lock().unwrap();
       wallet_service::import_wallet(
         &mut conn,
-        self.testnet,
+        self.is_testnet(),
         &label,
         &private_key_hex,
         Some(&password),
@@ -675,7 +747,7 @@ impl<T: RPC + Send + Sync> WalletBackend for RealWalletBackend<T> {
       let pk = PublicKey::from_secret_key(&secp, &child_key);
       let lock_arg = address::lock_arg_from_pubkey(&pk);
       let lock_hash = address::script_lock_hash(&lock_arg);
-      let addr = address::ckb_address_from_pubkey(&pk, self.testnet);
+      let addr = address::ckb_address_from_pubkey(&pk, self.is_testnet());
       let encrypted = crypto::encrypt_with_key(&child_key.secret_bytes(), &enc_key)?;
       wallets::insert_wallet(
         &mut conn,
@@ -702,6 +774,12 @@ impl<T: RPC + Send + Sync> WalletBackend for RealWalletBackend<T> {
     progress: &dyn TxProgressReporter,
   ) -> Result<TxHashResult, CommandError> {
     self.require_unlocked()?;
+    let _op = self
+      .network
+      .as_ref()
+      .map(|n| n.begin_op())
+      .transpose()?;
+    address::require_address_chain(&address, self.chain())?;
     if amount_shannons == 0 {
       return Err(CommandError::invalid_input("amount must be greater than 0"));
     }
@@ -725,8 +803,9 @@ impl<T: RPC + Send + Sync> WalletBackend for RealWalletBackend<T> {
     let recipient_arg = address::lock_arg_from_address(&address)?;
     let recipient_lock = signer::secp256k1_lock_ex(&recipient_arg);
 
+    let rpc = self.rpc.lock().unwrap().clone();
     let tx = signer::RealSigner::build_ckb_transfer(
-      &self.rpc,
+      &rpc,
       sender_lock,
       &sk,
       recipient_lock,
@@ -740,17 +819,79 @@ impl<T: RPC + Send + Sync> WalletBackend for RealWalletBackend<T> {
       phase: TxPhase::Broadcasting,
       tx_hash: None,
     });
-    let tx_hash = self.provider.send_transaction(&hex::encode(json)).await?;
+    let provider = self.provider();
+    let tx_hash = provider.send_transaction(&hex::encode(json)).await?;
     progress.report(TxProgress {
       phase: TxPhase::Confirming,
       tx_hash: Some(tx_hash.clone()),
     });
     // Resolve only once the transfer is confirmed on-chain.
-    self
-      .provider
+    provider
       .wait_for_confirmation(&tx_hash, 1, Some(std::time::Duration::from_secs(300)))
       .await?;
     Ok(TxHashResult { tx_hash })
+  }
+
+  async fn set_network(&self, chain: Chain) -> Result<WalletStatus, CommandError> {
+    if self.chain() == chain {
+      return self.get_status().await;
+    }
+    let Some(ctrl) = &self.network else {
+      return Err(CommandError::internal(
+        "network switching is unavailable in this backend",
+      ));
+    };
+    ctrl.try_begin_switch()?;
+    let resources = ctrl.resources_for(chain);
+    *self.provider.lock().unwrap() = resources.provider.clone();
+    self.testnet.store(resources.testnet, Ordering::SeqCst);
+    T::assign_rpc(&self.rpc, &resources.rpc)?;
+    self.reencode_addresses_for_chain(chain)?;
+    ctrl.activate(chain)?;
+    self.get_status().await
+  }
+}
+
+impl<T: HotSwapRpc + Send + Sync> RealWalletBackend<T> {
+  /// Re-encode every managed address to the target chain HRP. When unlocked,
+  /// also refresh the in-memory keyring address strings from the secret keys.
+  fn reencode_addresses_for_chain(&self, chain: Chain) -> Result<(), CommandError> {
+    let testnet = chain == Chain::Testnet;
+    let mut conn = self.db.lock().unwrap();
+    let children = wallets::list_wallets(&mut conn)?;
+    for child in &children {
+      let new_addr = if let Some((_, sk)) = self
+        .keyring
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|(r, _)| r.id == child.id)
+      {
+        let secp = secp256k1::Secp256k1::new();
+        let pk = PublicKey::from_secret_key(&secp, sk);
+        address::ckb_address_from_pubkey(&pk, testnet)
+      } else if let Ok(lock_arg) = address::lock_arg_from_address(&child.ckb_address) {
+        if testnet {
+          address::ckb_address_testnet(&lock_arg)
+        } else {
+          address::ckb_address_mainnet(&lock_arg)
+        }
+      } else {
+        continue;
+      };
+      if new_addr != child.ckb_address {
+        wallets::update_wallet_derived_info(&mut conn, child.id, &child.lock_hash, &new_addr)?;
+      }
+    }
+    drop(conn);
+    // Refresh keyring address snapshots when unlocked.
+    let mut keyring = self.keyring.lock().unwrap();
+    for (record, sk) in keyring.iter_mut() {
+      let secp = secp256k1::Secp256k1::new();
+      let pk = PublicKey::from_secret_key(&secp, sk);
+      record.ckb_address = address::ckb_address_from_pubkey(&pk, testnet);
+    }
+    Ok(())
   }
 }
 
@@ -1453,7 +1594,9 @@ mod tests {
     {
       let mut conn = backend.db.lock().unwrap();
       assert!(
-        txs_cache::get_cached(&mut conn, tx_hash).unwrap().is_none(),
+        txs_cache::get_cached(&mut conn, Chain::Testnet, tx_hash)
+          .unwrap()
+          .is_none(),
         "near-tip tx must not be cached"
       );
     }
@@ -1482,7 +1625,9 @@ mod tests {
     {
       let mut conn = backend.db.lock().unwrap();
       assert!(
-        txs_cache::get_cached(&mut conn, tx_hash).unwrap().is_none(),
+        txs_cache::get_cached(&mut conn, Chain::Testnet, tx_hash)
+          .unwrap()
+          .is_none(),
         "unconfirmed tx must never be cached"
       );
     }
@@ -1507,7 +1652,9 @@ mod tests {
     };
     let top = {
       let mut conn = backend.db.lock().unwrap();
-      txs_cache::get_tx_top(&mut conn, child_id).unwrap().unwrap()
+      txs_cache::get_tx_top(&mut conn, Chain::Testnet, child_id)
+        .unwrap()
+        .unwrap()
     };
     assert_eq!(top.top_tx_hash, tx_b);
     assert_eq!(top.top_block_number, 101);
@@ -1557,7 +1704,7 @@ mod tests {
     let db = init_test_db();
     let dir = tempfile::tempdir().unwrap();
     let keystore_path = dir.path().join("keystore.json");
-    let mut backend = RealWalletBackend::new(
+    let backend = RealWalletBackend::new(
       fake,
       provider.clone(),
       db,
@@ -1587,6 +1734,8 @@ mod tests {
     .expect("sender cell");
     backend
       .rpc
+      .lock()
+      .unwrap()
       .insert_fake_cell(fake_outpoint(), cell, Some(fake_header_view(1, 1, 1)));
 
     // Recipient is the sender's own (valid) address — a self-transfer.

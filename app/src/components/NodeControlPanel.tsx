@@ -4,7 +4,8 @@ import { CopyableText } from './CopyableText'
 import { NodeConfigModal } from './config/NodeConfigModal'
 import { useLocale } from '../i18n/LocaleContext'
 import { useNode } from '../node/NodeContext'
-import { node, wallet } from '../api/client'
+import { useWalletNetwork } from '../wallet/WalletNetworkContext'
+import { node } from '../api/client'
 import { toCommandError } from '../api/types'
 import type { NodeConfig, NodeRuntime, WatchtowerConfig } from '../api/types'
 import { fiberRpcUrl, withHttpScheme } from '../lib/node'
@@ -83,7 +84,8 @@ export function NodeControlPanel({
   onEditConnection,
 }: Props) {
   const { t, locale } = useLocale()
-  const { chain, kind } = useNode()
+  const { chain, kind, running: ctxRunning, starting: ctxStarting, applyRuntime } = useNode()
+  const { chain: walletChain, status: walletStatus } = useWalletNetwork()
   const [runtime, setRuntime] = useState<NodeRuntime | null>(null)
   // Live-uptime ticker anchor — bumped every second while the node is up so
   // the "运行时长" counts up smoothly between the 5s runtime polls.
@@ -93,12 +95,6 @@ export function NodeControlPanel({
   const [watchtower, setWatchtower] = useState<WatchtowerConfig>({ mode: 'builtin', endpoint: null })
   // Embedded node cold start takes a while — show a clear starting state.
   const [startRequested, setStartRequested] = useState(false)
-  // Node start requires the wallet unlocked (Fiber links a single CKB wallet).
-  // Conservative default: locked until the summary confirms otherwise.
-  const [walletGate, setWalletGate] = useState<{ hasWallet: boolean; unlocked: boolean }>({
-    hasWallet: true,
-    unlocked: false,
-  })
   // Persisted node config — `rpc.listening_addr` feeds the Fiber 端口 row and
   // the fnn-cli launch URL. Refetched when the config modal closes.
   const [config, setConfig] = useState<NodeConfig | null>(null)
@@ -114,6 +110,9 @@ export function NodeControlPanel({
           if (!alive) return
           setRuntime(r)
           setWatchtower(r.watchtower)
+          // Keep NodeContext (side-menu mismatch `!`, KPI gates) in sync with
+          // this panel's poll — especially after switching to an external.
+          applyRuntime(r)
         })
         .catch(() => {})
     poll()
@@ -124,7 +123,7 @@ export function NodeControlPanel({
       alive = false
       window.clearInterval(id)
     }
-  }, [refreshKey, kind])
+  }, [refreshKey, kind, applyRuntime])
 
   // 1s ticker for the live uptime readout — runs only while the node reports a
   // start anchor (startedAtMs), so a stopped node doesn't re-render every second.
@@ -134,23 +133,6 @@ export function NodeControlPanel({
     const id = window.setInterval(() => setNowMs(Date.now()), 1000)
     return () => window.clearInterval(id)
   }, [runtime?.startedAtMs])
-
-  useEffect(() => {
-    let alive = true
-    const check = () =>
-      wallet
-        .getStatus()
-        .then((s) => {
-          if (alive) setWalletGate({ hasWallet: s.hasWallet, unlocked: s.unlocked })
-        })
-        .catch(() => {})
-    check()
-    const id = window.setInterval(check, 5000)
-    return () => {
-      alive = false
-      window.clearInterval(id)
-    }
-  }, [refreshKey])
 
   const refetchConfig = () =>
     node
@@ -162,19 +144,30 @@ export function NodeControlPanel({
     refetchConfig()
   }, [])
 
-  const running = runtime?.running ?? false
+  const running = runtime?.running ?? ctxRunning
   // "Starting" survives page switches: the backend reports it on the runtime,
   // and the local `startRequested` covers the window while the IPC call flies.
-  const starting = startRequested || (runtime?.starting ?? false)
+  const starting = startRequested || (runtime?.starting ?? ctxStarting)
   const alias = runtime?.alias ?? '—'
+  // Prefer the just-polled runtime chain (external `chain_hash` / stored probe)
+  // over a possibly stale NodeContext value from the previous target.
+  const nodeChain = runtime?.chain ?? chain
   // Uptime anchored by the backend's `startedAtMs`; the 1s ticker counts it up
   // live, so it reads "0h 0m → 0h 5m → 1h 23m" instead of whole hours.
   const startedAtMs = runtime?.startedAtMs ?? null
   const uptimeText = startedAtMs != null ? formatUptime(Math.max(0, nowMs - startedAtMs)) : '0h 0m'
   const fiberPubkey = runtime?.fiberPubkey || '—'
   const fiberAddr = runtime?.fiberAddr || '—'
+  const walletGate = {
+    hasWallet: walletStatus?.hasWallet ?? true,
+    unlocked: walletStatus?.unlocked ?? false,
+  }
   const startDisabled = !walletGate.hasWallet || !walletGate.unlocked
   const isExternal = kind === 'external'
+  // External: show mismatch whenever chains differ (persisted probe survives a
+  // brief RPC blip). Builtin: only while up — a stopped process has no live peer.
+  const networkMismatch =
+    walletChain !== nodeChain && (isExternal ? !starting : running && !starting)
 
   const handleStop = async () => {
     setStopOpen(false)
@@ -256,8 +249,21 @@ export function NodeControlPanel({
           </span>
         </div>
         <div className="ncp-status-right">
-          <span className={`ncp-net-badge net-${chain}`}>
-            {chain === 'mainnet' ? t.networkMainnet : t.networkTestnet}
+          <span
+            className={`ncp-net-badge net-${nodeChain}${networkMismatch ? ' is-mismatch' : ''}`}
+            title={networkMismatch ? t.networkMismatchTip : undefined}
+            aria-label={
+              networkMismatch
+                ? `${t.networkMismatchBadge}: ${
+                    nodeChain === 'mainnet' ? t.networkMainnet : t.networkTestnet
+                  }`
+                : nodeChain === 'mainnet'
+                  ? t.networkMainnet
+                  : t.networkTestnet
+            }
+          >
+            {nodeChain === 'mainnet' ? t.networkMainnet : t.networkTestnet}
+            {networkMismatch ? <span className="ncp-net-mismatch-mark">!</span> : null}
           </span>
           <div className="ncp-actions">
             {isExternal ? (
@@ -311,6 +317,18 @@ export function NodeControlPanel({
           </div>
         </div>
       </div>
+
+      {networkMismatch && (
+        <div className="ncp-mismatch" role="status">
+          <span className="ncp-mismatch-mark" aria-hidden>
+            !
+          </span>
+          <div className="ncp-mismatch-text">
+            <span className="ncp-mismatch-title">{t.networkMismatchTitle}</span>
+            <span className="ncp-mismatch-hint">{t.networkMismatchTip}</span>
+          </div>
+        </div>
+      )}
 
       {/* ── Detail rows ──────────────────────────────────────────────── */}
       <div className="ncp-detail-rows">

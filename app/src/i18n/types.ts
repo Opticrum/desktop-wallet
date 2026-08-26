@@ -94,6 +94,8 @@ export type Messages = {
   walletImportFailed: string
   walletPasswordRequired: string
   walletPasswordWrong: string
+  /** Opticrum / wallet ops blocked on unsupported network (e.g. mainnet market). */
+  unsupportedNetwork: string
   walletNone: string
   walletNoneHint: string
   walletRefreshing: string
@@ -112,10 +114,23 @@ export type Messages = {
   nodeNavPeers: string
   nodeNavRuntime: string
 
-  // Liquidity — network (follows the node's configured chain)
+  // Liquidity — network
   networkMainnet: string
   networkTestnet: string
   rpcUrlLabel: string
+  /** Wallet page segmented control aria / titles */
+  walletNetworkSwitch: string
+  walletNetworkSwitching: string
+  /** TopBar read-only wallet network pill */
+  walletNetworkBadge: string
+  /** Opticrum market unavailable on mainnet */
+  lmMarketUnavailableTitle: string
+  lmMarketUnavailableBody: string
+  /** Wallet ↔ node CKB network mismatch */
+  networkMismatchTitle: string
+  networkMismatchTip: string
+  networkMismatchBlocked: string
+  networkMismatchBadge: string
 
   // Liquidity — KPI labels + buy action
   lmActiveMatches: string

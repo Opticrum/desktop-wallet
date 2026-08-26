@@ -127,6 +127,33 @@ pub fn ckb_address_testnet_short(lock_arg: &[u8; 20]) -> String {
 }
 
 /// Extract the 20-byte lock args from a CKB bech32/bech32m address.
+/// Return the CKB network implied by an address HRP (`ckb` / `ckt`).
+pub fn chain_from_address(address: &str) -> Result<crate::wire::Chain, crate::wire::CommandError> {
+  let (hrp, _, _) = bech32::decode(address)
+    .map_err(|e| crate::wire::CommandError::invalid_input(format!("Invalid CKB address: {e}")))?;
+  match hrp.as_str() {
+    "ckb" => Ok(crate::wire::Chain::Mainnet),
+    "ckt" => Ok(crate::wire::Chain::Testnet),
+    other => Err(crate::wire::CommandError::invalid_input(format!(
+      "Unsupported CKB address HRP '{other}'"
+    ))),
+  }
+}
+
+/// Reject addresses whose HRP does not match the active wallet network.
+pub fn require_address_chain(
+  address: &str,
+  expected: crate::wire::Chain,
+) -> Result<(), crate::wire::CommandError> {
+  let got = chain_from_address(address)?;
+  if got != expected {
+    return Err(crate::wire::CommandError::invalid_input(format!(
+      "address network mismatch: expected {expected}, got {got}"
+    )));
+  }
+  Ok(())
+}
+
 pub fn lock_arg_from_address(address: &str) -> Result<[u8; 20], crate::wire::CommandError> {
   use bech32::{convert_bits, Variant};
 

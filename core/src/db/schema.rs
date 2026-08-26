@@ -43,8 +43,9 @@ diesel::table! {
 }
 
 diesel::table! {
-    txs_cache (tx_hash) {
+    txs_cache (tx_hash, chain) {
         tx_hash -> Text,
+        chain -> Text,
         block_number -> BigInt,
         block_timestamp -> BigInt,
         inputs -> Text,
@@ -54,8 +55,9 @@ diesel::table! {
 }
 
 diesel::table! {
-    wallet_tx_tops (wallet_id) {
+    wallet_tx_tops (wallet_id, chain) {
         wallet_id -> BigInt,
+        chain -> Text,
         top_tx_hash -> Text,
         top_block_number -> BigInt,
         updated_at -> Text,
@@ -63,16 +65,17 @@ diesel::table! {
 }
 
 diesel::table! {
-    cached_orders (outpoint) {
+    cached_orders (outpoint, chain) {
         outpoint -> Text,
+        chain -> Text,
         data -> Text,
         synced_at -> Text,
     }
 }
 
 diesel::table! {
-    orders_cache_meta (id) {
-        id -> Integer,
+    orders_cache_meta (chain) {
+        chain -> Text,
         primed_at -> Text,
     }
 }

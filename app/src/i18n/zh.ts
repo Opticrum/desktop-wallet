@@ -89,6 +89,7 @@ export const zh: Messages = {
   walletImportFailed: '导入失败',
   walletPasswordRequired: '请输入密码',
   walletPasswordWrong: '密码错误',
+  unsupportedNetwork: '当前网络暂不支持此操作',
   walletNone: '暂无钱包',
   walletNoneHint: '请在顶部对话框创建钱包',
   walletRefreshing: '刷新中…',
@@ -106,10 +107,19 @@ export const zh: Messages = {
   nodeNavPeers: 'Peers',
   nodeNavRuntime: '运行日志',
 
-  // Liquidity — network (follows the node's configured chain)
+  // Liquidity — network
   networkMainnet: '主网',
   networkTestnet: '测试网',
   rpcUrlLabel: 'RPC 地址',
+  walletNetworkSwitch: '钱包网络',
+  walletNetworkSwitching: '正在切换网络…',
+  walletNetworkBadge: '当前钱包网络',
+  lmMarketUnavailableTitle: '主网市场暂未开放',
+  lmMarketUnavailableBody: 'Opticrum 合约目前仅部署在测试网。切换到测试网钱包后可查看市场概况与入金流动性。',
+  networkMismatchTitle: '钱包与节点网络不匹配',
+  networkMismatchTip: '钱包连接的 CKB 网络与当前 Fiber 节点不一致。请切换钱包网络，或将节点配置为同一网络后再进行链上操作。',
+  networkMismatchBlocked: '钱包与节点网络不匹配，无法执行此操作',
+  networkMismatchBadge: '网络不匹配',
 
   // Liquidity — KPI labels + buy action
   lmActiveMatches: '活跃匹配',

@@ -12,6 +12,7 @@
 //! computed from the wallet's secp256k1 lock; `'all'` returns every on-chain cell.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
@@ -42,6 +43,7 @@ use opticrum_sdk::{
 
 use diesel::sqlite::SqliteConnection;
 
+use crate::backend::network::NetworkController;
 use crate::backend::{SigningWallet, TxProgressReporter};
 use crate::chain::chain_provider::ChainProvider;
 use crate::db::orders_cache;
@@ -50,6 +52,34 @@ use crate::wallet::{address, signer};
 use crate::wire::*;
 
 use super::traits::LiquidityBackend;
+
+/// Hot-swap helper — production `RpcClient` copies the active endpoint; fakes no-op.
+pub trait HotSwapRpc: RPC + Clone {
+  fn assign_rpc(
+    slot: &Mutex<Self>,
+    from: &ckb_cinnabar_calculator::rpc::RpcClient,
+  ) -> Result<(), CommandError>;
+}
+
+impl HotSwapRpc for ckb_cinnabar_calculator::rpc::RpcClient {
+  fn assign_rpc(
+    slot: &Mutex<Self>,
+    from: &ckb_cinnabar_calculator::rpc::RpcClient,
+  ) -> Result<(), CommandError> {
+    *slot.lock().unwrap() = from.clone();
+    Ok(())
+  }
+}
+
+#[cfg(test)]
+impl HotSwapRpc for ckb_cinnabar_calculator::simulation::FakeRpcClient {
+  fn assign_rpc(
+    _slot: &Mutex<Self>,
+    _from: &ckb_cinnabar_calculator::rpc::RpcClient,
+  ) -> Result<(), CommandError> {
+    Ok(())
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Wire mapping helpers (pure, unit-testable)
@@ -407,10 +437,10 @@ fn build_dashboard(orders: &[OrderInfo], matches: &[MatchInfo], tip_block: u64) 
 /// Real liquidity backend, generic over the cinnabar RPC backend so tests can
 /// drive it with `FakeRpcClient` (offline).
 pub struct RealLiquidityBackend<T: RPC> {
-  rpc: T,
-  provider: Arc<dyn ChainProvider>,
+  rpc: Mutex<T>,
+  provider: Mutex<Arc<dyn ChainProvider>>,
   wallet: Arc<dyn SigningWallet>,
-  testnet: bool,
+  testnet: AtomicBool,
   /// The current fiber node's identity pubkey (hex), shared with the node
   /// backend — new orders are attributed to it in `OrderArgs.fiber_pubkey`.
   node_pubkey: Arc<Mutex<Option<String>>>,
@@ -425,6 +455,8 @@ pub struct RealLiquidityBackend<T: RPC> {
   /// reads cached cells instead of re-scanning the chain; `None` in tests (always
   /// scan, no persistence).
   db: Option<Mutex<SqliteConnection>>,
+  /// Production network controller — enables hot-swap. `None` in unit tests.
+  network: Option<Arc<NetworkController>>,
 }
 
 /// Run a blocking closure that internally awaits non-`Send` futures (the SDK
@@ -448,16 +480,63 @@ impl<T: RPC> RealLiquidityBackend<T> {
     node_pubkey: Arc<Mutex<Option<String>>>,
     db: Option<SqliteConnection>,
   ) -> Self {
+    Self::new_with_network(rpc, provider, wallet, testnet, node_pubkey, db, None)
+  }
+
+  #[allow(clippy::too_many_arguments)]
+  pub fn new_with_network(
+    rpc: T,
+    provider: Arc<dyn ChainProvider>,
+    wallet: Arc<dyn SigningWallet>,
+    testnet: bool,
+    node_pubkey: Arc<Mutex<Option<String>>>,
+    db: Option<SqliteConnection>,
+    network: Option<Arc<NetworkController>>,
+  ) -> Self {
     Self {
-      rpc,
-      provider,
+      rpc: Mutex::new(rpc),
+      provider: Mutex::new(provider),
       wallet,
-      testnet,
+      testnet: AtomicBool::new(testnet),
       node_pubkey,
       sidecar: Mutex::new(HashMap::new()),
       original_stake: Mutex::new(HashMap::new()),
       db: db.map(Mutex::new),
+      network,
     }
+  }
+
+  fn is_testnet(&self) -> bool {
+    self.testnet.load(Ordering::SeqCst)
+  }
+
+  fn chain(&self) -> Chain {
+    if self.is_testnet() {
+      Chain::Testnet
+    } else {
+      Chain::Mainnet
+    }
+  }
+
+  fn provider(&self) -> Arc<dyn ChainProvider> {
+    self.provider.lock().unwrap().clone()
+  }
+
+  fn rpc_clone(&self) -> T
+  where
+    T: Clone,
+  {
+    self.rpc.lock().unwrap().clone()
+  }
+
+  /// Reject Opticrum market writes on mainnet (contracts not deployed yet).
+  fn require_opticrum_network(&self) -> Result<(), CommandError> {
+    if !self.is_testnet() {
+      return Err(CommandError::unsupported_network(
+        "Opticrum market is not available on mainnet yet",
+      ));
+    }
+    Ok(())
   }
 
   /// Original rent pool (shannons) of a match — the first match cell's real
@@ -488,14 +567,15 @@ impl<T: RPC> RealLiquidityBackend<T> {
     );
     let (mut last_raw, mut first_raw): (Option<u64>, Option<u64>) = (None, None);
     for _hop in 0..MAX_HOPS {
-      let tx = self.provider.get_transaction(&outpoint.0).await.ok()?;
+      let provider = self.provider();
+      let tx = provider.get_transaction(&outpoint.0).await.ok()?;
       let raw = tx.outputs.get(outpoint.1)?.capacity;
       last_raw.get_or_insert(raw);
       let mut stepped = None;
       // Only the Opticrum-locked input matters — skip any input whose previous
       // cell can't be fetched or isn't an Opticrum cell (funding/change inputs).
       for inp in &tx.inputs {
-        let Ok(prev_tx) = self.provider.get_transaction(&inp.previous_tx_hash).await else {
+        let Ok(prev_tx) = provider.get_transaction(&inp.previous_tx_hash).await else {
           continue;
         };
         let Some(prev) = prev_tx.outputs.get(inp.previous_index as usize) else {
@@ -525,22 +605,31 @@ impl<T: RPC> RealLiquidityBackend<T> {
     Some(first.saturating_sub(occupied))
   }
 
-  async fn tip_block(&self) -> Result<u64, CommandError> {
-    OpticrumSdk::new(self.rpc.clone())
+  async fn tip_block(&self) -> Result<u64, CommandError>
+  where
+    T: Clone,
+  {
+    OpticrumSdk::new(self.rpc_clone())
       .get_tip_block()
       .await
       .map_err(map_sdk_err)
   }
 
-  async fn scan_orders(&self) -> Result<Vec<OrderInfo>, CommandError> {
-    OpticrumSdk::new(self.rpc.clone())
+  async fn scan_orders(&self) -> Result<Vec<OrderInfo>, CommandError>
+  where
+    T: Clone,
+  {
+    OpticrumSdk::new(self.rpc_clone())
       .scan_orders(None)
       .await
       .map_err(map_sdk_err)
   }
 
-  async fn scan_matches(&self) -> Result<Vec<MatchInfo>, CommandError> {
-    OpticrumSdk::new(self.rpc.clone())
+  async fn scan_matches(&self) -> Result<Vec<MatchInfo>, CommandError>
+  where
+    T: Clone,
+  {
+    OpticrumSdk::new(self.rpc_clone())
       .scan_matches(None)
       .await
       .map_err(map_sdk_err)
@@ -548,11 +637,17 @@ impl<T: RPC> RealLiquidityBackend<T> {
 
   /// Read helpers that degrade to honest empty state when the chain is
   /// unreachable — the desktop stays usable offline instead of erroring.
-  async fn tip_or_zero(&self) -> u64 {
+  async fn tip_or_zero(&self) -> u64
+  where
+    T: Clone,
+  {
     self.tip_block().await.unwrap_or(0)
   }
 
-  async fn scan_orders_or_empty(&self) -> Vec<OrderInfo> {
+  async fn scan_orders_or_empty(&self) -> Vec<OrderInfo>
+  where
+    T: Clone,
+  {
     match self.scan_orders().await {
       Ok(o) => o,
       Err(e) => {
@@ -562,7 +657,10 @@ impl<T: RPC> RealLiquidityBackend<T> {
     }
   }
 
-  async fn scan_matches_or_empty(&self) -> Vec<MatchInfo> {
+  async fn scan_matches_or_empty(&self) -> Vec<MatchInfo>
+  where
+    T: Clone,
+  {
     match self.scan_matches().await {
       Ok(m) => m,
       Err(e) => {
@@ -603,8 +701,9 @@ impl<T: RPC> RealLiquidityBackend<T> {
   fn write_orders_cache(&self, orders: &[LiquidityOrder]) -> Result<(), CommandError> {
     if let Some(db) = &self.db {
       let mut conn = db.lock().unwrap();
-      orders_cache::replace_all(&mut conn, orders)?;
-      orders_cache::mark_primed(&mut conn)?;
+      let chain = self.chain();
+      orders_cache::replace_all(&mut conn, chain, orders)?;
+      orders_cache::mark_primed(&mut conn, chain)?;
     }
     Ok(())
   }
@@ -634,7 +733,7 @@ impl<T: RPC> RealLiquidityBackend<T> {
   fn wallet_address(&self, addr: &str) -> Result<Address, CommandError> {
     let lock_arg = address::lock_arg_from_address(addr)?;
     let script = signer::secp256k1_lock_ex(&lock_arg).to_script_unchecked();
-    let network = if self.testnet {
+    let network = if self.is_testnet() {
       Network::Testnet
     } else {
       Network::Mainnet
@@ -703,13 +802,13 @@ impl<T: RPC> RealLiquidityBackend<T> {
       phase: TxPhase::Broadcasting,
       tx_hash: None,
     });
-    let hash = self.provider.send_transaction(&hex::encode(json)).await?;
+    let hash = self.provider().send_transaction(&hex::encode(json)).await?;
     progress.report(TxProgress {
       phase: TxPhase::Confirming,
       tx_hash: Some(hash.clone()),
     });
     self
-      .provider
+      .provider()
       .wait_for_confirmation(&hash, 1, Some(std::time::Duration::from_secs(300)))
       .await?;
     Ok(hash)
@@ -729,13 +828,13 @@ impl<T: RPC> RealLiquidityBackend<T> {
     // Plain 64-hex, no "0x" prefix — `H256::from_str` in ckb-fixed-hash expects
     // exactly 64 chars and rejects the prefix (the extraction path relies on this).
     let tx_hash_hex = hex::encode(tx_hash);
-    let info = self.provider.get_transaction(&tx_hash_hex).await.ok()?;
+    let provider = self.provider();
+    let info = provider.get_transaction(&tx_hash_hex).await.ok()?;
     if info.block_number == 0 {
       return None;
     }
     Some(
-      self
-        .provider
+      provider
         .get_block_timestamp(info.block_number)
         .await
         .unwrap_or(0),
@@ -744,8 +843,11 @@ impl<T: RPC> RealLiquidityBackend<T> {
 }
 
 #[async_trait]
-impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T> {
+impl<T: HotSwapRpc + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T> {
   async fn get_dashboard(&self) -> Result<DashboardData, CommandError> {
+    if !self.is_testnet() {
+      return Ok(build_dashboard(&[], &[], 0));
+    }
     let tip = self.tip_or_zero().await;
     let orders = self.scan_orders_or_empty().await;
     let matches = self.scan_matches_or_empty().await;
@@ -753,6 +855,9 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
   }
 
   async fn get_orders(&self, scope: Option<String>) -> Result<Vec<LiquidityOrder>, CommandError> {
+    if !self.is_testnet() {
+      return Ok(vec![]);
+    }
     // Personal orders ('mine', the default) read from the local cache once a
     // scan has primed it — order outpoints are immutable, so loading skips the
     // expensive chain scan until the user explicitly refreshes.
@@ -764,8 +869,9 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
       }
       if let Some(db) = &self.db {
         let mut conn = db.lock().unwrap();
-        if orders_cache::is_primed(&mut conn)? {
-          return orders_cache::list_orders(&mut conn);
+        let chain = self.chain();
+        if orders_cache::is_primed(&mut conn, chain)? {
+          return orders_cache::list_orders(&mut conn, chain);
         }
       }
       // First run / cache not primed — scan the chain. On failure return empty
@@ -790,6 +896,9 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
   }
 
   async fn refresh_orders(&self) -> Result<Vec<LiquidityOrder>, CommandError> {
+    if !self.is_testnet() {
+      return Ok(vec![]);
+    }
     // A locked wallet can't derive its lock script, so it can't own cells —
     // and rewriting the cache here would erase the wallet's orders (they only
     // reappear after a manual re-scan once it unlocks). Return nothing without
@@ -813,12 +922,16 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
   }
 
   async fn get_matches(&self, scope: Option<String>) -> Result<Vec<LiquidityMatch>, CommandError> {
+    if !self.is_testnet() {
+      return Ok(vec![]);
+    }
     let tip = self.tip_or_zero().await;
     let matches = self.scan_matches_or_empty().await;
     let matches = self.own_matches(scope.as_deref(), matches);
     // The wallet's lock hash determines each match's role (buyer/seller) — for
     // non-`'mine'` scans it is `None` and every match maps to `Other`.
     let my_lock = self.wallet_lock_hash();
+    let provider = self.provider();
     let mut out = Vec::with_capacity(matches.len());
     for m in &matches {
       // Original stake via lineage trace (cached per match args). `None` → the
@@ -830,7 +943,7 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
           tip,
           my_lock,
           original.map(|s| s as f64 / CKB_DECIMAL as f64),
-          self.provider.as_ref(),
+          provider.as_ref(),
         )
         .await,
       );
@@ -842,6 +955,9 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
     &self,
     blocks_threshold: u64,
   ) -> Result<Vec<MatchDeadline>, CommandError> {
+    if !self.is_testnet() {
+      return Ok(vec![]);
+    }
     let tip = self.tip_or_zero().await;
     let matches = self.scan_matches_or_empty().await;
     let mut deadlines: Vec<MatchDeadline> = matches
@@ -863,6 +979,12 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
     fiber_address: Option<String>,
     progress: &dyn TxProgressReporter,
   ) -> Result<PublishOrderResult, CommandError> {
+    self.require_opticrum_network()?;
+    let _op = self
+      .network
+      .as_ref()
+      .map(|n| n.begin_op())
+      .transpose()?;
     if capacity_shannons == 0 || rent_capacity_shannons == 0 {
       return Err(CommandError::invalid_input(
         "capacity and rent must be greater than 0",
@@ -892,7 +1014,7 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
     let sender_lock = self.wallet_lock_ex(&pk);
     let args_bytes = order_args.to_bytes();
 
-    let rpc = self.rpc.clone();
+    let rpc = self.rpc_clone();
     let tx = run_blocking(move || {
       let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -950,8 +1072,9 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
     };
     if let Some(db) = &self.db {
       let mut conn = db.lock().unwrap();
-      orders_cache::upsert_order(&mut conn, &new_order)?;
-      orders_cache::mark_primed(&mut conn)?;
+      let chain = self.chain();
+      orders_cache::upsert_order(&mut conn, chain, &new_order)?;
+      orders_cache::mark_primed(&mut conn, chain)?;
     }
     Ok(PublishOrderResult {
       order_outpoint: outpoint,
@@ -964,6 +1087,12 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
     outpoint: String,
     progress: &dyn TxProgressReporter,
   ) -> Result<TxHashResult, CommandError> {
+    self.require_opticrum_network()?;
+    let _op = self
+      .network
+      .as_ref()
+      .map(|n| n.begin_op())
+      .transpose()?;
     let (addr, sk) = self.signing_identity()?;
     let buyer = self.wallet_address(&addr)?;
     let secp = Secp256k1::new();
@@ -976,7 +1105,7 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
       .find(|o| outpoint_0x(&o.order_outpoint.tx_hash, o.order_outpoint.index) == outpoint)
       .ok_or_else(|| CommandError::invalid_input("order not found on-chain"))?;
 
-    let rpc = self.rpc.clone();
+    let rpc = self.rpc_clone();
     let tx = run_blocking(move || {
       let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -1004,6 +1133,12 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
     amount_shannons: u64,
     progress: &dyn TxProgressReporter,
   ) -> Result<TxHashResult, CommandError> {
+    self.require_opticrum_network()?;
+    let _op = self
+      .network
+      .as_ref()
+      .map(|n| n.begin_op())
+      .transpose()?;
     if amount_shannons == 0 {
       return Err(CommandError::invalid_input("amount must be greater than 0"));
     }
@@ -1018,6 +1153,12 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
     amount_shannons: u64,
     progress: &dyn TxProgressReporter,
   ) -> Result<TxHashResult, CommandError> {
+    self.require_opticrum_network()?;
+    let _op = self
+      .network
+      .as_ref()
+      .map(|n| n.begin_op())
+      .transpose()?;
     if amount_shannons == 0 {
       return Err(CommandError::invalid_input("amount must be greater than 0"));
     }
@@ -1031,6 +1172,12 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
     match_outpoint: String,
     progress: &dyn TxProgressReporter,
   ) -> Result<ExtractResult, CommandError> {
+    self.require_opticrum_network()?;
+    let _op = self
+      .network
+      .as_ref()
+      .map(|n| n.begin_op())
+      .transpose()?;
     let (addr, sk) = self.signing_identity()?;
     let seller = self.wallet_address(&addr)?;
     let secp = Secp256k1::new();
@@ -1050,7 +1197,7 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
     }
     let returned_ckb = match_info.ckb_capacity as f64 / CKB_DECIMAL as f64;
 
-    let rpc = self.rpc.clone();
+    let rpc = self.rpc_clone();
     let tx = run_blocking(move || {
       let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -1074,9 +1221,25 @@ impl<T: RPC + Send + Sync + 'static> LiquidityBackend for RealLiquidityBackend<T
       returned_ckb,
     })
   }
+
+  fn apply_network(&self, chain: Chain) -> Result<(), CommandError> {
+    if self.chain() == chain {
+      return Ok(());
+    }
+    let Some(ctrl) = &self.network else {
+      return Err(CommandError::internal(
+        "network switching is unavailable in this backend",
+      ));
+    };
+    let resources = ctrl.resources_for(chain);
+    *self.provider.lock().unwrap() = resources.provider.clone();
+    self.testnet.store(resources.testnet, Ordering::SeqCst);
+    T::assign_rpc(&self.rpc, &resources.rpc)?;
+    Ok(())
+  }
 }
 
-impl<T: RPC + 'static> RealLiquidityBackend<T> {
+impl<T: Clone + RPC + 'static> RealLiquidityBackend<T> {
   /// Shared buyer update-match (inject +/withdraw − capacity) path.
   async fn update_match(
     &self,
@@ -1106,7 +1269,7 @@ impl<T: RPC + 'static> RealLiquidityBackend<T> {
 
     // Tip is required for the buyer withdrawal-window check (HeaderDep[0]).
     let tip_block = self.tip_block().await?;
-    let rpc = self.rpc.clone();
+    let rpc = self.rpc_clone();
     let tx = run_blocking(move || {
       let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()

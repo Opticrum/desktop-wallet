@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocale } from '../i18n/LocaleContext'
+import { useWalletNetwork } from '../wallet/WalletNetworkContext'
+import { useNode } from '../node/NodeContext'
 import { wallet } from '../api/client'
-import type { WalletStatus, WalletSummary, WalletTx, WalletTxKind } from '../api/types'
+import type { Chain, WalletStatus, WalletSummary, WalletTx, WalletTxKind } from '../api/types'
 import { addressShort, typeCounts, TX_TYPE_ORDER } from '../lib/wallet'
 import { CkbTxModal, useCkbTx } from './CkbTxModal'
 import { CopyableText } from './CopyableText'
@@ -36,7 +38,17 @@ function addrDisplay(address: string): string {
   return `${address.slice(0, 10)}…${address.slice(-8)}`
 }
 
-function WalletPageHead({ address }: { address?: string }) {
+function WalletPageHead({
+  address,
+  chain,
+  switching,
+  onSwitch,
+}: {
+  address?: string
+  chain: Chain
+  switching: boolean
+  onSwitch: (chain: Chain) => void
+}) {
   const { t } = useLocale()
   return (
     <header className="wallet-page-head">
@@ -50,6 +62,30 @@ function WalletPageHead({ address }: { address?: string }) {
           />
         ) : null}
       </div>
+      <div
+        className="wallet-net-switch"
+        role="group"
+        aria-label={t.walletNetworkSwitch}
+      >
+        <button
+          type="button"
+          className={`wallet-net-btn net-testnet${chain === 'testnet' ? ' is-active' : ''}`}
+          aria-pressed={chain === 'testnet'}
+          disabled={switching || chain === 'testnet'}
+          onClick={() => onSwitch('testnet')}
+        >
+          {t.networkTestnet}
+        </button>
+        <button
+          type="button"
+          className={`wallet-net-btn net-mainnet${chain === 'mainnet' ? ' is-active' : ''}`}
+          aria-pressed={chain === 'mainnet'}
+          disabled={switching || chain === 'mainnet'}
+          onClick={() => onSwitch('mainnet')}
+        >
+          {t.networkMainnet}
+        </button>
+      </div>
     </header>
   )
 }
@@ -60,6 +96,15 @@ function WalletPageHead({ address }: { address?: string }) {
  */
 export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
   const { t } = useLocale()
+  const {
+    chain,
+    switching,
+    refreshEpoch,
+    setNetwork,
+    status: netStatus,
+  } = useWalletNetwork()
+  const { chain: nodeChain, running, starting } = useNode()
+  const networkMatched = !running || starting || nodeChain === chain
   const [sendOpen, setSendOpen] = useState(false)
   const [qrOpen, setQrOpen] = useState(false)
 
@@ -103,17 +148,27 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
 
   const handleSend = useCallback(
     async (address: string, amountCkb: number) => {
+      if (!networkMatched) return
       setSendOpen(false)
       await runCkbTx(t.send, async ({ channel }) => {
         const res = await wallet.sendCkb(address, Math.round(amountCkb * 1e8), channel)
         return res
       })
     },
-    [runCkbTx, t.send],
+    [runCkbTx, t.send, networkMatched],
+  )
+
+  const handleSwitch = useCallback(
+    (next: Chain) => {
+      void setNetwork(next).catch(() => {})
+    },
+    [setNetwork],
   )
 
   useEffect(() => {
     let cancelled = false
+    setSummary(null)
+    setTxs([])
     void (async () => {
       try {
         await loadSummary()
@@ -129,24 +184,11 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
       cancelled = true
       window.clearInterval(id)
     }
-  }, [loadSummary, loadTxs, refreshKey])
+  }, [loadSummary, loadTxs, refreshKey, refreshEpoch, chain])
 
   useEffect(() => {
-    let alive = true
-    const poll = () =>
-      wallet
-        .getStatus()
-        .then((s) => {
-          if (alive) setStatus(s)
-        })
-        .catch(() => {})
-    poll()
-    const id = window.setInterval(poll, 5000)
-    return () => {
-      alive = false
-      window.clearInterval(id)
-    }
-  }, [refreshKey])
+    if (netStatus) setStatus(netStatus)
+  }, [netStatus])
 
   const [activeTypes, setActiveTypes] = useState<Record<TxType, boolean>>({
     receive: true,
@@ -157,10 +199,19 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
     rent_extract: true,
   })
 
+  const head = (
+    <WalletPageHead
+      address={status?.address || summary?.address}
+      chain={chain}
+      switching={switching}
+      onSwitch={handleSwitch}
+    />
+  )
+
   if (!status) {
     return (
       <article className="wallet-page">
-        <WalletPageHead />
+        {head}
         <p className="wallet-page-placeholder">{t.walletRefreshing}</p>
       </article>
     )
@@ -169,7 +220,7 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
   if (!status.hasWallet) {
     return (
       <article className="wallet-page">
-        <WalletPageHead />
+        {head}
         <div className="wallet-page-empty">
           <div className="wallet-none-badge">{t.walletNone}</div>
           <p className="text-secondary">{t.walletNoneHint}</p>
@@ -181,8 +232,10 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
   if (!status.unlocked) {
     return (
       <article className="wallet-page">
-        <WalletPageHead address={status.address} />
-        <p className="wallet-page-placeholder">{t.walletRefreshing}</p>
+        {head}
+        <p className="wallet-page-placeholder">
+          {switching ? t.walletNetworkSwitching : t.walletRefreshing}
+        </p>
       </article>
     )
   }
@@ -201,7 +254,12 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
 
   return (
     <article className="wallet-page">
-      <WalletPageHead address={status.address || summary?.address} />
+      {head}
+      {switching && (
+        <p className="wallet-page-placeholder" role="status">
+          {t.walletNetworkSwitching}
+        </p>
+      )}
 
       <section className="wallet-page-hero" aria-label={t.availableCkb}>
         <p className="wallet-page-kicker">{t.availableCkb}</p>
@@ -222,7 +280,13 @@ export function WalletModule({ refreshKey = 0 }: { refreshKey?: number }) {
           </p>
         )}
         <div className="wallet-page-actions">
-          <button type="button" className="btn-primary btn-icon" onClick={() => setSendOpen(true)}>
+          <button
+            type="button"
+            className="btn-primary btn-icon"
+            disabled={!networkMatched || switching}
+            title={networkMatched ? undefined : t.networkMismatchBlocked}
+            onClick={() => setSendOpen(true)}
+          >
             <IconSend />
             <span>{t.send}</span>
           </button>

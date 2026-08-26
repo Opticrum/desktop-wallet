@@ -10,7 +10,7 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
 use super::fiber_client::BUILTIN_ID;
-use crate::wire::{CommandError, ExternalTarget};
+use crate::wire::{Chain, CommandError, ExternalTarget};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredExternal {
@@ -19,6 +19,15 @@ pub struct StoredExternal {
   pub rpc_url: String,
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub auth_token: Option<String>,
+  /// CKB network probed from `node_info.chain_hash`. Persisted so mismatch UI
+  /// still knows the external's chain when a poll briefly fails (and so we never
+  /// fall back to the *built-in* config chain for an external target).
+  #[serde(default = "default_external_chain")]
+  pub chain: Chain,
+}
+
+fn default_external_chain() -> Chain {
+  Chain::Testnet
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,6 +73,10 @@ impl TargetsFile {
     self.externals.iter().find(|e| e.id == id)
   }
 
+  pub fn find_mut(&mut self, id: &str) -> Option<&mut StoredExternal> {
+    self.externals.iter_mut().find(|e| e.id == id)
+  }
+
   pub fn to_wire_externals(&self) -> Vec<ExternalTarget> {
     self
       .externals
@@ -73,6 +86,7 @@ impl TargetsFile {
         alias: e.alias.clone(),
         rpc_url: e.rpc_url.clone(),
         auth_token: e.auth_token.clone(),
+        chain: e.chain,
       })
       .collect()
   }
@@ -114,6 +128,7 @@ mod tests {
         alias: "vps".into(),
         rpc_url: "http://10.0.0.2:8227".into(),
         auth_token: Some("tok".into()),
+        chain: Chain::Testnet,
       }],
     };
     file.persist(&path).unwrap();

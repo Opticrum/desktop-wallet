@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { node, wallet } from '../api/client'
+import { node } from '../api/client'
 import { toCommandError } from '../api/types'
 import type { ExternalTarget, NodeTargetList } from '../api/types'
 import { useLocale } from '../i18n/LocaleContext'
 import { commandErrorText } from '../lib/errors'
 import { useNode } from '../node/NodeContext'
+import { useWalletNetwork } from '../wallet/WalletNetworkContext'
 import { ConfirmModal } from './ConfirmModal'
 
 type DialogState =
@@ -17,7 +18,8 @@ type Props = {
   onToast: (msg: string) => void
   /** Bumped by the control panel's "edit connection" to open the active external. */
   editRequest?: number
-  /** Bumped after unlock so the lock/unlock badge updates immediately. */
+  /** Bumped after unlock so the lock/unlock badge updates immediately.
+   *  Status now comes from WalletNetworkContext; kept for call-site compat. */
   walletEpoch?: number
   /** After add / edit / remove so the console's Fiber port row refreshes. */
   onTargetsChanged?: () => void
@@ -87,13 +89,19 @@ export function NodeSideMenu({
   onWallet,
   onToast,
   editRequest = 0,
-  walletEpoch = 0,
+  walletEpoch: _walletEpoch = 0,
   onTargetsChanged,
 }: Props) {
   const { t } = useLocale()
-  const { running, starting, kind, targetId, applyRuntime } = useNode()
+  const { running, starting, kind, targetId, applyRuntime, chain: nodeChain } = useNode()
+  const { chain: walletChain, status: walletStatus } = useWalletNetwork()
+  const networkMismatch =
+    walletChain !== nodeChain &&
+    (kind === 'external' ? !starting : running && !starting)
   const [list, setList] = useState<NodeTargetList | null>(null)
-  const [walletUnlocked, setWalletUnlocked] = useState(false)
+  const walletUnlocked = walletStatus?.unlocked ?? false
+  const networkLabel = walletChain === 'mainnet' ? t.networkMainnet : t.networkTestnet
+  const lockLabel = walletUnlocked ? t.nodeWalletUnlocked : t.nodeWalletLocked
   const [dialog, setDialog] = useState<DialogState>({ mode: 'closed' })
   const [removeId, setRemoveId] = useState<string | null>(null)
   const [formAlias, setFormAlias] = useState('')
@@ -119,23 +127,6 @@ export function NodeSideMenu({
     const id = window.setInterval(refresh, 5000)
     return () => window.clearInterval(id)
   }, [refresh])
-
-  useEffect(() => {
-    let alive = true
-    const poll = () =>
-      wallet
-        .getStatus()
-        .then((s) => {
-          if (alive) setWalletUnlocked(s.unlocked)
-        })
-        .catch(() => {})
-    poll()
-    const id = window.setInterval(poll, 5000)
-    return () => {
-      alive = false
-      window.clearInterval(id)
-    }
-  }, [walletEpoch])
 
   const select = async (id: string) => {
     if (id === (list?.activeId ?? targetId)) return
@@ -237,6 +228,11 @@ export function NodeSideMenu({
             <span className="nsm-item-title">{t.nodeBuiltin}</span>
             <span className="nsm-item-sub">{builtin?.alias || '—'}</span>
           </span>
+          {builtinSelected && networkMismatch ? (
+            <span className="nsm-warn" title={t.networkMismatchTip} aria-label={t.networkMismatchBadge}>
+              !
+            </span>
+          ) : null}
           <span className={`nsm-dot ${builtinDot}`} />
         </button>
 
@@ -268,6 +264,15 @@ export function NodeSideMenu({
                       <span className="nsm-item-title">{ext.alias}</span>
                       <span className="nsm-item-sub mono">{ext.rpcUrl}</span>
                     </span>
+                    {selected && networkMismatch ? (
+                      <span
+                        className="nsm-warn"
+                        title={t.networkMismatchTip}
+                        aria-label={t.networkMismatchBadge}
+                      >
+                        !
+                      </span>
+                    ) : null}
                   </button>
                   <div className="nsm-row-actions">
                     <button
@@ -304,16 +309,17 @@ export function NodeSideMenu({
         type="button"
         className={`nsm-wallet${walletUnlocked ? ' is-unlocked' : ' is-locked'}`}
         onClick={onWallet}
-        aria-label={`${t.wallet}, ${walletUnlocked ? t.nodeWalletUnlocked : t.nodeWalletLocked}`}
-        title={walletUnlocked ? t.nodeWalletUnlocked : t.nodeWalletLocked}
+        aria-label={`${t.wallet}, ${networkLabel}, ${lockLabel}`}
+        title={`${t.walletNetworkBadge}: ${networkLabel} · ${lockLabel}`}
       >
         <span className="nsm-wallet-icon">
           <IconWallet />
         </span>
         <span className="nsm-wallet-text">
           <span className="nsm-item-title">{t.wallet}</span>
-          <span className="nsm-item-sub">
-            {walletUnlocked ? t.nodeWalletUnlocked : t.nodeWalletLocked}
+          <span className={`nsm-wallet-net net-${walletChain}`}>
+            <span className="nsm-wallet-net-dot" aria-hidden />
+            {networkLabel}
           </span>
         </span>
         <span className="nsm-wallet-chevron">

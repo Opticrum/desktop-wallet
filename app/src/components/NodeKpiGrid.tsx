@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocale } from '../i18n/LocaleContext'
 import { useNode } from '../node/NodeContext'
+import { useWalletNetwork } from '../wallet/WalletNetworkContext'
 import { channels } from '../api/client'
 import type { ChannelList } from '../api/types'
 import { FiberSendModal } from './FiberSendModal'
@@ -41,6 +42,9 @@ export function NodeKpiGrid({
 }) {
   const { t } = useLocale()
   const { running, chain, targetId } = useNode()
+  const { chain: walletChain } = useWalletNetwork()
+  const networkMatched = !running || walletChain === chain
+  const actionsReady = running && networkMatched
   const [data, setData] = useState<ChannelList | null>(null)
   const [sendOpen, setSendOpen] = useState(false)
   const [invoiceOpen, setInvoiceOpen] = useState(false)
@@ -103,8 +107,14 @@ export function NodeKpiGrid({
           type="button"
           className="kpi kpi-btn kpi-outbound"
           onClick={() => setSendOpen(true)}
-          disabled={!running}
-          title={running ? t.clickToSend : t.nodeNotRunning}
+          disabled={!actionsReady}
+          title={
+            !running
+              ? t.nodeNotRunning
+              : !networkMatched
+                ? t.networkMismatchBlocked
+                : t.clickToSend
+          }
         >
           <span className="kpi-role-icon" aria-hidden>
             <IconSendOut />
@@ -115,13 +125,15 @@ export function NodeKpiGrid({
             <div className="kpi-sub">{t.unitCkb}</div>
           </div>
           <span className="kpi-hint">
-            {running ? (
+            {actionsReady ? (
               <>
                 <IconSendOut />
                 {t.clickToSend}
               </>
-            ) : (
+            ) : !running ? (
               t.nodeNotRunning
+            ) : (
+              t.networkMismatchBadge
             )}
           </span>
         </button>
@@ -129,8 +141,14 @@ export function NodeKpiGrid({
           type="button"
           className="kpi kpi-btn kpi-inbound"
           onClick={() => setInvoiceOpen(true)}
-          disabled={!running}
-          title={running ? t.fiberInvoiceHint : t.nodeNotRunning}
+          disabled={!actionsReady}
+          title={
+            !running
+              ? t.nodeNotRunning
+              : !networkMatched
+                ? t.networkMismatchBlocked
+                : t.fiberInvoiceHint
+          }
         >
           <span className="kpi-role-icon" aria-hidden>
             <IconRecvIn />
@@ -141,13 +159,15 @@ export function NodeKpiGrid({
             <div className="kpi-sub">{t.unitCkb}</div>
           </div>
           <span className="kpi-hint">
-            {running ? (
+            {actionsReady ? (
               <>
                 <IconRecvIn />
                 {t.fiberInvoiceHint}
               </>
-            ) : (
+            ) : !running ? (
               t.nodeNotRunning
+            ) : (
+              t.networkMismatchBadge
             )}
           </span>
         </button>

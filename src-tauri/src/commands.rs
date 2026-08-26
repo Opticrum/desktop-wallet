@@ -149,6 +149,24 @@ pub async fn wallet_send_ckb(
     .await
 }
 
+/// Switch the wallet (+ liquidity) CKB network. Liquidity swaps first; on
+/// wallet failure the previous liquidity network is restored.
+#[tauri::command]
+pub async fn wallet_set_network(
+  state: State<'_, AppState>,
+  chain: Chain,
+) -> Result<WalletStatus, CommandError> {
+  let previous = state.0.wallet.get_status().await?.chain;
+  state.0.liquidity.apply_network(chain)?;
+  match state.0.wallet.set_network(chain).await {
+    Ok(status) => Ok(status),
+    Err(e) => {
+      let _ = state.0.liquidity.apply_network(previous);
+      Err(e)
+    }
+  }
+}
+
 // ── node ─────────────────────────────────────────────────────────────────────
 
 #[tauri::command]

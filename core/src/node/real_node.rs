@@ -169,7 +169,11 @@ impl RealNodeBackend {
     let client = Self::make_client(&ext.rpc_url, ext.auth_token.clone())?;
     self.handle.replace(client.clone());
     match probe_node_info(&client, 8).await {
-      Ok(info) => *self.node_pubkey.lock().unwrap() = Some(info.pubkey),
+      Ok(info) => {
+        *self.node_pubkey.lock().unwrap() = Some(info.pubkey.clone());
+        let chain = chain_from_hash(&info.chain_hash);
+        self.remember_external_chain(id, chain);
+      }
       Err(_) => *self.node_pubkey.lock().unwrap() = None,
     }
     Ok(())
@@ -330,41 +334,47 @@ impl RealNodeBackend {
     target_id: &str,
     alias: &str,
     rpc_url: &str,
+    stored_chain: Chain,
   ) -> NodeRuntime {
     match info {
-      Some(i) => NodeRuntime {
-        running: true,
-        starting: false,
-        alias: i.node_name.clone().or_else(|| Some(alias.to_string())),
-        started_at_ms: None,
-        uptime_hours: 0,
-        fiber_pubkey: i.pubkey.clone(),
-        fiber_addr: i.addresses.first().cloned(),
-        addresses: i.addresses.clone(),
-        chain: chain_from_hash(&i.chain_hash),
-        version: Some(i.version.clone()),
-        commit_hash: Some(i.commit_hash.clone()),
-        peers_count: i.peers_count,
-        channel_count: i.channel_count,
-        pending_channel_count: i.pending_channel_count,
-        watchtower: WatchtowerConfig {
-          mode: WatchtowerMode::Disabled,
-          endpoint: None,
-        },
-        kind: NodeKind::External,
-        target_id: target_id.into(),
-        rpc_url: rpc_url.to_string(),
-      },
+      Some(i) => {
+        let chain = chain_from_hash(&i.chain_hash);
+        NodeRuntime {
+          running: true,
+          starting: false,
+          alias: i.node_name.clone().or_else(|| Some(alias.to_string())),
+          started_at_ms: None,
+          uptime_hours: 0,
+          fiber_pubkey: i.pubkey.clone(),
+          fiber_addr: i.addresses.first().cloned(),
+          addresses: i.addresses.clone(),
+          chain,
+          version: Some(i.version.clone()),
+          commit_hash: Some(i.commit_hash.clone()),
+          peers_count: i.peers_count,
+          channel_count: i.channel_count,
+          pending_channel_count: i.pending_channel_count,
+          watchtower: WatchtowerConfig {
+            mode: WatchtowerMode::Disabled,
+            endpoint: None,
+          },
+          kind: NodeKind::External,
+          target_id: target_id.into(),
+          rpc_url: rpc_url.to_string(),
+        }
+      }
+      // Unreachable: keep the last probed network — never the built-in config
+      // chain, which would falsely match a mainnet wallet against a testnet remote.
       None => NodeRuntime {
         running: false,
         starting: false,
         alias: Some(alias.to_string()),
         started_at_ms: None,
         uptime_hours: 0,
-        fiber_pubkey: self.node_pubkey.lock().unwrap().clone().unwrap_or_default(),
+        fiber_pubkey: String::new(),
         fiber_addr: None,
         addresses: Vec::new(),
-        chain: parse_chain(&self.config.lock().unwrap().fiber.chain),
+        chain: stored_chain,
         version: None,
         commit_hash: None,
         peers_count: 0,
@@ -378,6 +388,17 @@ impl RealNodeBackend {
         target_id: target_id.into(),
         rpc_url: rpc_url.to_string(),
       },
+    }
+  }
+
+  fn remember_external_chain(&self, id: &str, chain: Chain) {
+    let mut file = self.targets.lock().unwrap();
+    if let Some(ext) = file.find_mut(id) {
+      if ext.chain != chain {
+        ext.chain = chain;
+        drop(file);
+        let _ = self.persist_targets();
+      }
     }
   }
 
@@ -431,15 +452,19 @@ impl NodeBackend for RealNodeBackend {
   async fn get_runtime(&self) -> Result<NodeRuntime, CommandError> {
     if !self.is_builtin() {
       let id = self.active_id();
-      let (alias, rpc_url) = self
+      let (alias, rpc_url, stored_chain) = self
         .targets
         .lock()
         .unwrap()
         .find(&id)
-        .map(|e| (e.alias.clone(), e.rpc_url.clone()))
-        .unwrap_or_else(|| (id.clone(), String::new()));
+        .map(|e| (e.alias.clone(), e.rpc_url.clone(), e.chain))
+        .unwrap_or_else(|| (id.clone(), String::new(), Chain::Testnet));
       let info = self.fiber.node_info().await.unwrap_or(None);
-      return Ok(self.external_runtime(info.as_ref(), &id, &alias, &rpc_url));
+      let runtime = self.external_runtime(info.as_ref(), &id, &alias, &rpc_url, stored_chain);
+      if info.is_some() {
+        self.remember_external_chain(&id, runtime.chain);
+      }
+      return Ok(runtime);
     }
     let running = self.embedded.lock().await.is_some();
     let starting = self.starting.load(Ordering::SeqCst);
@@ -533,12 +558,14 @@ impl NodeBackend for RealNodeBackend {
       .map(|t| t.trim().to_string())
       .filter(|t| !t.is_empty());
     let client = Self::make_client(&rpc_url, token.clone())?;
-    probe_node_info(&client, 8).await?;
+    let info = probe_node_info(&client, 8).await?;
+    let chain = chain_from_hash(&info.chain_hash);
     let stored = StoredExternal {
       id: new_external_id(),
       alias,
       rpc_url,
       auth_token: token,
+      chain,
     };
     {
       let mut file = self.targets.lock().unwrap();
@@ -570,7 +597,8 @@ impl NodeBackend for RealNodeBackend {
       .map(|t| t.trim().to_string())
       .filter(|t| !t.is_empty());
     let client = Self::make_client(&rpc_url, token.clone())?;
-    probe_node_info(&client, 8).await?;
+    let info = probe_node_info(&client, 8).await?;
+    let chain = chain_from_hash(&info.chain_hash);
     {
       let mut file = self.targets.lock().unwrap();
       let ext = file
@@ -581,6 +609,7 @@ impl NodeBackend for RealNodeBackend {
       ext.alias = alias;
       ext.rpc_url = rpc_url;
       ext.auth_token = token;
+      ext.chain = chain;
     }
     self.persist_targets()?;
     if self.active_id() == id {
@@ -807,6 +836,7 @@ mod tests {
       alias: "remote".into(),
       rpc_url: "10.0.0.2:8227".into(),
       auth_token: None,
+      chain: Chain::Testnet,
     });
     backend.targets.lock().unwrap().active_id = "ext1".into();
     let r = backend.get_runtime().await.unwrap();
@@ -819,6 +849,49 @@ mod tests {
     let (backend, _dir) = test_backend(Arc::new(MockFiberApi::new(None)));
     let err = backend.set_active("nope".into()).await.unwrap_err();
     assert!(err.to_string().contains("unknown node target"));
+  }
+
+  #[tokio::test]
+  async fn external_unreachable_keeps_stored_chain_not_builtin() {
+    let (backend, _dir) = test_backend(Arc::new(MockFiberApi::new(None)));
+    // Built-in config claims mainnet — must not leak onto an unreachable external.
+    backend.config.lock().unwrap().fiber.chain = "mainnet".into();
+    backend.targets.lock().unwrap().externals.push(StoredExternal {
+      id: "ext1".into(),
+      alias: "remote".into(),
+      rpc_url: "10.0.0.2:8227".into(),
+      auth_token: None,
+      chain: Chain::Testnet,
+    });
+    backend.targets.lock().unwrap().active_id = "ext1".into();
+    let r = backend.get_runtime().await.unwrap();
+    assert!(!r.running);
+    assert_eq!(r.kind, NodeKind::External);
+    assert_eq!(r.chain, Chain::Testnet);
+  }
+
+  #[tokio::test]
+  async fn external_runtime_maps_chain_hash() {
+    let mut info = sample_info();
+    // CKB mainnet genesis — anything else is treated as testnet.
+    info.chain_hash =
+      "0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5".into();
+    let (backend, _dir) = test_backend(Arc::new(MockFiberApi::new(Some(info))));
+    backend.targets.lock().unwrap().externals.push(StoredExternal {
+      id: "ext1".into(),
+      alias: "remote".into(),
+      rpc_url: "10.0.0.2:8227".into(),
+      auth_token: None,
+      chain: Chain::Testnet,
+    });
+    backend.targets.lock().unwrap().active_id = "ext1".into();
+    let r = backend.get_runtime().await.unwrap();
+    assert!(r.running);
+    assert_eq!(r.chain, Chain::Mainnet);
+    assert_eq!(
+      backend.targets.lock().unwrap().find("ext1").unwrap().chain,
+      Chain::Mainnet
+    );
   }
 
   #[tokio::test]

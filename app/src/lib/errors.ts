@@ -12,6 +12,8 @@ export function commandErrorText(t: Messages, err: CommandError): string {
     // Wrong wallet password (core wallet/crypto.rs returns NotAuthorized).
     case 'not_authorized':
       return t.walletPasswordWrong
+    case 'unsupported_network':
+      return t.unsupportedNetwork
     case 'channel_open_timeout':
       return t.channelOpenTimeout
     case 'chain':

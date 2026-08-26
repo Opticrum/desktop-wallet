@@ -7,6 +7,7 @@ use std::sync::Mutex;
 
 use async_trait::async_trait;
 use serde::{de::Deserializer, Deserialize};
+use serde_json::Value;
 
 use std::time::Duration;
 
@@ -15,15 +16,27 @@ use crate::wire::CommandError;
 use super::fiber_client::FiberClientHandle;
 use super::rpc_client::{FiberRpcExt, RpcClient};
 
-/// Deserialize a `"0x…"` (or bare) hex string into a `u32` — the fiber node
-/// serializes numeric fields as hex strings (`U32Hex`).
+/// Fiber serializes counts as `"0x…"` hex strings (`U32Hex`); some builds may
+/// emit a JSON number. Accept either so `node_info` does not fail open as
+/// unreachable (which hid wallet↔node network mismatch for externals).
 fn de_hex_u32<'de, D>(d: D) -> Result<u32, D::Error>
 where
   D: Deserializer<'de>,
 {
-  let s = String::deserialize(d)?;
-  let s = s.strip_prefix("0x").unwrap_or(&s);
-  u32::from_str_radix(s, 16).map_err(serde::de::Error::custom)
+  let v = Value::deserialize(d)?;
+  match v {
+    Value::String(s) => {
+      let s = s.strip_prefix("0x").unwrap_or(&s);
+      u32::from_str_radix(s, 16).map_err(serde::de::Error::custom)
+    }
+    Value::Number(n) => n
+      .as_u64()
+      .and_then(|u| u32::try_from(u).ok())
+      .ok_or_else(|| serde::de::Error::custom("u32 out of range")),
+    other => Err(serde::de::Error::custom(format!(
+      "expected hex string or number, got {other}"
+    ))),
+  }
 }
 
 /// Node info from the fiber `node_info` RPC — the subset the runtime needs.

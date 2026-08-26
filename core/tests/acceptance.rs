@@ -9,11 +9,14 @@ use opticrum_wallet_core::wire::Chain;
 
 fn testnet_config(dir: &std::path::Path) -> BackendConfig {
   BackendConfig {
+    data_dir: dir.display().to_string(),
     database_url: dir.join("opticrum.db").display().to_string(),
     keystore_path: dir.join("keystore.json").display().to_string(),
     node_config_path: dir.join("node-config.json").display().to_string(),
-    ckb_rpc_url: "https://testnet.ckbapp.dev".to_string(),
-    ckb_indexer_url: "https://testnet.ckb.dev/indexer".to_string(),
+    testnet_rpc_url: "https://testnet.ckbapp.dev".to_string(),
+    testnet_indexer_url: "https://testnet.ckb.dev/indexer".to_string(),
+    mainnet_rpc_url: "https://mainnet.ckbapp.dev".to_string(),
+    mainnet_indexer_url: "https://mainnet.ckb.dev/indexer".to_string(),
     fee_rate: 1000,
     network: Chain::Testnet,
   }
