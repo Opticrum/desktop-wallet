@@ -271,7 +271,6 @@ export const en: Messages = {
   lmAvgRemaining: 'Avg left',
 
   // Liquidity — market dashboard (right sidebar)
-  lmMarketOverview: 'Market overview',
   lmGlobalOrderDemand: 'Global order demand',
   lmTotalOrders: 'Orders',
   lmOrdersUnit: 'orders',

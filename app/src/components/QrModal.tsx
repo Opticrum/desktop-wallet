@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useLocale } from '../i18n/LocaleContext'
 import { useScrollLock } from '../lib/useScrollLock'
 
@@ -218,7 +219,10 @@ async function copyText(value: string): Promise<void> {
   document.body.removeChild(ta)
 }
 
-/** Enlarged receive QR dialog — click the QR tile to open it. */
+/**
+ * Enlarged receive QR dialog. Portaled to `document.body` so the overlay
+ * covers the full app rather than the transformed wallet drawer sheet.
+ */
 export function QrModal({
   open,
   onClose,
@@ -237,10 +241,12 @@ export function QrModal({
     if (!open) return
     setCopied(false)
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      onClose()
     }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+    document.addEventListener('keydown', handler, true)
+    return () => document.removeEventListener('keydown', handler, true)
   }, [open, onClose])
 
   if (!open) return null
@@ -258,8 +264,8 @@ export function QrModal({
     }
   }
 
-  return (
-    <div className="modal-backdrop" role="presentation">
+  return createPortal(
+    <div className="modal-backdrop is-over-drawer" role="presentation">
       <div
         className="qr-modal"
         role="dialog"
@@ -316,6 +322,7 @@ export function QrModal({
           {copied ? t.copied : t.copy}
         </button>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

@@ -267,7 +267,6 @@ export const zh: Messages = {
   lmAvgRemaining: '平均剩余',
 
   // Liquidity — market dashboard (right sidebar)
-  lmMarketOverview: '市场概览',
   lmGlobalOrderDemand: '全局订单需求',
   lmTotalOrders: '订单',
   lmOrdersUnit: '笔',

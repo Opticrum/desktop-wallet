@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useLocale } from '../i18n/LocaleContext'
 import { useScrollLock } from '../lib/useScrollLock'
 
@@ -15,10 +16,11 @@ function IconClose() {
 const MIN_SEND_CKB = 61
 
 /**
- * Floating send dialog rendered above the wallet page.
- * Collects a recipient CKB address + amount (CKB), validates locally, then
- * hands off to `onSubmit` — the parent runs the tx through the 3-step
- * confirmation modal (构造 → 发送上链 → 打包确认).
+ * Floating send dialog. Portaled to `document.body` so the overlay covers the
+ * full app — the wallet lives in a transformed drawer, which would otherwise
+ * clip `position: fixed` to the sheet. Collects a recipient CKB address +
+ * amount (CKB), validates locally, then hands off to `onSubmit` — the parent
+ * runs the tx through the 3-step confirmation modal (构造 → 发送上链 → 打包确认).
  */
 export function SendDetail({
   open,
@@ -53,14 +55,16 @@ export function SendDetail({
     }
   }, [open])
 
-  // Escape to dismiss.
+  // Capture Escape so the wallet drawer behind this overlay does not also close.
   useEffect(() => {
     if (!open) return
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      onClose()
     }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+    document.addEventListener('keydown', handler, true)
+    return () => document.removeEventListener('keydown', handler, true)
   }, [open, onClose])
 
   useScrollLock(open)
@@ -89,8 +93,8 @@ export function SendDetail({
     onSubmit(address.trim(), amt)
   }
 
-  return (
-    <div className="send-modal-backdrop" role="presentation">
+  return createPortal(
+    <div className="send-modal-backdrop is-over-drawer" role="presentation">
       <div
         className="send-modal"
         role="dialog"
@@ -160,6 +164,7 @@ export function SendDetail({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

@@ -279,7 +279,6 @@ export type Messages = {
   lmAvgRemaining: string
 
   // Liquidity — market dashboard (right sidebar)
-  lmMarketOverview: string
   lmGlobalOrderDemand: string
   lmTotalOrders: string
   lmOrdersUnit: string

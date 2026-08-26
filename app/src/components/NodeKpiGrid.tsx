@@ -55,18 +55,35 @@ export function NodeKpiGrid({
   const closeSend = useCallback(() => setSendOpen(false), [])
   const closeInvoice = useCallback(() => setInvoiceOpen(false), [])
 
+  const loadSeq = useRef(0)
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current
+    if (!running) {
+      setData({ nodes: [] })
+      return
+    }
     try {
       const c = await channels.list()
+      if (seq !== loadSeq.current) return
       setData(c)
     } catch {
-      /* mock — best-effort */
+      if (seq !== loadSeq.current) return
+      setData({ nodes: [] })
     }
-  }, [])
+  }, [running])
 
-  // Initial + manual toolbar refresh.
+  // Target / reachability: never keep another node's counts. Toolbar refresh
+  // (refreshKey) re-fetches in place so the KPIs don't flash to zero.
+  const seenTarget = useRef(targetId)
   useEffect(() => {
-    load()
+    const switched = seenTarget.current !== targetId
+    seenTarget.current = targetId
+    if (switched || !running) setData({ nodes: [] })
+    if (!running) return
+    void load()
+    return () => {
+      loadSeq.current += 1
+    }
   }, [load, refreshKey, targetId])
 
   // The Fiber node starts/restarts independently of this component — watch the

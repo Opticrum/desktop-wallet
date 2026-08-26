@@ -317,13 +317,16 @@ export function NodeSideMenu({
         </span>
         <span className="nsm-wallet-text">
           <span className="nsm-item-title">{t.wallet}</span>
+          <span className="nsm-item-sub">{lockLabel}</span>
+        </span>
+        <span className="nsm-wallet-trail">
           <span className={`nsm-wallet-net net-${walletChain}`}>
             <span className="nsm-wallet-net-dot" aria-hidden />
             {networkLabel}
           </span>
-        </span>
-        <span className="nsm-wallet-chevron">
-          <IconChevron />
+          <span className="nsm-wallet-chevron">
+            <IconChevron />
+          </span>
         </span>
       </button>
 

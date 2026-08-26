@@ -59,12 +59,9 @@ export function MarketOverviewChip() {
       onMouseLeave={() => setOpen(false)}
     >
       <div className="tb-market-flyout">
-        <div className="tb-market-flyout-head">
-          <h2 className="tb-market-flyout-title">{t.lmMarketOverview}</h2>
-          <span className={`tb-net-pill net-${chain}`}>
-            {chain === 'mainnet' ? t.networkMainnet : t.networkTestnet}
-          </span>
-        </div>
+        <span className={`tb-net-pill net-${chain}`}>
+          {chain === 'mainnet' ? t.networkMainnet : t.networkTestnet}
+        </span>
         {available ? (
           <MarketOverviewPanel dashboard={dashboard} />
         ) : (

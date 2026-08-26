@@ -325,22 +325,37 @@ export function NodeConnectionsSection({ onToast, onRefresh }: Props) {
     setChannelOpen({ status: 'idle' })
   }, [frozen])
 
+  const loadSeq = useRef(0)
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current
+    if (!running) {
+      setNodes([])
+      return
+    }
     try {
       const c = await channels.list()
+      if (seq !== loadSeq.current) return
       setNodes(c.nodes)
     } catch {
-      /* best-effort */
+      if (seq !== loadSeq.current) return
+      setNodes([])
     }
-  }, [])
+  }, [running])
 
   // Channel close runs behind the 3-step confirmation modal; `load` (the
   // channel list refresh) fires once the operation settles. Open uses a
   // separate node-list wait dialog — Fiber never surfaces the funding tx.
   const { ckbTxState, runCkbTx, closeCkbTx } = useCkbTx(load)
 
+  // Drop the previous target's peers immediately. An unreachable node has no
+  // live peer list — keeping the last fetch (with frozen buttons) is wrong.
   useEffect(() => {
-    load()
+    setNodes([])
+    if (!running) return
+    void load()
+    return () => {
+      loadSeq.current += 1
+    }
   }, [load, targetId])
 
   // When the node restarts, `channels.list` isn't re-fetched on its own — reload

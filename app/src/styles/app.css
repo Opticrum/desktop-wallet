@@ -298,21 +298,18 @@
   transform: translateY(0);
 }
 
-.tb-market-flyout-head {
-  padding-top: 2px;
-}
-
-.tb-market-flyout-title {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-  text-wrap: balance;
+.tb-market-flyout > .tb-net-pill {
+  position: absolute;
+  top: 14px;
+  right: 16px;
 }
 
 .tb-market-flyout .lm-dash-figure {
   gap: 6px;
+}
+
+.tb-market-flyout .lm-dash-figure .stat-label {
+  padding-right: 72px;
 }
 
 .tb-market-flyout .stat-label {
@@ -428,6 +425,7 @@
   font-size: 13px;
   font-weight: 800;
   color: var(--ink);
+  padding-right: 72px;
 }
 
 .tb-market-unavailable-body {
@@ -1103,6 +1101,12 @@ body:has(.modal-backdrop, .send-modal-backdrop, .drawer-backdrop) .center-panel 
   overflow: hidden;
   overscroll-behavior: contain;
   animation: send-modal-fade 0.16s ease-out;
+}
+
+/* Sit above the bottom drawer (300). Used when the send dialog is portaled
+   out of the wallet sheet — a transformed ancestor would otherwise clip it. */
+.send-modal-backdrop.is-over-drawer {
+  z-index: 350;
 }
 
 @keyframes send-modal-fade {
@@ -10207,22 +10211,30 @@ button.ncp-start-tip {
   letter-spacing: -0.02em;
 }
 
-/* Quiet network line under 钱包 — colored ink + dot, not a TopBar-style pill. */
+.nsm-wallet-trail {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Compact network tag — left of the chevron; same chroma as other net chrome. */
 .nsm-wallet-net {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  margin-top: 1px;
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.01em;
-  line-height: 1.2;
+  gap: 4px;
+  padding: 3px 7px 3px 6px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  line-height: 1;
   white-space: nowrap;
 }
 
 .nsm-wallet-net-dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   flex-shrink: 0;
   background: currentColor;
@@ -10230,10 +10242,14 @@ button.ncp-start-tip {
 
 .nsm-wallet-net.net-mainnet {
   color: var(--net-mainnet);
+  background: var(--net-mainnet-soft);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--net-mainnet) 32%, transparent);
 }
 
 .nsm-wallet-net.net-testnet {
   color: var(--net-testnet);
+  background: var(--net-testnet-soft);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--net-testnet) 32%, transparent);
 }
 
 .nsm-wallet-chevron {
