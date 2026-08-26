@@ -32,16 +32,19 @@ diesel_migrations = { version = "2", features = ["sqlite"] }
 # `bundled` must be applied on libsqlite3-sys directly (diesel 2 has no sqlite-bundled feature)
 libsqlite3-sys = { version = "0.30", features = ["bundled"] }
 
-# --- chain access / skeleton signing (local path per decision) ---
-ckb-cinnabar-calculator = { path = "../../ckb-cinnabar/cinnabar/calculate" }
+# --- chain access / skeleton signing ---
+# Pin the same revs as opticrum-sdk so Cargo unifies one crate identity
+# (unpinned `git = url` vs `git = url, rev = …` are treated as different sources).
+ckb-cinnabar-calculator = { git = "https://github.com/ashuralyk/ckb-cinnabar", rev = "f50d8e9" }
 
-# --- opticrum protocol / SDK (local path — unified with opticrum + opticrum-sdk) ---
-opticrum-calculator = { path = "../opticrum/calculator/opticrum" }
-opticrum-protocol = { path = "../opticrum/opticrum-protocol" }
-opticrum-sdk = { path = "../opticrum-sdk" }
+# --- opticrum protocol / SDK ---
+opticrum-calculator = { git = "https://github.com/Opticrum/ckb-contract-script", rev = "803523a" }
+opticrum-protocol = { git = "https://github.com/Opticrum/ckb-contract-script", rev = "803523a" }
+opticrum-sdk = { git = "https://github.com/Opticrum/client-sdk" }
 
-# --- fiber JSON-RPC types (local fiber checkout; single source of truth) ---
-fiber-json-types = { path = "/Users/vimchain/Cryptape/fiber/lightning-network/fiber/crates/fiber-json-types" }
+# Fiber: wallet embeds StoreActor / ChannelState::Stale / Config.restore from
+# develop tip (v0.9.0-rc7 + 44). Tag v0.9.0-rc7 alone is too old for this code.
+fiber-json-types = { git = "https://github.com/nervosnetwork/fiber", rev = "5db52a24" }
 # molecule Entity trait — for reading fiber packed OutPoint bytes
 molecule = "0.9"
 # fiber node config.yml serialization
@@ -50,7 +53,7 @@ serde_yaml = "0.9"
 # --- embedded fiber node (fnn as a library, in-process) ---
 # rocksdb backend: the `sqlite` feature clashes with diesel's bundled
 # libsqlite3-sys (`links="sqlite3"`), so fiber-store uses bundled RocksDB.
-fnn = { path = "/Users/vimchain/Cryptape/fiber/lightning-network/fiber/crates/fiber-lib", default-features = false, features = ["rocksdb", "watchtower"] }
+fnn = { git = "https://github.com/nervosnetwork/fiber", rev = "5db52a24", default-features = false, features = ["rocksdb", "watchtower"] }
 ractor = "0.15"
 tokio-util = { version = "0.7", features = ["rt"] }
 clap-serde-derive = "0.2.1"

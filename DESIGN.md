@@ -1,99 +1,99 @@
-# ProMobile Balance Dashboard — 高保真复刻设计规范
+# ProMobile Balance Dashboard — High-Fidelity Recreation Spec
 
-## 0. 文档目的
+## 0. Purpose
 
-本文档把参考图中的视觉信息蒸馏为可直接实施的页面规范。目标不是复用图中的品牌，而是仅依靠本文档，即可在浏览器或桌面 WebView 中基本复刻出相同的构图、密度、层级和质感。
+This document distills the visual information in the reference image into a page spec that can be implemented directly. The goal is not to reuse the brand in the image, but to recreate the same composition, density, hierarchy, and material from this document alone — in a browser or a desktop WebView.
 
-- **参考图基准尺寸：** `1024 × 768 px`
-- **目标页面类型：** 桌面端支付/钱包后台的余额页
-- **目标视觉误差：** 关键结构位置不超过 `±4 px`；颜色、字重和阴影允许因字体及渲染器产生轻微差异
-- **视觉校验：** 已用本文档生成 `1024 × 768` 静态 HTML 截图，与参考图叠图比对；下文 §19 记录差异与修正项
-- **设计模式：** 仅定义参考图中的浅色桌面版，不从该图外推暗色版或移动版
-- **实现自由度：** 可使用 React、Vue 或静态 HTML；图表可用 SVG/CSS，实现方式不影响验收
+- **Reference image baseline size:** `1024 × 768 px`
+- **Target page type:** desktop payment / wallet back-office balance page
+- **Target visual tolerance:** key structural positions within `±4 px`; color, weight, and shadow may differ slightly by font and renderer
+- **Visual check:** a `1024 × 768` static HTML screenshot was generated from this document and overlaid against the reference; §19 records differences and corrections
+- **Design mode:** defines only the light desktop version in the reference; do not extrapolate a dark theme or a mobile layout from this image
+- **Implementation freedom:** React, Vue, or static HTML are all fine; charts may be SVG or CSS. Implementation choice does not affect acceptance
 
-本文中的尺寸分为两类：
+Sizes in this document fall into two classes:
 
-- **观察值：** 可直接从 `1024 × 768` 参考图估算出的边界或比例
-- **推定值：** 因图像缩放、抗锯齿或素材缺失而推导出的合理实现值
+- **Observed values:** edges or ratios that can be estimated directly from the `1024 × 768` reference
+- **Inferred values:** reasonable implementation values derived because of image scaling, anti-aliasing, or missing source assets
 
-当两者冲突时，优先保证整体比例、视觉层级与留白节奏，而不是机械追求单个像素。
-
----
-
-## 1. 视觉摘要
-
-页面是一张悬浮在浅蓝灰背景上的大型圆角桌面应用窗口。窗口内部不使用传统顶栏，而是分为：
-
-1. **左侧固定导航栏**：白色独立圆角面板，包含品牌、六项导航、一个推广卡和帮助入口。
-2. **右侧工作区**：上方是一张横跨全宽的余额与快捷操作卡；下方分成交易记录主卡和统计图侧卡。
-3. **柔和悬浮感**：几乎不依赖明显边框，而是通过极浅的灰紫底色、白色卡片、细腻阴影和大圆角建立层级。
-4. **单一主色**：高饱和皇家蓝负责激活态、按钮、链接和关键图标；橙、青、紫只服务于数据分类。
-5. **金融信息层级**：余额数字最大；卡片标题次之；表格与标签保持紧凑、克制。
-
-关键词：`clean fintech`、`soft dashboard`、`rounded desktop shell`、`royal blue accent`、`low-contrast borders`、`compact data table`。
+When the two conflict, preserve overall proportion, visual hierarchy, and the rhythm of whitespace — do not chase individual pixels mechanically.
 
 ---
 
-## 2. 基准画布与整体坐标
+## 1. Visual summary
 
-### 2.1 画布
+The page is a large rounded desktop-app window floating on a light blue-gray background. Inside the window there is no traditional top bar. Instead it splits into:
 
-| 项目 | 基准值 |
+1. **Fixed left navigation:** an independent white rounded panel containing brand, six nav items, a promo card, and a help entry.
+2. **Right workspace:** a full-width balance and quick-action card on top; below it, a payment-history main card and a statistics side card.
+3. **Soft float:** almost no hard borders. Hierarchy comes from a very light gray-violet ground, white cards, fine shadows, and large radii.
+4. **Single accent:** high-saturation royal blue owns active states, buttons, links, and key icons. Orange, cyan, and violet serve data classification only.
+5. **Financial information hierarchy:** the balance figure is largest; card titles next; tables and labels stay compact and restrained.
+
+Keywords: `clean fintech`, `soft dashboard`, `rounded desktop shell`, `royal blue accent`, `low-contrast borders`, `compact data table`.
+
+---
+
+## 2. Baseline canvas and overall coordinates
+
+### 2.1 Canvas
+
+| Item | Baseline |
 |---|---:|
-| 视口 | `1024 × 768 px` |
-| 页面外背景 | 全屏 |
-| 应用窗口左上角 | `x=51, y=56` |
-| 应用窗口尺寸 | `922 × 656 px` |
-| 应用窗口右下角 | `x=973, y=712` |
-| 应用窗口外圆角 | `22 px` |
+| Viewport | `1024 × 768 px` |
+| Page background | full screen |
+| App window top-left | `x=51, y=56` |
+| App window size | `922 × 656 px` |
+| App window bottom-right | `x=973, y=712` |
+| App window outer radius | `22 px` |
 
-应用窗口约占视口：
+The app window occupies roughly:
 
-- 宽度：`90.0%`
-- 高度：`85.4%`
-- 水平居中
-- 距顶部约 `7.3vh`
+- Width: `90.0%`
+- Height: `85.4%`
+- Horizontally centered
+- About `7.3vh` from the top
 
-推荐使用如下缩放策略：
+Recommended scale strategy:
 
 ```text
 scale = min((viewportWidth - 48) / 922, (viewportHeight - 48) / 656, 1)
 ```
 
-在 `1024 × 768` 及以上视口中可保持 `scale=1`。更小视口允许整体等比缩小，但不重排卡片，不切换移动布局。
+At `1024 × 768` and above, keep `scale=1`. Smaller viewports may scale the whole shell proportionally — do not reflow cards or switch to a mobile layout.
 
-### 2.2 应用窗口内部区域
+### 2.2 Regions inside the app window
 
-应用窗口自身使用非常浅的灰白/淡紫底色，并留出约 `11 px` 内边距。
+The shell itself uses a very light gray-white / pale-violet ground and about `11 px` of inner padding.
 
-| 区域 | 左上角 | 尺寸 | 圆角 |
+| Region | Top-left | Size | Radius |
 |---|---:|---:|---:|
-| 左侧栏 | `62, 67` | `178 × 634` | `15 px` |
-| 右工作区 | `248, 67` | `714 × 634` | — |
-| 顶部余额卡 | `248, 67` | `714 × 196` | `15 px` |
-| 交易记录卡 | `248, 272` | `474 × 429` | `15 px` |
-| 统计卡 | `730, 272` | `232 × 429` | `15 px` |
+| Left sidebar | `62, 67` | `178 × 634` | `15 px` |
+| Right workspace | `248, 67` | `714 × 634` | — |
+| Top balance card | `248, 67` | `714 × 196` | `15 px` |
+| Payment-history card | `248, 272` | `474 × 429` | `15 px` |
+| Statistics card | `730, 272` | `232 × 429` | `15 px` |
 
-核心间距：
+Core gaps:
 
-- 应用窗口内边距：`11 px`
-- 左栏与工作区间距：`8 px`
-- 顶部卡与下方卡间距：`9 px`
-- 下方左右卡间距：`8 px`
+- App-window padding: `11 px`
+- Sidebar to workspace: `8 px`
+- Top card to lower cards: `9 px`
+- Lower left/right cards: `8 px`
 
-这些小间距使三块内容像嵌入同一桌面应用，而不是分散的网页卡片。
+These tight gaps make the three content blocks feel embedded in one desktop app, not scattered web cards.
 
 ---
 
-## 3. 设计令牌
+## 3. Design tokens
 
-以下颜色为根据参考图推定的实现色值。应集中定义为变量，不应散落硬编码。
+The colors below are implementation values inferred from the reference. Define them as variables in one place; do not scatter hardcoded values.
 
-### 3.1 色彩
+### 3.1 Color
 
 ```css
 :root {
-  /* Foundations — 色值经 1024×768 参考图像素采样校正 */
+  /* Foundations — values corrected by sampling the 1024×768 reference */
   --page-bg: #e1ecf0;
   --shell-bg: #f7f6fb;
   --surface: #ffffff;
@@ -115,7 +115,7 @@ scale = min((viewportWidth - 48) / 922, (viewportHeight - 48) / 656, 1)
   --blue-500: #3f61ff;
   --blue-100: #eaf0ff;
 
-  /* 侧栏导航图标底色（观察值，不可随意替换为其他 pastel） */
+  /* Sidebar nav icon grounds (observed — do not swap for other pastels) */
   --nav-bg-overview: #e5e4ff;
   --nav-bg-apps: #cfedff;
   --nav-bg-app-overview: #ffe4cd;
@@ -140,15 +140,15 @@ scale = min((viewportWidth - 48) / 922, (viewportHeight - 48) / 656, 1)
 }
 ```
 
-颜色使用规则：
+Color rules:
 
-- 主按钮、选中导航、选中 Tab、可点击链接统一使用 `--blue-600`。
-- 橙色仅表示 Debit；紫色仅表示 Bonus；青色仅表示 Invoice。
-- 黄色用于套餐标签和推广卡闪电图标，不用于主要 CTA。
-- 普通正文不得使用纯黑；最大余额和总统计值可接近 `#111218`。
-- 卡片以白色区分，不使用强边框。
+- Primary buttons, selected nav, selected tabs, and clickable links all use `--blue-600`.
+- Orange means Debit only; violet means Bonus only; cyan means Invoice only.
+- Yellow is for the plan tag and the promo-card lightning icon — not for the primary CTA.
+- Body copy must not use pure black; the largest balance and total stats may approach `#111218`.
+- Cards are distinguished by white fill, not by strong borders.
 
-### 3.2 圆角
+### 3.2 Radii
 
 ```css
 --radius-shell: 22px;
@@ -159,14 +159,14 @@ scale = min((viewportWidth - 48) / 922, (viewportHeight - 48) / 656, 1)
 --radius-pill: 999px;
 ```
 
-规则：
+Rules:
 
-- 三张主内容卡与左侧栏统一 `15 px`。
-- 快捷操作卡 `13 px`。
-- 菜单图标底和小按钮 `8–10 px`。
-- 标签、主题切换底和图例使用胶囊圆角。
+- The three main content cards and the left sidebar share `15 px`.
+- Quick-action cards: `13 px`.
+- Menu icon grounds and small buttons: `8–10 px`.
+- Tags, the theme-toggle track, and legends use a pill radius.
 
-### 3.3 阴影
+### 3.3 Shadows
 
 ```css
 --shadow-shell:
@@ -184,29 +184,29 @@ scale = min((viewportWidth - 48) / 922, (viewportHeight - 48) / 656, 1)
   0 6px 18px rgba(17, 18, 24, 0.18);
 ```
 
-不要给每张白卡都添加明显阴影。主卡通过白色与 `--shell-bg` 的明度差区分；外壳阴影才是页面主要悬浮来源。
+Do not put a visible shadow on every white card. Main cards separate from `--shell-bg` by luminance; the shell shadow is the page's primary sense of float.
 
-### 3.4 间距体系
+### 3.4 Spacing scale
 
-基础单位采用 `4 px`：
+Base unit is `4 px`:
 
 ```text
 4 / 8 / 12 / 16 / 20 / 24 / 32
 ```
 
-常用值：
+Common values:
 
-- 图标与文字：`10–12 px`
-- 卡片内部左右边距：`20 px`
-- 顶部卡内部左右边距：`20 px`
-- 表格行垂直内边距：`12–13 px`
-- 区块标题到内容：`22–28 px`
+- Icon to text: `10–12 px`
+- Card inner left/right padding: `20 px`
+- Top-card inner left/right padding: `20 px`
+- Table-row vertical padding: `12–13 px`
+- Block title to content: `22–28 px`
 
 ---
 
-## 4. 字体系统
+## 4. Type system
 
-参考图使用几何感较强的现代无衬线字体。可选：
+The reference uses a geometric modern sans. Prefer:
 
 ```css
 font-family:
@@ -218,44 +218,44 @@ font-family:
   sans-serif;
 ```
 
-若无法加载 Inter，macOS 使用 SF Pro、Windows 使用 Segoe UI。数字应启用等宽数字特性：
+If Inter cannot load, use SF Pro on macOS and Segoe UI on Windows. Figures should use tabular lining:
 
 ```css
 font-variant-numeric: tabular-nums;
 ```
 
-### 4.1 字号层级
+### 4.1 Type scale
 
-| 用途 | 字号 | 行高 | 字重 |
+| Use | Size | Line height | Weight |
 |---|---:|---:|---:|
-| 品牌字标 | `15 px` | `20 px` | `800` |
-| 最大余额整数 | `38 px` | `42 px` | `600` |
-| 最大余额小数 | `20 px` | `28 px` | `400` |
-| 环图中心总额 | `27 px` | `31 px` | `700` |
-| 卡片标题 | `13 px` | `18 px` | `700` |
+| Brand wordmark | `15 px` | `20 px` | `800` |
+| Largest balance integer | `38 px` | `42 px` | `600` |
+| Largest balance decimal | `20 px` | `28 px` | `400` |
+| Donut-center total | `27 px` | `31 px` | `700` |
+| Card title | `13 px` | `18 px` | `700` |
 | Tab | `13 px` | `18 px` | `500` |
-| 导航项 | `11 px` | `16 px` | `500` |
-| 普通标签 | `10 px` | `15 px` | `400–500` |
-| 表头 | `9 px` | `13 px` | `600` |
-| 表格正文 | `9 px` | `13 px` | `400–600` |
-| 微型说明 | `8 px` | `12 px` | `400` |
+| Nav item | `11 px` | `16 px` | `500` |
+| Ordinary label | `10 px` | `15 px` | `400–500` |
+| Table header | `9 px` | `13 px` | `600` |
+| Table body | `9 px` | `13 px` | `400–600` |
+| Micro copy | `8 px` | `12 px` | `400` |
 
-### 4.2 字体细节
+### 4.2 Type details
 
-- 标题和关键数字字距：`-0.02em`
-- 普通正文：`0`
-- 全大写字标允许 `0.02em`
-- 金额的整数和小数必须在同一基线上，小数颜色更浅
-- 表格金额右对齐并加粗
-- 不使用超细字重；浅灰文本依靠颜色降低层级
+- Titles and key figures: letter-spacing `-0.02em`
+- Body: `0`
+- All-caps wordmark may use `0.02em`
+- Integer and decimal of an amount must share one baseline; the decimal is lighter
+- Table amounts are right-aligned and bold
+- Do not use ultra-light weights; muted gray text lowers hierarchy through color, not weight
 
 ---
 
-## 5. 页面外背景与应用外壳
+## 5. Page background and app shell
 
-### 5.1 页面背景
+### 5.1 Page background
 
-背景为均匀的浅蓝灰 `#e1ecf0`。参考图在应用窗口周围存在轻微亮度变化，可用一个非常克制的径向渐变模拟：
+A flat light blue-gray `#e1ecf0`. The reference has a slight luminance shift around the window; a very restrained radial gradient may simulate it:
 
 ```css
 background:
@@ -267,54 +267,54 @@ background:
   );
 ```
 
-不得出现明显纹理、网格或彩色光斑。
+No obvious texture, grid, or colored bloom.
 
-### 5.2 应用外壳
+### 5.2 App shell
 
-- 尺寸：`922 × 656 px`
-- 背景：`--shell-bg`
-- 圆角：`22 px`
-- 内边距：`11 px`
-- 阴影：`--shadow-shell`
-- 溢出：隐藏
-- 不绘制系统窗口标题栏或红黄绿控制点
+- Size: `922 × 656 px`
+- Background: `--shell-bg`
+- Radius: `22 px`
+- Padding: `11 px`
+- Shadow: `--shadow-shell`
+- Overflow: hidden
+- Do not draw a system title bar or traffic-light controls
 
-应用窗口应看起来像一整块乳白色桌面软件，而不是浏览器页面中的普通容器。
+The window should read as one milky desktop product, not an ordinary container on a web page.
 
 ---
 
-## 6. 左侧导航栏
+## 6. Left navigation
 
-### 6.1 容器
+### 6.1 Container
 
-- 坐标：`62, 67`
-- 尺寸：`178 × 634 px`
-- 背景：白色
-- 圆角：`15 px`
-- 内部左右边距：`12 px`
-- 布局：纵向 Flex
+- Coordinates: `62, 67`
+- Size: `178 × 634 px`
+- Background: white
+- Radius: `15 px`
+- Inner left/right padding: `12 px`
+- Layout: vertical flex
 
-内容分为四段：
+Content in four bands:
 
-1. 品牌区
-2. 主导航
-3. 自动占据剩余空间
-4. 推广卡 + Help
+1. Brand
+2. Primary nav
+3. Spacer that eats remaining space
+4. Promo card + Help
 
-### 6.2 品牌
+### 6.2 Brand
 
-品牌位于约 `x=74, y=86`：
+Brand sits around `x=74, y=86`:
 
-- 可视尺寸约 `108 × 17 px`
-- 与左栏顶部距离约 `18 px`
-- 字标内容：`PRO`（蓝色）+ `MOBILE`（深色）
-- 全大写、粗体
-- 两部分无空格或仅 `1–2 px` 视觉空隙
+- Visible size about `108 × 17 px`
+- About `18 px` from the top of the sidebar
+- Wordmark: `PRO` (blue) + `MOBILE` (dark)
+- All caps, bold
+- No space between the two parts, or only a `1–2 px` optical gap
 
-字母 O 设计成品牌符号，**禁止**用普通字母 O 或 Emoji 代替。SVG 构造要点：
+The letter O is a brand mark. **Do not** substitute a plain letter O or an emoji. SVG construction notes:
 
 ```svg
-<!-- 视口 18×18，嵌入 "PRO" 与 "MOBILE" 之间 -->
+<!-- Viewport 18×18, sits between "PRO" and "MOBILE" -->
 <g transform="translate(0,0)">
   <circle cx="9" cy="9" r="7" fill="none" stroke="#3f61ff" stroke-width="2.2"/>
   <circle cx="9" cy="9" r="3.5" fill="#ffffff"/>
@@ -322,81 +322,81 @@ background:
 </g>
 ```
 
-- 外环直径约 `14 px`，描边 `#3f61ff`
-- 内留白圆直径约 `7 px`
-- 顶部标记为倒置小三角/水滴，宽 `2.4 px`，高 `2.8 px`
-- "PRO" 字色 `#3f61ff`，"MOBILE" 字色 `#111218`，字间距 `0.02em`
+- Outer ring diameter about `14 px`, stroke `#3f61ff`
+- Inner white circle diameter about `7 px`
+- Top mark is an inverted small triangle / droplet, `2.4 px` wide × `2.8 px` high
+- "PRO" color `#3f61ff`, "MOBILE" color `#111218`, letter-spacing `0.02em`
 
-### 6.3 收起按钮
+### 6.3 Collapse control
 
-在左栏右边缘、约 `x=230, y=104` 放置：
+On the right edge of the sidebar, around `x=230, y=104`:
 
-- `18 × 18 px` 的白色圆形按钮
-- 中间为向左 Chevron
-- 按钮一半压在左右栏间隙上
-- 轻微边框或阴影
-- 图标尺寸 `10 px`
+- `18 × 18 px` white circular button
+- Left-pointing chevron in the center
+- Half of the button sits in the gap between the two columns
+- Light border or shadow
+- Icon size `10 px`
 
-### 6.4 主导航
+### 6.4 Primary nav
 
-主导航从约 `y=123` 开始。六个项目的中心 y 值约为：
+Primary nav starts around `y=123`. Center y of the six items is about:
 
 ```text
 136 / 175 / 213 / 252 / 291 / 330
 ```
 
-默认导航项：
+Default nav item:
 
-- 高度：`32 px`
-- 左右内边距：`12 px`
-- 图标与文字间距：`10 px`
-- 图标底：`28 × 28 px`
-- 图标本体：`14–15 px`
-- 文字：`11 px / 500`
+- Height: `32 px`
+- Left/right padding: `12 px`
+- Icon-to-text gap: `10 px`
+- Icon ground: `28 × 28 px`
+- Glyph: `14–15 px`
+- Label: `11 px / 500`
 
-导航内容：
+Nav content:
 
-| 项目 | 图标语义 | 图标底色 token | 图标色 token |
+| Item | Icon meaning | Icon-ground token | Icon-color token |
 |---|---|---|---|
-| Overview | Home（描边房屋） | `--nav-bg-overview` `#e5e4ff` | `--nav-fg-overview` `#4f46e5` |
-| My Apps | 四宫格 | `--nav-bg-apps` `#cfedff` | `--nav-fg-apps` `#0891b2` |
-| App Overview | 时钟/饼图 | `--nav-bg-app-overview` `#ffe4cd` | `--nav-fg-app-overview` `#ea580c` |
-| Balance | 钱包（描边） | `--blue-600` 实心 | `#ffffff` |
-| My Orders | 文档/收据 | `--nav-bg-orders` `#fff3d6` | `--nav-fg-orders` `#ca8a04` |
-| New order | 带加号的文档 | 主按钮整体 | 白 |
+| Overview | Home (stroked house) | `--nav-bg-overview` `#e5e4ff` | `--nav-fg-overview` `#4f46e5` |
+| My Apps | Four-up grid | `--nav-bg-apps` `#cfedff` | `--nav-fg-apps` `#0891b2` |
+| App Overview | Clock / pie | `--nav-bg-app-overview` `#ffe4cd` | `--nav-fg-app-overview` `#ea580c` |
+| Balance | Wallet (stroke) | solid `--blue-600` | `#ffffff` |
+| My Orders | Document / receipt | `--nav-bg-orders` `#fff3d6` | `--nav-fg-orders` `#ca8a04` |
+| New order | Document with plus | whole row as primary button | white |
 
-**图标实现硬性要求：** 全部使用 inline SVG 描边图标（`stroke-width: 1.7`，`stroke-linecap: round`，`fill: none`）。**禁止** Unicode 符号、Emoji、Icon Font 混用。校验时若出现 👛💳🔔⚙ 等字符，视为未通过。
+**Hard icon requirement:** all icons are inline SVG strokes (`stroke-width: 1.7`, `stroke-linecap: round`, `fill: none`). **Do not** mix Unicode symbols, emoji, or icon fonts. If 👛💳🔔⚙ or similar characters appear in a review, the build fails.
 
-#### 激活项 Balance
+#### Active item: Balance
 
-- 左栏最左边出现 `3 px` 宽、约 `21 px` 高的蓝色竖条
-- 竖条贴近左侧栏边缘，圆角 `2 px`
-- 钱包图标底为 `28 × 28 px` 蓝色圆角方块
-- 图标底带 `--shadow-icon`
-- 文本仍为深色，不必整体填蓝
+- A `3 px` wide, about `21 px` tall blue vertical bar on the far left of the sidebar
+- The bar hugs the sidebar edge, radius `2 px`
+- Wallet icon ground is a `28 × 28 px` blue rounded square
+- Icon ground uses `--shadow-icon`
+- Label stays dark; do not fill the whole row blue
 
-#### 主按钮 New order
+#### Primary button: New order
 
-- 位置约 `x=74, y=314`
-- 尺寸约 `154 × 32 px`
-- 背景：`--blue-500`
-- 圆角：`9 px`
-- 蓝色悬浮阴影：`--shadow-active`
-- 内容水平居中
-- 图标和文字间距 `8 px`
-- 文本 `11 px / 500 / 白色`
+- Position about `x=74, y=314`
+- Size about `154 × 32 px`
+- Background: `--blue-500`
+- Radius: `9 px`
+- Blue lift shadow: `--shadow-active`
+- Content horizontally centered
+- Icon-to-text gap `8 px`
+- Text `11 px / 500 / white`
 
-### 6.5 推广卡
+### 6.5 Promo card
 
-位于左栏底部上方，约：
+Above the bottom of the sidebar, about:
 
-- 坐标：`74, 566`
-- 尺寸：`154 × 77 px`
-- 背景：`--surface-promo`（`#edeffb`，比 `--surface-soft` 略灰）
-- 圆角：`11 px`
-- 内边距：`11 px`
+- Coordinates: `74, 566`
+- Size: `154 × 77 px`
+- Background: `--surface-promo` (`#edeffb`, slightly grayer than `--surface-soft`)
+- Radius: `11 px`
+- Padding: `11 px`
 
-文本：
+Copy:
 
 ```text
 Advanced mode
@@ -405,193 +405,193 @@ Coming soon
 Join Waitlist  →
 ```
 
-层级：
+Hierarchy:
 
-- 标题：`10 px / 700 / 深色`
-- 说明：`8 px / 400 / 深灰`
-- 链接：`9 px / 600 / 蓝色`
+- Title: `10 px / 700 / dark`
+- Caption: `8 px / 400 / dark gray`
+- Link: `9 px / 600 / blue`
 
-右下角放置一个约 `32 × 32 px` 的白色圆形底，内含黄色闪电。白底可有极轻阴影。
+Place an about `32 × 32 px` white circle in the lower right with a yellow lightning bolt inside. The white ground may have an extremely light shadow.
 
 ### 6.6 Help
 
-- 位于约 `y=676`
-- 上方距推广卡约 `18 px`
-- 左侧圆形浅灰图标底 `24 × 24 px`
-- 内部为问号或 Help Circle
-- 文字 `Help`，`10 px / 500`
-- 整行高度 `32 px`
+- Around `y=676`
+- About `18 px` below the promo card
+- Left: circular light-gray icon ground `24 × 24 px`
+- Inside: question mark or Help Circle
+- Label `Help`, `10 px / 500`
+- Full row height `32 px`
 
 ---
 
-## 7. 顶部余额卡
+## 7. Top balance card
 
-### 7.1 容器
+### 7.1 Container
 
-- 坐标：`248, 67`
-- 尺寸：`714 × 196 px`
-- 白色背景
-- 圆角：`15 px`
-- 内边距：左右 `20 px`
+- Coordinates: `248, 67`
+- Size: `714 × 196 px`
+- White background
+- Radius: `15 px`
+- Padding: left/right `20 px`
 
-该卡分为三条水平带：
+The card has three horizontal bands:
 
-1. 顶部工具带：约 `52 px`
-2. Tab 带：约 `32 px`
-3. 余额和快捷操作带：剩余区域
+1. Top tool strip: about `52 px`
+2. Tab strip: about `32 px`
+3. Balance and quick-actions band: remaining space
 
-### 7.2 顶部工具带
+### 7.2 Top tool strip
 
-#### 左侧时间
+#### Time on the left
 
-位于约 `x=268, y=90`：
+Around `x=268, y=90`:
 
-- 先放 `12 px` 时钟图标
-- 与文字间距 `5 px`
-- `13:34 PM`：`10 px / 600 / 深色`
-- `UTC+3`：`8 px / 400 / 灰色`
-- 时间与时区间距约 `3 px`
+- A `12 px` clock icon first
+- `5 px` gap to the text
+- `13:34 PM`: `10 px / 600 / dark`
+- `UTC+3`: `8 px / 400 / gray`
+- About `3 px` between time and timezone
 
-#### 右侧账户工具
+#### Account tools on the right
 
-从右向左依次为：
+Right to left:
 
-1. Settings 齿轮
-2. Notification 铃铛，右上角有蓝点
-3. 主题胶囊：太阳 + 月亮
-4. 蓝色圆形加号
-5. 余额 `$13,650.25`
-6. 套餐标签 `Starter`
+1. Settings gear
+2. Notification bell with a blue dot at the upper right
+3. Theme pill: sun + moon
+4. Blue circular plus
+5. Balance `$13,650.25`
+6. Plan tag `Starter`
 
-整体垂直中心约 `y=94`。
+Vertical center of the whole group around `y=94`.
 
-规格：
+Spec:
 
-- 图标按钮触控框：`28 × 28 px`
-- 裸图标视觉尺寸：`14–15 px`，**必须为 SVG 描边图标，禁止 Emoji**
-- 图标按钮之间：`8 px`
-- 加号按钮：`20 × 20 px`，蓝底白字，带蓝色轻阴影
-- 当前余额：`10 px / 600`
-- Starter：约 `55 × 18 px` 淡黄胶囊，左侧黄色小点，文字 `8 px / 600`
-- 主题胶囊：约 `44 × 22 px`，背景 `#f0f1f5`；太阳处于激活态并使用 `#eaf0ff` 圆底（直径 `20 px`），月亮为灰色描边无底色
-- 铃铛通知点：直径 `4 px`，位于图标右上方，颜色 `--blue-600`
-- 工具区图标（设置/通知/时钟）统一 `#6f7481` 描边，线宽 `1.7 px`
+- Icon-button hit target: `28 × 28 px`
+- Bare icon visual size: `14–15 px`, **must be SVG stroke icons — no emoji**
+- Gap between icon buttons: `8 px`
+- Plus button: `20 × 20 px`, blue ground, white glyph, light blue shadow
+- Current balance: `10 px / 600`
+- Starter: about `55 × 18 px` pale-yellow pill, yellow dot on the left, type `8 px / 600`
+- Theme pill: about `44 × 22 px`, background `#f0f1f5`; sun is active on a `#eaf0ff` circular ground (diameter `20 px`); moon is a gray stroke with no fill
+- Bell notification dot: diameter `4 px`, upper-right of the icon, color `--blue-600`
+- Tool-strip icons (settings / notification / clock) share a `#6f7481` stroke, width `1.7 px`
 
-### 7.3 Tab
+### 7.3 Tabs
 
-Tab 起点约 `x=269, y=132`：
+Tabs start around `x=269, y=132`:
 
 - `Balance`
 - `Order payments`
 
-Tab 字号 `13 px`，两项间距约 `27 px`。
+Tab size `13 px`, gap between the two about `27 px`.
 
-激活项：
+Active item:
 
-- 蓝色文字
+- Blue text
 - `font-weight: 600`
-- 下方 `2 px` 蓝色指示线
-- 指示线宽约 `58 px`
-- 指示线与文字基线间距约 `12 px`
+- `2 px` blue indicator line below
+- Indicator width about `58 px`
+- About `12 px` from the text baseline to the indicator
 
-Tab 区底部有一条横跨内容区的 `1 px` 分隔线，颜色 `--line`。
+A `1 px` divider runs the full content width under the tab strip, color `--line`.
 
-### 7.4 余额信息
+### 7.4 Balance figure
 
-位于左侧约 `x=268, y=180`：
+On the left around `x=268, y=180`:
 
-- 标签：`Your balance:`，`10 px / --text-secondary`
-- 标签与金额间距：`8 px`
-- 金额整数：`$13,650`，`38 px / 600 / --text-strong`
-- 小数：`.25`，`20 px / 400 / --text-tertiary`
-- 小数紧跟整数，底部基线对齐
+- Label: `Your balance:`, `10 px / --text-secondary`
+- Label-to-amount gap: `8 px`
+- Integer: `$13,650`, `38 px / 600 / --text-strong`
+- Decimal: `.25`, `20 px / 400 / --text-tertiary`
+- Decimal sits flush after the integer, bottom-aligned on the same baseline
 
-不要给余额添加货币图标、涨跌箭头或副指标。
+Do not add a currency icon, up/down arrows, or secondary metrics to the balance.
 
-### 7.5 快捷操作卡
+### 7.5 Quick-action cards
 
-右侧横排三张卡：
+Three cards in a row on the right:
 
-| 卡片 | 位置约值 | 尺寸 | 图标 |
+| Card | Approx. position | Size | Icon |
 |---|---:|---:|---|
-| By Card | `499, 176` | `141 × 68` | 银行卡 |
+| By Card | `499, 176` | `141 × 68` | bank card |
 | By Crypto | `650, 176` | `141 × 68` | Bitcoin |
-| Invoice | `801, 176` | `141 × 68` | 发票 |
+| Invoice | `801, 176` | `141 × 68` | invoice |
 
-共同规格：
+Shared spec:
 
-- 背景：`--surface-soft`
-- 圆角：`13 px`
-- 内边距：`14 px`
-- 无边框、无明显阴影
-- 图标位于左上，SVG 约 `21 × 21 px`，描边色 `--blue-600`，**禁止 Emoji**
-- 标题位于左下，`10 px / 600 / 蓝色`
-- 右下角放置 `+`（SVG 或细线字符），`18 px` 视觉大小，颜色 `--blue-600`，`font-weight: 300`
-- 卡间距：`10 px`
-- 卡片内部采用 `position: relative`；图标距左上 `14 px`，标题距左下 `14 px`，加号距右下 `10–12 px`
+- Background: `--surface-soft`
+- Radius: `13 px`
+- Padding: `14 px`
+- No border, no obvious shadow
+- Icon at top-left, SVG about `21 × 21 px`, stroke `--blue-600`, **no emoji**
+- Title at bottom-left, `10 px / 600 / blue`
+- A `+` at the bottom-right (SVG or a thin character), visual size `18 px`, color `--blue-600`, `font-weight: 300`
+- Card gap: `10 px`
+- Inside the card use `position: relative`; icon `14 px` from top-left, title `14 px` from bottom-left, plus `10–12 px` from bottom-right
 
-卡片不是主按钮，不要填充实心蓝色。其视觉权重应低于 New order。三张卡背景必须同为 `--surface-soft`，不得一张偏紫一张偏灰。
+These cards are not primary buttons — do not fill them solid blue. Their visual weight must sit below New order. All three backgrounds must be `--surface-soft`; do not let one lean violet and another gray.
 
 ---
 
-## 8. 下方交易记录卡
+## 8. Lower payment-history card
 
-### 8.1 容器
+### 8.1 Container
 
-- 坐标：`248, 272`
-- 尺寸：`474 × 429 px`
-- 背景：白色
-- 圆角：`15 px`
-- 内边距：顶部 `20 px`，左右 `19 px`
-- 内容溢出在卡内裁剪
+- Coordinates: `248, 272`
+- Size: `474 × 429 px`
+- Background: white
+- Radius: `15 px`
+- Padding: top `20 px`, left/right `19 px`
+- Overflow clipped inside the card
 
-### 8.2 标题行
+### 8.2 Title row
 
-- 标题 `Payment history`
-- 位置约 `x=268, y=299`
+- Title `Payment history`
+- Around `x=268, y=299`
 - `13 px / 700`
 
-右侧按钮：
+Right-side button:
 
-- 文字 `Download`
-- 尺寸约 `79 × 28 px`
-- 淡蓝背景
-- 圆角 `8 px`
-- 左侧下载图标 `13 px`
-- 文字 `9 px / 600 / 蓝色`
-- 靠右，与卡片右边距约 `20 px`
+- Label `Download`
+- Size about `79 × 28 px`
+- Pale-blue background
+- Radius `8 px`
+- Download icon `13 px` on the left
+- Type `9 px / 600 / blue`
+- Flush right, about `20 px` from the card edge
 
-### 8.3 表格
+### 8.3 Table
 
-表格从约 `y=341` 开始，不绘制外框。列如下：
+Table starts around `y=341`. No outer frame. Columns:
 
-| 列 | 起始位置约值 | 宽度 | 对齐 |
+| Column | Approx. start | Width | Align |
 |---|---:|---:|---|
-| Date | `268` | `84 px` | 左 |
-| Payment method | `352` | `112 px` | 左 |
-| Type | `464` | `76 px` | 左 |
-| ID number | `540` | `80 px` | 左 |
-| Amount | `620` | `81 px` | 右 |
+| Date | `268` | `84 px` | left |
+| Payment method | `352` | `112 px` | left |
+| Type | `464` | `76 px` | left |
+| ID number | `540` | `80 px` | left |
+| Amount | `620` | `81 px` | right |
 
-表头：
+Header:
 
 - `9 px / 600 / --text-primary`
-- 各可排序列名后有上下双 Chevron
-- 排序图标 `7 px`，浅灰
-- 表头高度约 `30 px`
-- 下边线 `1 px solid --line`
+- Sortable columns have an up/down double chevron after the name
+- Sort icon `7 px`, light gray
+- Header height about `30 px`
+- Bottom edge `1 px solid --line`
 
-表格行：
+Rows:
 
-- 行高约 `41 px`
-- 每行底部 `1 px` 浅灰分隔线
-- 正文 `9 px`
-- 日期、ID 使用灰色
-- 支付方式和金额使用较深文字
-- 金额右对齐、`font-weight: 600`
-- 显示 `+` 前缀
+- Row height about `41 px`
+- `1 px` light-gray divider under each row
+- Body `9 px`
+- Date and ID use gray
+- Payment method and amount use darker type
+- Amount right-aligned, `font-weight: 600`
+- Show a `+` prefix
 
-参考数据：
+Reference data:
 
 | Date | Payment method | Type | ID number | Amount |
 |---|---|---|---|---:|
@@ -604,116 +604,116 @@ Tab 区底部有一条横跨内容区的 `1 px` 分隔线，颜色 `--line`。
 | 05.02.2022 | Invoice | Invoice | 38766940 | + $953.00 |
 | 03.02.2022 | Referal | Bonus | 38766940 | + $105.00 |
 
-为忠实复刻，参考图中的 `Referal` 拼写可原样保留；若作为正式产品则应改为 `Referral`。
+To match the recreation, the misspelling `Referal` in the reference may be kept as-is; a shipping product should use `Referral`.
 
-### 8.4 支付方式徽标
+### 8.4 Payment-method marks
 
-支付方式不是文字胶囊，而是“小品牌图标 + 尾号/名称”组合：
+Payment method is not a text pill. It is a small brand mark + last-four / name:
 
-- Mastercard：`29 × 17 px` 黑色圆角矩形（`border-radius: 3px`），内部两个重叠圆：左圆 `#eb001b`、右圆 `#f79e1b`，圆直径 `8 px`，水平居中
-- Visa：`29 × 17 px` 背景 `linear-gradient(135deg, #1a1f71, #2b5fd9)`，圆角 `3 px`，白色 `VISA` 字 `6 px / 700`
-- Referal：`20 × 20 px` 背景 `#f1ecff`，圆角 `4 px`，内部紫色 `#633de8` 四角星或礼物 SVG `10 px`
-- Invoice：`29 × 20 px` 背景 `#3d4450`，圆角 `3 px`，内部白色双向箭头 SVG `11 px`
-- 图标与尾号间距：`5 px`
-- 尾号颜色：`--text-secondary`
+- Mastercard: `29 × 17 px` black rounded rect (`border-radius: 3px`), two overlapping circles inside: left `#eb001b`, right `#f79e1b`, diameter `8 px`, horizontally centered
+- Visa: `29 × 17 px` background `linear-gradient(135deg, #1a1f71, #2b5fd9)`, radius `3 px`, white `VISA` at `6 px / 700`
+- Referal: `20 × 20 px` background `#f1ecff`, radius `4 px`, inner violet `#633de8` four-point star or gift SVG `10 px`
+- Invoice: `29 × 20 px` background `#3d4450`, radius `3 px`, inner white two-way arrow SVG `11 px`
+- Icon-to-last-four gap: `5 px`
+- Last-four color: `--text-secondary`
 
-如果无法使用品牌 Logo，应画简化矢量标记，不使用彩色 Emoji。
+If brand logos cannot be used, draw simplified vector marks. Do not use colored emoji.
 
-### 8.5 Type 色彩
+### 8.5 Type color
 
-- Debit：橙色文字，前置直径 `3 px` 橙点
-- Bonus：紫色文字，前置紫点
-- Invoice：青色文字，前置青点
-- 字号 `9 px / 600`
+- Debit: orange type, leading `3 px` orange dot
+- Bonus: violet type, leading violet dot
+- Invoice: cyan type, leading cyan dot
+- Size `9 px / 600`
 
-### 8.6 内部滚动条
+### 8.6 Inner scrollbar
 
-参考图在交易卡右侧靠内位置有极细滚动条：
+The reference has an extremely thin scrollbar inset on the right of the history card:
 
-- 轨道可透明
-- 滑块宽 `3 px`
-- 滑块高约 `72 px`
-- 浅灰紫 `#e7e8f1`
-- 圆角 `99 px`
-- 距卡片右边缘约 `5 px`
+- Track may be transparent
+- Thumb width `3 px`
+- Thumb height about `72 px`
+- Light gray-violet `#e7e8f1`
+- Radius `99 px`
+- About `5 px` from the card's right edge
 
-在基准图中展示 8 行，最后一行可接近底部裁切，以暗示列表可滚动。
+Show 8 rows at the baseline; the last row may clip near the bottom to imply the list scrolls.
 
 ---
 
-## 9. 统计卡
+## 9. Statistics card
 
-### 9.1 容器
+### 9.1 Container
 
-- 坐标：`730, 272`
-- 尺寸：`232 × 429 px`
-- 白色背景
-- 圆角：`15 px`
-- 内边距：`20 px`
+- Coordinates: `730, 272`
+- Size: `232 × 429 px`
+- White background
+- Radius: `15 px`
+- Padding: `20 px`
 
-### 9.2 标题与月份切换
+### 9.2 Title and month switcher
 
-标题：
+Title:
 
 - `Statistics`
 - `13 px / 700`
-- 左对齐
+- Left-aligned
 
-月份控制位于右上：
+Month control at the upper right:
 
 ```text
 ‹    April 2023    ›
 ```
 
-- 左右箭头图标：`9 px`
-- 月份：`8 px / 500`
-- 三者垂直居中
-- 左箭头深色，右箭头浅灰，表达可前翻但下一月不可用
+- Left/right arrow icons: `9 px`
+- Month: `8 px / 500`
+- The three are vertically centered
+- Left arrow dark, right arrow light gray — previous month is available, next is not
 
-### 9.3 环形图几何
+### 9.3 Donut geometry
 
-环形图位于卡片上半部中央：
+The donut sits in the upper-center of the card:
 
-- 图表外接框约 `178 × 178 px`
-- 圆心约 `x=846, y=430`
-- 外半径约 `82 px`
-- 环线宽约 `14 px`
-- 端点：圆头 `stroke-linecap: round`
-- 背景轨道：极浅灰紫
-- 整体从约 `-82°` 开始
+- Chart bounding box about `178 × 178 px`
+- Center about `x=846, y=430`
+- Outer radius about `82 px`
+- Stroke width about `14 px`
+- Caps: round `stroke-linecap: round`
+- Track: very light gray-violet
+- Whole ring starts around `-82°`
 
-三段数据按视觉占比：
+Three segments by visual share:
 
-| 数据 | 色彩 | 视觉占比 |
+| Data | Color | Visual share |
 |---|---|---:|
-| Debit | 橙色 `#ff6b1a` | `53%` |
-| Invoice | 青色 `#15b8ed` | `29%` |
-| Bonus | 紫色 `#633de8` | `18%` |
+| Debit | orange `#ff6b1a` | `53%` |
+| Invoice | cyan `#15b8ed` | `29%` |
+| Bonus | violet `#633de8` | `18%` |
 
-参考图的圆环视觉顺序：
+Visual order in the reference:
 
-- 橙色占左上、左侧和左下的大段
-- 青色从顶部偏右延伸至右下
-- 紫色位于底部偏右
-- 各段之间不留明显白缝，利用圆头端点自然衔接
+- Orange takes a large arc from upper-left through left to lower-left
+- Cyan runs from upper-right down to lower-right
+- Violet sits lower-right
+- No obvious white gaps between segments; round caps join them naturally
 
-环形图下方和右下方存在**肉眼可见**的柔和彩色投影（不是可选装饰，缺失会明显偏离参考图）：
+**Visibly** soft colored glows sit below and to the lower-right of the ring (not optional decoration — missing them clearly misses the reference):
 
-- 橙色投影：位于橙段左下，颜色 `#ff6b1a`，模糊 `22 px`，不透明度 `14%`
-- 青色投影：位于青段右下，颜色 `#15b8ed`，模糊 `20 px`，不透明度 `12%`
-- 紫色投影：位于紫段右下，颜色 `#633de8`，模糊 `18 px`，不透明度 `10%`
-- 投影层向下偏移 `10–14 px`，不得污染标题区
+- Orange glow: under the orange arc, lower-left; color `#ff6b1a`; blur `22 px`; opacity `14%`
+- Cyan glow: under the cyan arc, lower-right; color `#15b8ed`; blur `20 px`; opacity `12%`
+- Violet glow: under the violet arc, lower-right; color `#633de8`; blur `18 px`; opacity `10%`
+- Glow layer offset down `10–14 px`; must not bleed into the title
 
-最稳妥的实现是：
+Most reliable implementation:
 
-1. 一层 SVG 绘制真实圆环；
-2. 复制一层同色圆环，向下偏移 `12 px`；
-3. 对复制层施加 `filter: blur(18px)` 和低透明度；
-4. 使用容器裁剪，避免阴影污染标题。
+1. One SVG layer draws the real ring;
+2. Duplicate the same-colored ring, offset down `12 px`;
+3. Apply `filter: blur(18px)` and low opacity to the duplicate;
+4. Clip the container so the shadow cannot pollute the title.
 
-### 9.4 图表中心
+### 9.4 Chart center
 
-圆心内容垂直排列：
+Center content stacks vertically:
 
 ```text
 $22,123
@@ -721,76 +721,76 @@ Total expenses per
 month
 ```
 
-- 总额：`27 px / 700 / --text-strong`
-- 说明：`8 px / 400 / --text-secondary`
-- 总额与说明间距：`5 px`
-- 文本水平居中
+- Total: `27 px / 700 / --text-strong`
+- Caption: `8 px / 400 / --text-secondary`
+- Total-to-caption gap: `5 px`
+- Text horizontally centered
 
-### 9.5 浮动提示
+### 9.5 Floating tooltip
 
-参考图在圆环左上偏中位置悬浮黑色 Tooltip：
+The reference floats a black tooltip on the upper-left of the ring, slightly toward center:
 
 ```text
 • Debit  $1,222.00
 ```
 
-- 约 `88 × 23 px`
-- 黑色/深炭色背景
-- 圆角 `8 px`
-- 阴影 `--shadow-tooltip`
-- 字号 `8 px`
-- Debit 点与文字为橙色
-- 金额为白色
-- Tooltip 可覆盖圆环和中心数字边缘
+- About `88 × 23 px`
+- Black / deep charcoal background
+- Radius `8 px`
+- Shadow `--shadow-tooltip`
+- Type `8 px`
+- Debit dot and label are orange
+- Amount is white
+- The tooltip may overlap the ring and the edge of the center figure
 
-默认静态复刻时直接展示该 Tooltip。交互实现中可在鼠标悬停 Debit 段时显示。
+In a static recreation, show this tooltip by default. In an interactive build, show it on hover of the Debit segment.
 
-### 9.6 图例
+### 9.6 Legend
 
-图例放在图表下方，采用两行布局：
+Legend sits under the chart in two rows:
 
-第一行：
+First row:
 
 - Debit `$1,222.00`
 - Bonus `$243.00`
 
-第二行居中：
+Second row, centered:
 
 - Invoice `$1,765.00`
 
-每个图例项：
+Each legend item:
 
-- 高度约 `22 px`
-- 横向内边距 `9 px`
-- 胶囊圆角
-- 字号 `8 px`
-- 左侧为分类色小点
-- 标签文字使用分类色
-- 金额使用深灰
+- Height about `22 px`
+- Horizontal padding `9 px`
+- Pill radius
+- Type `8 px`
+- Category-colored dot on the left
+- Label uses the category color
+- Amount uses dark gray
 
-底色（观察值）：
+Grounds (observed):
 
-- Debit：`#f4eae1`（偏 Peach，不是纯白）
-- Bonus：`#f1ecff`（淡紫）
-- Invoice：`#eef6ff`（淡青蓝）
+- Debit: `#f4eae1` (peach, not pure white)
+- Bonus: `#f1ecff` (pale violet)
+- Invoice: `#eef6ff` (pale cyan-blue)
 
-两项间距约 `7 px`，两行间距约 `7 px`。
+Item gap about `7 px`, row gap about `7 px`.
 
 ---
 
-## 10. 图标语言
+## 10. Icon language
 
-全局图标应来自**同一套 inline SVG 描边图标**。这是复刻成败的关键约束：
+All icons must come from **one set of inline SVG stroke icons**. This is a make-or-break constraint for the recreation:
 
-- 线宽：`1.7 px`（固定，不可混用 1.5 与 2.0）
-- 端点和折角：`round`
-- 默认 viewBox：`0 0 24 24`，渲染尺寸 `14–16 px`
-- 导航图标容器内 SVG 渲染 `14 px`
-- 快捷操作卡 SVG 渲染 `21 px`
-- **禁止：** Emoji、Unicode 象形符号（⌂▦◷👛💳₿📃🔔⚙☀☾⚡）、多套 Icon Font、写实 PNG 图标
-- 允许：支付品牌简化 SVG（MC/Visa）、Logo 专用 SVG
+- Stroke width: `1.7 px` (fixed — do not mix 1.5 and 2.0)
+- Caps and joins: `round`
+- Default viewBox: `0 0 24 24`, rendered `14–16 px`
+- Nav icons render `14 px` inside their container
+- Quick-action card SVGs render `21 px`
+- **Forbidden:** emoji, Unicode pictographs (⌂▦◷👛💳₿📃🔔⚙☀☾⚡), mixed icon fonts, photorealistic PNG icons
+- Allowed: simplified payment-brand SVGs (MC / Visa), logo-specific SVGs
 
-最小 SVG 模板：
+Minimum SVG template:
 
 ```html
 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
@@ -798,7 +798,7 @@ month
 </svg>
 ```
 
-建议图标语义：
+Suggested icon meanings:
 
 ```text
 Home, Grid, PieChart, Wallet, Receipt, FilePlus,
@@ -807,54 +807,54 @@ CreditCard, Bitcoin, FileText, Plus, Download,
 ChevronLeft, ChevronRight, ChevronsUpDown
 ```
 
-银行卡、Visa、Mastercard 标识属于支付方式品牌标记，见 §8.4 独立构造，不走通用描边模板。
+Bank-card, Visa, and Mastercard marks are payment-method brand marks. See §8.4 for their own construction; they do not use the generic stroke template.
 
-**闪电图标（推广卡）：** 使用 `#ffd735` 填充的 SVG 闪电，置于 `32 × 32 px` 白圆内；禁止 ⚡ Emoji。
-
----
-
-## 11. 交互与状态
-
-参考图是静态画面，但复刻实现至少应定义以下状态。
-
-### 11.1 导航
-
-- Hover：图标底或整行出现 `--surface-blue`
-- Active：使用 Balance 项的“左竖线 + 蓝底图标”模式
-- New order Hover：向上位移 `-1 px`，阴影略增强
-- Focus：`2 px` 蓝色外轮廓，偏移 `2 px`
-
-### 11.2 Tab
-
-- 点击切换激活文字和底部指示线
-- 指示线可用 `160–200 ms ease-out` 横向移动
-- 未激活项 Hover 时文字变深，不添加胶囊背景
-
-### 11.3 快捷操作
-
-- Hover：背景由 `--surface-soft` 加深至 `--surface-blue`
-- 卡片整体可点击
-- 加号可旋转或缩放，但动效不得超过 `160 ms`
-
-### 11.4 表格
-
-- 行 Hover：`rgba(49, 91, 245, 0.025)`
-- 表头排序点击后只突出对应 Chevron
-- Download 按钮 Hover：底色略加深
-- 表格滚动时标题行保持固定不是必须项；若实现固定，不能改变基准画面
-
-### 11.5 环形图
-
-- Hover 某段时，该段径向外移 `2 px` 或线宽增加 `1 px`
-- Tooltip 跟随当前段内容
-- 动画首次进入：圆环在 `500–700 ms` 内绘制完成
-- 尊重 `prefers-reduced-motion`
+**Lightning icon (promo card):** a `#ffd735` filled SVG bolt inside a `32 × 32 px` white circle; no ⚡ emoji.
 
 ---
 
-## 12. 布局实现建议
+## 11. Interaction and states
 
-### 12.1 顶层网格
+The reference is a still, but a recreation must at least define the following states.
+
+### 11.1 Nav
+
+- Hover: icon ground or the whole row takes `--surface-blue`
+- Active: Balance pattern — left bar + blue icon ground
+- New order hover: translate up `-1 px`, shadow slightly stronger
+- Focus: `2 px` blue outline, offset `2 px`
+
+### 11.2 Tabs
+
+- Click swaps the active label and the bottom indicator
+- Indicator may slide with `160–200 ms ease-out`
+- Inactive hover darkens the type; do not add a pill background
+
+### 11.3 Quick actions
+
+- Hover: background deepens from `--surface-soft` to `--surface-blue`
+- The whole card is clickable
+- The plus may rotate or scale, but motion must not exceed `160 ms`
+
+### 11.4 Table
+
+- Row hover: `rgba(49, 91, 245, 0.025)`
+- Header sort click highlights only the matching chevron
+- Download hover: ground slightly darker
+- A sticky header on scroll is not required; if you add one, it must not change the baseline still
+
+### 11.5 Donut
+
+- Hovering a segment moves it radially out `2 px` or increases stroke by `1 px`
+- Tooltip follows the hovered segment
+- First-entry animation: the ring draws in over `500–700 ms`
+- Honor `prefers-reduced-motion`
+
+---
+
+## 12. Layout implementation notes
+
+### 12.1 Top-level grid
 
 ```css
 *, *::before, *::after {
@@ -883,89 +883,89 @@ ChevronLeft, ChevronRight, ChevronsUpDown
 }
 ```
 
-### 12.2 顶部卡
+### 12.2 Top card
 
-顶部余额卡不建议用绝对定位。使用：
+Do not absolutely position the top balance card. Use:
 
-- 上方 Toolbar：Flex，左右分布
-- 中间 Tabs：Flex + 底边线
-- 下方内容：Grid，左侧余额固定约 `211 px`，右侧三卡等分
+- Toolbar above: flex, space-between
+- Tabs in the middle: flex + bottom divider
+- Content below: grid — left balance fixed about `211 px`, three cards equal on the right
 
 ```css
 grid-template-columns: 211px repeat(3, 1fr);
 gap: 10px;
 ```
 
-### 12.3 统计图
+### 12.3 Statistics chart
 
-使用 SVG 而不是 CSS `conic-gradient`，原因：
+Use SVG, not a CSS `conic-gradient`, because:
 
-- SVG 更容易获得圆头端点；
-- 分段长度和起点更可控；
-- Tooltip 锚点更稳定；
-- 阴影可复制路径单独模糊。
+- SVG makes round caps easier;
+- segment length and start angle are more controllable;
+- tooltip anchors are more stable;
+- shadows can duplicate the path and blur independently.
 
 ---
 
-## 13. 响应与缩放
+## 13. Responsiveness and scale
 
-本设计是桌面应用构图，不应在窄屏下重新排成移动卡片。
+This is a desktop-app composition. Do not restack into mobile cards on a narrow screen.
 
-### 13.1 推荐断点
+### 13.1 Recommended breakpoints
 
-| 视口 | 行为 |
+| Viewport | Behavior |
 |---|---|
-| `≥ 1024 × 720` | 原尺寸或接近原尺寸展示 |
-| `900–1023 px` 宽 | 应用外壳整体等比缩小 |
-| `< 900 px` 宽 | 继续等比缩小并允许页面滚动，不重排 |
+| `≥ 1024 × 720` | native size or near-native |
+| `900–1023 px` wide | scale the whole shell proportionally |
+| `< 900 px` wide | keep scaling; allow page scroll; do not reflow |
 
-### 13.2 高分辨率视口
+### 13.2 High-resolution viewports
 
-在 `1440 × 900` 或更大视口中：
+At `1440 × 900` or larger:
 
-- 建议保持应用窗口约 `1080–1160 px` 最大宽度并同比放大内部尺寸；
-- 或保持 `922 × 656 px` 原尺寸，让外部留白增加；
-- 不允许单独拉宽工作区导致交易表格与统计卡比例失真。
+- Prefer a max app-window width of about `1080–1160 px` and scale internals with it;
+- or keep `922 × 656 px` and let outer whitespace grow;
+- do not stretch only the workspace — that distorts the table-to-stats ratio.
 
-如果选择流式放大，保持以下比例：
+If you choose fluid scale, keep:
 
 ```text
-左侧栏 : 右侧工作区 = 178 : 714
-交易卡 : 统计卡 = 474 : 232
-顶部卡高度 : 下方卡高度 = 196 : 429
+sidebar : workspace = 178 : 714
+history card : stats card = 474 : 232
+top-card height : lower-card height = 196 : 429
 ```
 
 ---
 
-## 14. 可访问性约束
+## 14. Accessibility constraints
 
-高保真不应以牺牲可用性为代价：
+High fidelity must not cost usability:
 
-- 所有纯图标按钮提供 `aria-label`
-- 可点击区域不小于 `28 × 28 px`；视觉图标可小于点击框
-- 蓝色链接和按钮与背景保持至少 `4.5:1` 对比度
-- 表格使用真实 `<table>` 语义
-- Tab 使用 `role="tablist"`、`role="tab"` 和 `aria-selected`
-- 环形图提供文字摘要，不只依赖颜色
-- Debit/Bonus/Invoice 同时使用文字标签和色点
-- 键盘 Focus 不得被 `overflow: hidden` 裁掉
+- Every icon-only button has an `aria-label`
+- Click targets are at least `28 × 28 px`; the visual glyph may be smaller than the hit box
+- Blue links and buttons keep at least `4.5:1` contrast against their ground
+- The table uses real `<table>` semantics
+- Tabs use `role="tablist"`, `role="tab"`, and `aria-selected`
+- The donut has a text summary; do not rely on color alone
+- Debit / Bonus / Invoice use both a text label and a color dot
+- Keyboard focus must not be clipped by `overflow: hidden`
 
-参考图中部分 `8–9 px` 微型文字不适合真实产品长期使用。若可用性优先，可统一放大 `1 px`，但必须同步调整行高，避免破坏构图。
+Some `8–9 px` micro type in the reference is a poor long-term product size. If usability wins, bump those sizes by `1 px`, but also bump line-height so composition does not break.
 
 ---
 
-## 15. 素材与内容清单
+## 15. Assets and copy inventory
 
-复刻所需素材：
+Assets needed for the recreation:
 
-1. ProMobile 矢量字标
-2. 一套统一线性图标
-3. Mastercard 简化标识
-4. Visa 简化标识
-5. Referal 紫色标记
-6. Invoice 深色标记
+1. ProMobile vector wordmark
+2. One unified linear icon set
+3. Simplified Mastercard mark
+4. Simplified Visa mark
+5. Referal violet mark
+6. Invoice dark mark
 
-页面文案：
+Page copy:
 
 ```text
 PRO MOBILE
@@ -1010,148 +1010,148 @@ Invoice
 
 ---
 
-## 16. 实施顺序
+## 16. Implementation order
 
-为减少视觉返工，按以下顺序实现：
+To cut visual rework, implement in this order:
 
-1. 页面背景、应用外壳及两列网格
-2. 三张主卡的尺寸、间距和圆角
-3. 左侧栏结构及导航激活态
-4. 顶部工具带、Tab 和余额区
-5. 三张快捷操作卡
-6. 交易表格的列宽、行高和支付标记
-7. 统计卡 SVG 圆环、中心文字和图例
-8. 字体、色彩、阴影和微型对齐
-9. Hover、Focus、滚动和 Tooltip
-10. 在 `1024 × 768` 下截图做叠图校验
+1. Page background, app shell, and two-column grid
+2. Size, gap, and radius of the three main cards
+3. Sidebar structure and nav active state
+4. Top tool strip, tabs, and balance area
+5. Three quick-action cards
+6. Table column widths, row height, and payment marks
+7. Stats-card SVG ring, center copy, and legend
+8. Type, color, shadow, and micro alignment
+9. Hover, focus, scroll, and tooltip
+10. Screenshot at `1024 × 768` and overlay-check
 
-不要先做动画或真实数据接入；布局尺寸不稳定时，这些工作会干扰视觉校准。
-
----
-
-## 17. 高保真验收清单
-
-### 17.1 整体
-
-- [ ] 在 `1024 × 768` 截图中，应用窗口约位于 `51,56`，尺寸约 `922 × 656`
-- [ ] 应用窗口四周有均匀浅蓝灰留白和柔和下投影
-- [ ] 左栏、顶部卡、交易卡、统计卡的边界与基准值误差不超过 `4 px`
-- [ ] 页面没有传统顶栏、浏览器风格边框或强分割线
-
-### 17.2 左侧栏
-
-- [ ] Logo 位于左上并保持蓝黑双色
-- [ ] 六个导航项目的节奏紧凑、纵向间隔一致
-- [ ] Balance 有左侧蓝线和蓝色钱包图标底
-- [ ] New order 是唯一大面积实心蓝色导航按钮
-- [ ] 推广卡和 Help 锚定在底部
-
-### 17.3 顶部卡
-
-- [ ] 工具带左侧为时间，右侧为套餐、余额、加号、主题、通知、设置
-- [ ] Balance Tab 使用蓝字和细蓝下划线
-- [ ] `$13,650` 是全页最大文字，小数明显更小更浅
-- [ ] 三张快捷卡尺寸一致，图标在左上，加号在右下
-
-### 17.4 交易卡
-
-- [ ] 表格列宽固定，金额列右对齐
-- [ ] 每行仅使用极浅分隔线
-- [ ] Mastercard、Visa、Referal、Invoice 有可辨识的不同标记
-- [ ] Debit、Bonus、Invoice 使用橙、紫、青分类
-- [ ] 卡内右侧出现细滚动条
-
-### 17.5 统计卡
-
-- [ ] 圆环在卡片中水平居中，外径约 `164 px`
-- [ ] 橙色是最大段，青色第二，紫色最小
-- [ ] 圆环端点为圆头，并有克制的彩色下投影
-- [ ] 中心 `$22,123` 清晰，说明文字分两行
-- [ ] 默认可见黑色 Debit Tooltip
-- [ ] 图例为上二下一的胶囊布局
-
-### 17.6 视觉质感
-
-- [ ] 白卡与灰紫外壳通过明度区分，不依赖强阴影
-- [ ] 主色始终是皇家蓝，橙/青/紫仅用于数据
-- [ ] 图标线宽统一，没有 Emoji 或风格混杂
-- [ ] 圆角遵循 `22 / 15 / 13 / 9 / pill` 层级
-- [ ] 字体层级依靠字号、字重和灰度，而不是过多颜色
+Do not start with animation or live data. Unstable layout sizes will fight visual calibration.
 
 ---
 
-## 18. 禁止偏移的设计特征
+## 17. High-fidelity acceptance checklist
 
-以下变化会明显破坏参考图风格，实施时应避免：
+### 17.1 Overall
 
-- 把左侧栏改为深色或半透明玻璃
-- 增加横跨全窗口的顶栏
-- 使用紫色渐变作为品牌主视觉
-- 给每张卡添加厚边框或强烈阴影
-- 把 Tab 改成大号胶囊切换器
-- 把快捷操作改成三个实心蓝色按钮
-- 将交易表格做成高密度企业后台样式
-- 使用尖角图表、方头圆环或带坐标轴的复杂图
-- 在基准桌面宽度下折叠、堆叠或隐藏统计卡
-- 引入大面积插画、照片背景或多余装饰
+- [ ] In a `1024 × 768` screenshot, the app window sits around `51,56` at about `922 × 656`
+- [ ] Even light blue-gray margin around the window, with a soft drop shadow
+- [ ] Sidebar, top card, history card, and stats card edges are within `4 px` of baseline
+- [ ] No traditional top bar, browser-style chrome, or hard dividing rules
 
-复刻成功的关键不是单个 Logo 或数据内容，而是：**大圆角桌面外壳、独立白色左栏、上整下分的卡片网格、紧凑金融数据、皇家蓝主色，以及低对比度的柔和悬浮层级。**
+### 17.2 Sidebar
+
+- [ ] Logo is top-left and stays two-tone blue/black
+- [ ] Six nav items are compact, with even vertical rhythm
+- [ ] Balance has the left blue bar and a blue wallet-icon ground
+- [ ] New order is the only large solid-blue nav button
+- [ ] Promo card and Help are anchored to the bottom
+
+### 17.3 Top card
+
+- [ ] Tool strip: time on the left; plan, balance, plus, theme, notification, settings on the right
+- [ ] Balance tab uses blue type and a thin blue underline
+- [ ] `$13,650` is the largest type on the page; the decimal is clearly smaller and lighter
+- [ ] Three quick-action cards are the same size; icon top-left, plus bottom-right
+
+### 17.4 History card
+
+- [ ] Fixed column widths; amount column right-aligned
+- [ ] Rows use only a very light divider
+- [ ] Mastercard, Visa, Referal, and Invoice have distinct marks
+- [ ] Debit, Bonus, Invoice use orange, violet, cyan
+- [ ] A thin scrollbar appears on the inner right of the card
+
+### 17.5 Statistics card
+
+- [ ] Ring is horizontally centered in the card; outer diameter about `164 px`
+- [ ] Orange is the largest segment, cyan second, violet smallest
+- [ ] Round caps, with restrained colored under-glows
+- [ ] Center `$22,123` is clear; caption wraps to two lines
+- [ ] Black Debit tooltip is visible by default
+- [ ] Legend is two-up then one-centered pills
+
+### 17.6 Material
+
+- [ ] White cards separate from the gray-violet shell by luminance, not heavy shadow
+- [ ] Accent is always royal blue; orange / cyan / violet are data-only
+- [ ] Icon stroke width is unified; no emoji or mixed styles
+- [ ] Radii follow the `22 / 15 / 13 / 9 / pill` ladder
+- [ ] Type hierarchy comes from size, weight, and gray — not extra colors
 
 ---
 
-## 19. 视觉校验记录（2026-07-29）
+## 18. Design traits that must not drift
 
-### 19.1 校验方法
+These changes clearly break the reference. Avoid them in implementation:
 
-1. 严格按本文档生成静态 HTML：`.design-check/promobile-from-design.html`
-2. 在 `1024 × 768` 视口截图：`.design-check/generated-from-design.png`
-3. 与参考图 `.design-check/reference.png` 并排比对布局、色值、图标、图表
+- Dark or frosted-glass sidebar
+- A top bar spanning the full window
+- Purple gradients as the brand look
+- Thick borders or heavy shadows on every card
+- Large pill tab switchers
+- Three solid-blue quick-action buttons
+- A high-density enterprise back-office table
+- Sharp charts, square-capped rings, or complex charts with axes
+- Folding, stacking, or hiding the stats card at the baseline desktop width
+- Large illustrations, photo backgrounds, or extra decoration
 
-### 19.2 已通过项
+A successful recreation is not about one logo or one data set. It is: **a large-radius desktop shell, an independent white sidebar, a full-width top card over a split lower grid, compact financial data, a royal-blue accent, and a low-contrast, softly floating hierarchy.**
 
-| 项目 | 参考图 | 按 DESIGN.md 生成 | 结论 |
+---
+
+## 19. Visual-check log (2026-07-29)
+
+### 19.1 Method
+
+1. Generate static HTML strictly from this document: `.design-check/promobile-from-design.html`
+2. Screenshot at `1024 × 768`: `.design-check/generated-from-design.png`
+3. Side-by-side with the reference `.design-check/reference.png` — layout, color, icons, chart
+
+### 19.2 Passed
+
+| Item | Reference | Generated from DESIGN.md | Result |
 |---|---:|---:|---|
-| 视口 | `1024 × 768` | `1024 × 768` | 一致 |
-| 应用窗口位置 | `51, 56` | `51, 56` | 一致 |
-| 应用窗口尺寸 | `922 × 656` | `922, 656` | 一致 |
-| 左栏 / 工作区比例 | `178 : 714` | `178 : 714` | 一致 |
-| 下方卡比例 | `474 : 232` | `474 : 232` | 一致 |
-| 主结构（侧栏 + 上卡 + 下左表 + 下右图） | 四区块 | 四区块 | 一致 |
-| 主色蓝 | `#3f61ff` 附近 | `#3e5cf8` | 基本一致 |
-| 白卡 / 浅底层级 | 低对比 | 低对比 | 一致 |
+| Viewport | `1024 × 768` | `1024 × 768` | match |
+| App-window position | `51, 56` | `51, 56` | match |
+| App-window size | `922 × 656` | `922, 656` | match |
+| Sidebar / workspace ratio | `178 : 714` | `178 : 714` | match |
+| Lower-card ratio | `474 : 232` | `474 : 232` | match |
+| Main structure (sidebar + top card + lower-left table + lower-right chart) | four regions | four regions | match |
+| Accent blue | near `#3f61ff` | `#3e5cf8` | close enough |
+| White cards / light ground hierarchy | low contrast | low contrast | match |
 
-### 19.3 初版明显差异与根因
+### 19.3 First-pass gaps and root causes
 
-| 差异 | 严重度 | 根因 | 文档修正 |
+| Gap | Severity | Cause | Doc fix |
 |---|---|---|---|
-| 导航/工具栏/快捷操作用 Emoji 代替图标 | **高** | §10 禁止 Emoji 但缺少可执行 SVG 规范 | 强化 §10、§6.4、§7.2 |
-| Logo O 未做品牌环 | 中 | §6.2 描述抽象 | 补充 SVG 构造 |
-| 外壳底色偏灰 `#f5f4f9` | 中 | 初版 token 采样不足 | 改为 `#f7f6fb` |
-| 页面背景偏深 `#e7f1f5` | 低 | 同上 | 改为 `#e1ecf0` |
-| 导航图标底色不统一 | 中 | 仅写“淡蓝/淡青”无量化 | 新增 nav-bg token |
-| 环图彩色投影几乎不可见 | 中 | §9.3 写“8–12%”过弱 | 提高到 10–14% 并标为必做 |
-| 图例胶囊底色过白 | 低 | 未给观察色值 | 补充 `#f4eae1` 等 |
-| 推广卡底色 | 低 | 与 action 卡混用 token | 新增 `--surface-promo` |
-| MC/Visa 徽标过于简化 | 中 | §8.4 描述不足 | 补充渐变/双圆构造 |
+| Nav / toolbar / quick actions used emoji instead of icons | **High** | §10 forbids emoji but lacked an executable SVG spec | tightened §10, §6.4, §7.2 |
+| Logo O was not a brand ring | Medium | §6.2 was too abstract | added SVG construction |
+| Shell ground too gray `#f5f4f9` | Medium | first-pass token sampling | changed to `#f7f6fb` |
+| Page background too dark `#e7f1f5` | Low | same | changed to `#e1ecf0` |
+| Nav icon grounds inconsistent | Medium | only “pale blue / pale cyan”, no numbers | added nav-bg tokens |
+| Donut color glows almost invisible | Medium | §9.3 “8–12%” too weak | raised to 10–14% and marked required |
+| Legend pills too white | Low | no observed color | added `#f4eae1` etc. |
+| Promo-card ground | Low | shared token with action cards | added `--surface-promo` |
+| MC / Visa marks oversimplified | Medium | §8.4 underspecified | added gradient / dual-circle construction |
 
-### 19.4 复验标准
+### 19.4 Re-check bar
 
-更新文档后再次生成截图，以下项必须肉眼接近参考图，否则继续修订文档：
+After updating the document, generate the screenshot again. These must look close to the reference by eye, or keep revising the spec:
 
-1. 全页无 Emoji 字符
-2. 侧栏六项图标均为“ pastel 底 + 描边 icon ”，Balance 为蓝底白 icon
-3. 外壳间隙可见 `#f7f6fb` 淡紫灰，而非深灰
-4. 环图下方能看到橙/青/紫三色柔光
-5. 图例胶囊有淡色底，不是白底黑字
-6. Tooltip 为 `#191b20` 深底，橙点 + 白金额
+1. No emoji characters on the page
+2. All six sidebar icons are “pastel ground + stroke icon”; Balance is blue ground, white icon
+3. Shell gutter shows `#f7f6fb` pale violet-gray, not a darker gray
+4. Orange / cyan / violet glows are visible under the ring
+5. Legend pills have tinted grounds, not white-on-black
+6. Tooltip is `#191b20` dark ground, orange dot + white amount
 
-### 19.5 校验产物路径
+### 19.5 Artifact paths
 
 ```text
 .design-check/
-  reference.png              # 参考图副本
-  promobile-from-design.html # 按 DESIGN.md 生成的静态页
-  generated-from-design.png  # 1024×768 生成截图
+  reference.png              # copy of the reference
+  promobile-from-design.html # static page generated from DESIGN.md
+  generated-from-design.png  # 1024×768 generated screenshot
 ```
 
-实施方应在每次大幅修改 DESIGN.md 后重复 §19.1 流程。
+Implementers should repeat §19.1 after any substantial change to DESIGN.md.
