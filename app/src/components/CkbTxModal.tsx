@@ -8,6 +8,7 @@ import { toCommandError } from '../api/types'
 import type { CkbTxPhase, CkbTxProgress } from '../api/types'
 import { explorerTxUrl } from '../lib/wallet'
 import { useWalletNetwork } from '../wallet/WalletNetworkContext'
+import { usePresence } from '../lib/usePresence'
 import { useScrollLock } from '../lib/useScrollLock'
 
 /**
@@ -153,13 +154,20 @@ export function CkbTxModal({
   const { t } = useLocale()
   const { chain } = useWalletNetwork()
   const [copied, setCopied] = useState(false)
+  const open = state.status !== 'idle'
+  const { shown, entered, onExitEnd } = usePresence(open)
+  // Keep the last non-idle payload so the exit transition still has content.
+  const [display, setDisplay] = useState(state)
+  useEffect(() => {
+    if (state.status !== 'idle') setDisplay(state)
+  }, [state])
 
   useEffect(() => {
     setCopied(false)
   }, [state.status])
 
   useEffect(() => {
-    if (state.status === 'idle') return
+    if (!open) return
     const handler = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       e.stopPropagation()
@@ -168,48 +176,52 @@ export function CkbTxModal({
     }
     document.addEventListener('keydown', handler, true)
     return () => document.removeEventListener('keydown', handler, true)
-  }, [state.status, onClose])
+  }, [open, state.status, onClose])
 
-  useScrollLock(state.status !== 'idle')
+  useScrollLock(shown)
 
-  if (state.status === 'idle') return null
+  if (!shown || display.status === 'idle') return null
 
-  const waiting = state.status === 'waiting'
-  const confirmed = state.status === 'confirmed'
-  const rejected = state.status === 'rejected'
+  const waiting = display.status === 'waiting'
+  const confirmed = display.status === 'confirmed'
+  const rejected = display.status === 'rejected'
 
   const handleCopy = async () => {
-    if (state.status !== 'confirmed' || !state.txHash) return
-    await copyText(state.txHash)
+    if (display.status !== 'confirmed' || !display.txHash) return
+    await copyText(display.txHash)
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1400)
   }
 
   const handleOpenExplorer = () => {
-    if (state.status !== 'confirmed' || !state.txHash) return
-    const url = explorerTxUrl(chain, state.txHash)
+    if (display.status !== 'confirmed' || !display.txHash) return
+    const url = explorerTxUrl(chain, display.txHash)
     node.openUrl(url).catch(() => {
       window.open(url, '_blank', 'noopener,noreferrer')
     })
   }
 
   const statusText = waiting
-    ? state.phase === 'confirming'
+    ? display.phase === 'confirming'
       ? t.ckbTxPhaseConfirming
-      : state.phase === 'broadcasting'
+      : display.phase === 'broadcasting'
         ? t.ckbTxPhaseBroadcasting
         : t.ckbTxPhaseConstructing
     : confirmed
       ? t.ckbTxConfirmed
       : t.ckbTxFailed
 
-  const steps = stepStates(waiting ? 'waiting' : confirmed ? 'confirmed' : 'rejected', state.status === 'waiting' || state.status === 'rejected' ? state.phase : undefined)
+  const steps = stepStates(
+    waiting ? 'waiting' : confirmed ? 'confirmed' : 'rejected',
+    display.status === 'waiting' || display.status === 'rejected' ? display.phase : undefined,
+  )
   const stepLabels = [t.ckbTxStepConstruct, t.ckbTxStepBroadcast, t.ckbTxStepConfirm]
 
   return createPortal(
     <div
-      className={`modal-backdrop ckb-tx-backdrop${overDrawer ? ' is-over-drawer' : ''}`}
+      className={`modal-backdrop ckb-tx-backdrop${entered ? ' is-open' : ''}${overDrawer ? ' is-over-drawer' : ''}`}
       role="presentation"
+      onTransitionEnd={onExitEnd}
     >
       <div
         className="modal ckb-tx-modal"
@@ -223,7 +235,7 @@ export function CkbTxModal({
           </button>
         )}
 
-        <div className="ckb-tx-title">{state.label}</div>
+        <div className="ckb-tx-title">{display.label}</div>
 
         <ol className="ckb-tx-steps">
           {steps.map((st, i) => (
@@ -251,7 +263,7 @@ export function CkbTxModal({
         {confirmed && (
           <>
             <div className="ckb-tx-hint">{t.ckbTxConfirmedHint}</div>
-            {state.txHash && (
+            {display.txHash && (
               <div className="ckb-tx-hash">
                 <div className="ckb-tx-hash-label">
                   <span>{t.ckbTxHash}</span>
@@ -259,8 +271,8 @@ export function CkbTxModal({
                     type="button"
                     className="ckb-tx-hash-copy"
                     onClick={handleCopy}
-                    title={`${t.copy}: ${state.txHash}`}
-                    aria-label={`${t.copy}: ${state.txHash}`}
+                    title={`${t.copy}: ${display.txHash}`}
+                    aria-label={`${t.copy}: ${display.txHash}`}
                   >
                     {copied ? t.copied : <IconCopy />}
                   </button>
@@ -271,7 +283,7 @@ export function CkbTxModal({
                   onClick={handleOpenExplorer}
                   title={t.ckbTxViewExplorer}
                 >
-                  <span>{state.txHash}</span>
+                  <span>{display.txHash}</span>
                   <IconExternal />
                 </button>
               </div>
@@ -279,7 +291,7 @@ export function CkbTxModal({
           </>
         )}
 
-        {rejected && <div className="ckb-tx-error">{state.error}</div>}
+        {rejected && <div className="ckb-tx-error">{display.error}</div>}
 
         {!waiting && (
           <button type="button" className="btn-primary ckb-tx-done" onClick={onClose}>

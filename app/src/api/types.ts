@@ -157,6 +157,7 @@ export type NodeConfig = {
     bootnode_addrs: string[]
     announced_addrs: string[]
     standalone_watchtower_rpc_url: string
+    standalone_watchtower_token: string
     watchtower_check_interval_seconds: number
     disable_built_in_watchtower: boolean
     open_channel_auto_accept_min_ckb_funding_amount: number

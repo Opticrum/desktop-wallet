@@ -19,6 +19,7 @@ pub fn default_config() -> NodeConfig {
       ],
       announced_addrs: vec![],
       standalone_watchtower_rpc_url: "/ip4/45.77.65.221/tcp/8115".into(),
+      standalone_watchtower_token: "".into(),
       watchtower_check_interval_seconds: 60,
       disable_built_in_watchtower: false,
       open_channel_auto_accept_min_ckb_funding_amount: 10_000_000_000,

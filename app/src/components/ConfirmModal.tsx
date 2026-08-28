@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { usePresence } from '../lib/usePresence'
 import { useScrollLock } from '../lib/useScrollLock'
 
 type ConfirmModalProps = {
@@ -25,6 +26,8 @@ export function ConfirmModal({
   danger = false,
   overDrawer = false,
 }: ConfirmModalProps) {
+  const { shown, entered, onExitEnd } = usePresence(open)
+
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
@@ -36,16 +39,17 @@ export function ConfirmModal({
     return () => document.removeEventListener('keydown', onKey, true)
   }, [open, onCancel])
 
-  useScrollLock(open)
+  useScrollLock(shown)
 
-  if (!open) return null
+  if (!shown) return null
 
   return (
     <div
-      className={`modal-backdrop${overDrawer ? ' is-over-drawer' : ''}`}
+      className={`modal-backdrop${entered ? ' is-open' : ''}${overDrawer ? ' is-over-drawer' : ''}`}
       role="dialog"
       aria-modal="true"
       aria-label={title}
+      onTransitionEnd={onExitEnd}
     >
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-title">{title}</div>

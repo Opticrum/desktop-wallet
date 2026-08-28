@@ -145,28 +145,13 @@ export function WatchtowerSection() {
   const wtUrl = config.fiber.standalone_watchtower_rpc_url
   const wtEnabled = wtUrl !== ''
   return (
-    <Section
-      title={
-        <div className="config-section-title-row">
-          <span>{t.watchtower}</span>
-          <label className="config-title-switch">
-            <span className="config-row-title">{t.cfgDisableBuiltinWatchtower}</span>
-            <span className="config-switch">
-              <input
-                type="checkbox"
-                checked={config.fiber.disable_built_in_watchtower}
-                onChange={(e) => patchFiber({ disable_built_in_watchtower: e.target.checked })}
-              />
-              <span className="config-switch-track">
-                <span className="config-switch-thumb" />
-              </span>
-            </span>
-          </label>
-        </div>
-      }
-      icon={<IconShield />}
-      disabled={config.fiber.disable_built_in_watchtower}
-    >
+    <Section title={t.watchtower} icon={<IconShield />}>
+      <ToggleRow
+        title={t.cfgDisableBuiltinWatchtower}
+        desc={t.cfgDisableBuiltinWatchtowerDesc}
+        checked={config.fiber.disable_built_in_watchtower}
+        onChange={(v) => patchFiber({ disable_built_in_watchtower: v })}
+      />
       <ToggleRow
         title={t.watchtowerRemoteEnable}
         desc={t.watchtowerRemoteDesc}
@@ -176,12 +161,21 @@ export function WatchtowerSection() {
         }
       />
       {wtEnabled && (
-        <TextField
-          label={t.watchtowerUrl}
-          value={wtUrl}
-          onChange={(v) => patchFiber({ standalone_watchtower_rpc_url: v })}
-          mono
-        />
+        <>
+          <TextField
+            label={t.watchtowerUrl}
+            value={wtUrl}
+            onChange={(v) => patchFiber({ standalone_watchtower_rpc_url: v })}
+            mono
+          />
+          <TextField
+            label={t.watchtowerToken}
+            desc={t.watchtowerTokenDesc}
+            value={config.fiber.standalone_watchtower_token}
+            onChange={(v) => patchFiber({ standalone_watchtower_token: v })}
+            mono
+          />
+        </>
       )}
       <NumberField
         label={t.cfgWatchtowerInterval}
@@ -338,22 +332,22 @@ export function AdvancedPanel() {
               value={config.fiber.min_outbound_peers}
               onChange={(v) => patchFiber({ min_outbound_peers: v })}
             />
-            <ToggleRow
-              title={t.cfgSyncGraph}
-              checked={config.fiber.sync_network_graph}
-              onChange={(v) => patchFiber({ sync_network_graph: v })}
-            />
-            <ToggleRow
-              title={t.cfgAutoAnnounceNode}
-              checked={config.fiber.auto_announce_node}
-              onChange={(v) => patchFiber({ auto_announce_node: v })}
-            />
             <TextField
               label={t.cfgProxyUrl}
               value={config.fiber.proxy_url}
               onChange={(v) => patchFiber({ proxy_url: v })}
               placeholder="socks5://127.0.0.1:9050"
               mono
+            />
+            <ToggleRow
+              title={t.cfgAutoAnnounceNode}
+              checked={config.fiber.auto_announce_node}
+              onChange={(v) => patchFiber({ auto_announce_node: v })}
+            />
+            <ToggleRow
+              title={t.cfgSyncGraph}
+              checked={config.fiber.sync_network_graph}
+              onChange={(v) => patchFiber({ sync_network_graph: v })}
             />
           </div>
         </div>

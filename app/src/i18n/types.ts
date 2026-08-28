@@ -538,6 +538,8 @@ export type Messages = {
   watchtowerRemoteEnable: string
   watchtowerRemoteDesc: string
   watchtowerUrl: string
+  watchtowerToken: string
+  watchtowerTokenDesc: string
   configFile: string
   nodeChainDesc: string
 
@@ -561,6 +563,7 @@ export type Messages = {
   cfgAnnouncedAddrs: string
   cfgWatchtowerInterval: string
   cfgDisableBuiltinWatchtower: string
+  cfgDisableBuiltinWatchtowerDesc: string
   cfgAutoAcceptMin: string
   cfgAutoAcceptAmount: string
   cfgTlcExpiry: string

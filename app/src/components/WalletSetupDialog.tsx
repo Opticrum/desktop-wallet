@@ -1,5 +1,6 @@
 import { useLocale } from '../i18n/LocaleContext'
 import { WalletGate } from './WalletGate'
+import { usePresence } from '../lib/usePresence'
 import { useScrollLock } from '../lib/useScrollLock'
 
 type WalletSetupDialogProps = {
@@ -15,13 +16,20 @@ type WalletSetupDialogProps = {
  */
 export function WalletSetupDialog({ open, onReady }: WalletSetupDialogProps) {
   const { t } = useLocale()
+  const { shown, entered, onExitEnd } = usePresence(open)
 
-  useScrollLock(open)
+  useScrollLock(shown)
 
-  if (!open) return null
+  if (!shown) return null
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={t.walletSetupTitle}>
+    <div
+      className={`modal-backdrop${entered ? ' is-open' : ''}`}
+      role="dialog"
+      aria-modal="true"
+      aria-label={t.walletSetupTitle}
+      onTransitionEnd={onExitEnd}
+    >
       <div className="modal wallet-setup-modal">
         <div className="wallet-setup-head">
           <div className="modal-title">{t.walletSetupTitle}</div>

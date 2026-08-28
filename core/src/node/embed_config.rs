@@ -92,6 +92,8 @@ struct FiberSectionYaml<'a> {
   scripts: Vec<config_file::FiberScriptFile>,
   #[serde(skip_serializing_if = "Option::is_none")]
   standalone_watchtower_rpc_url: Option<&'a str>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  standalone_watchtower_token: Option<&'a str>,
   disable_built_in_watchtower: bool,
   watchtower_check_interval_seconds: u64,
   open_channel_auto_accept_min_ckb_funding_amount: u64,
@@ -124,6 +126,11 @@ fn fiber_section<'a>(cfg: &'a NodeConfig, base_dir: &Path) -> FiberSectionYaml<'
       None
     } else {
       Some(&cfg.fiber.standalone_watchtower_rpc_url)
+    },
+    standalone_watchtower_token: if cfg.fiber.standalone_watchtower_token.is_empty() {
+      None
+    } else {
+      Some(&cfg.fiber.standalone_watchtower_token)
     },
     disable_built_in_watchtower: cfg.fiber.disable_built_in_watchtower,
     watchtower_check_interval_seconds: cfg.fiber.watchtower_check_interval_seconds,
@@ -206,6 +213,24 @@ mod tests {
       .iter()
       .find(|s| matches!(s.name, fnn::ckb::contracts::Contract::FundingLock));
     assert!(funding.is_some(), "FundingLock script present");
+  }
+
+  #[test]
+  fn standalone_watchtower_token_maps_into_fiber_config() {
+    let mut cfg = default_config();
+    cfg.fiber.standalone_watchtower_rpc_url = "/ip4/1.2.3.4/tcp/8115".into();
+    cfg.fiber.standalone_watchtower_token = "test-biscuit-token".into();
+    let dir = tempfile::tempdir().unwrap();
+    let fnn_cfg = fnn_config_from_wire(&cfg, dir.path()).unwrap();
+    let fiber = fnn_cfg.fiber.as_ref().unwrap();
+    assert_eq!(
+      fiber.standalone_watchtower_rpc_url.as_deref(),
+      Some("/ip4/1.2.3.4/tcp/8115")
+    );
+    assert_eq!(
+      fiber.standalone_watchtower_token.as_deref(),
+      Some("test-biscuit-token")
+    );
   }
 
   #[test]

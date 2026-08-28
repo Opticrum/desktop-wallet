@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocale } from '../i18n/LocaleContext'
+import { usePresence } from '../lib/usePresence'
 import { useScrollLock } from '../lib/useScrollLock'
 
 function IconClose() {
@@ -45,6 +46,7 @@ export function SendDetail({
   const [address, setAddress] = useState('')
   const [amount, setAmount] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const { shown, entered, onExitEnd } = usePresence(open)
 
   // Reset the form each time the dialog opens.
   useEffect(() => {
@@ -67,9 +69,9 @@ export function SendDetail({
     return () => document.removeEventListener('keydown', handler, true)
   }, [open, onClose])
 
-  useScrollLock(open)
+  useScrollLock(shown)
 
-  if (!open) return null
+  if (!shown) return null
 
   const handleConfirm = () => {
     const amt = Number(amount)
@@ -94,7 +96,11 @@ export function SendDetail({
   }
 
   return createPortal(
-    <div className="send-modal-backdrop is-over-drawer" role="presentation">
+    <div
+      className={`send-modal-backdrop is-over-drawer${entered ? ' is-open' : ''}`}
+      role="presentation"
+      onTransitionEnd={onExitEnd}
+    >
       <div
         className="send-modal"
         role="dialog"

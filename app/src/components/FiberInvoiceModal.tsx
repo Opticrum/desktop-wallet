@@ -3,6 +3,7 @@ import { useLocale } from '../i18n/LocaleContext'
 import { channels } from '../api/client'
 import { toCommandError } from '../api/types'
 import { QrPlaceholder } from './QrModal'
+import { usePresence } from '../lib/usePresence'
 import { useScrollLock } from '../lib/useScrollLock'
 
 function IconClose() {
@@ -90,8 +91,9 @@ export function FiberInvoiceModal({
   const [invoice, setInvoice] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [generating, setGenerating] = useState(false)
+  const { shown, entered, onExitEnd } = usePresence(open)
 
-  useScrollLock(open)
+  useScrollLock(shown)
 
   useEffect(() => {
     if (!open) return
@@ -107,7 +109,7 @@ export function FiberInvoiceModal({
     return () => window.removeEventListener('keydown', handler)
   }, [open, onClose])
 
-  if (!open) return null
+  if (!shown) return null
 
   const handleGenerate = async () => {
     const value = Number.parseFloat(amount)
@@ -150,7 +152,11 @@ export function FiberInvoiceModal({
   }
 
   return (
-    <div className="send-modal-backdrop" role="presentation">
+    <div
+      className={`send-modal-backdrop${entered ? ' is-open' : ''}`}
+      role="presentation"
+      onTransitionEnd={onExitEnd}
+    >
       <div
         className="send-modal fiber-modal"
         role="dialog"

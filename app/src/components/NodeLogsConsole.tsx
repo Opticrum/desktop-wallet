@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocale } from '../i18n/LocaleContext'
 import { node } from '../api/client'
 import type { LogLevel, NodeLog } from '../api/types'
@@ -80,6 +80,7 @@ function ExpandIcon() {
  */
 export function NodeLogsConsole() {
   const { t } = useLocale()
+  const consoleRef = useRef<HTMLElement>(null)
   const [logs, setLogs] = useState<NodeLog[]>([])
   const [expanded, setExpanded] = useState(false)
   const [logsOpen, setLogsOpen] = useState(false)
@@ -106,6 +107,28 @@ export function NodeLogsConsole() {
     }
   }, [])
 
+  // Expanded console sits above the node page scroller / cell pool. Wheel
+  // over it must stay in `.lv-body` — `overscroll-behavior` alone does not
+  // cut the chain in the Tauri WebView when the body is not overflowing.
+  useEffect(() => {
+    if (!expanded) return
+    const root = consoleRef.current
+    if (!root) return
+    const onWheel = (e: WheelEvent) => {
+      const body = root.querySelector<HTMLElement>('.lv-body')
+      if (body) {
+        const max = body.scrollHeight - body.clientHeight
+        if (max > 0) {
+          const next = Math.min(max, Math.max(0, body.scrollTop + e.deltaY))
+          if (next !== body.scrollTop) body.scrollTop = next
+        }
+      }
+      e.preventDefault()
+    }
+    root.addEventListener('wheel', onWheel, { passive: false })
+    return () => root.removeEventListener('wheel', onWheel)
+  }, [expanded])
+
   const stats = logStats(logs)
   const visibleLogs = logs.filter((line) => activeLevels[line.level])
   const latestLog = !expanded && logs.length > 0 ? logs[logs.length - 1] : null
@@ -115,7 +138,7 @@ export function NodeLogsConsole() {
     setActiveLevels((prev) => ({ ...prev, [level]: !prev[level] }))
 
   return (
-    <section className="panel node-logs-console">
+    <section ref={consoleRef} className="panel node-logs-console">
       <div className="nlc-bar">
         <button
           type="button"

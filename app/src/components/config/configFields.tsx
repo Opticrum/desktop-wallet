@@ -139,30 +139,33 @@ export function Section({
 
 // ── Form primitives ─────────────────────────────────────────────────────────
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({ label, desc, children }: { label: string; desc?: string; children: ReactNode }) {
   return (
     <div className="config-url-row">
       <label className="config-url-label">{label}</label>
       {children}
+      {desc && <span className="config-row-desc">{desc}</span>}
     </div>
   )
 }
 
 export function TextField({
   label,
+  desc,
   value,
   onChange,
   mono,
   placeholder,
 }: {
   label: string
+  desc?: string
   value: string
   onChange: (v: string) => void
   mono?: boolean
   placeholder?: string
 }) {
   return (
-    <Field label={label}>
+    <Field label={label} desc={desc}>
       <input
         className={`config-url-input${mono ? ' mono' : ''}`}
         value={value}

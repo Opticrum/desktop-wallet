@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocale } from '../i18n/LocaleContext'
+import { usePresence } from '../lib/usePresence'
 import { useScrollLock } from '../lib/useScrollLock'
 
 /**
@@ -234,8 +235,9 @@ export function QrModal({
 }) {
   const { t } = useLocale()
   const [copied, setCopied] = useState(false)
+  const { shown, entered, onExitEnd } = usePresence(open)
 
-  useScrollLock(open)
+  useScrollLock(shown)
 
   useEffect(() => {
     if (!open) return
@@ -249,7 +251,7 @@ export function QrModal({
     return () => document.removeEventListener('keydown', handler, true)
   }, [open, onClose])
 
-  if (!open) return null
+  if (!shown) return null
 
   const handleCopy = async () => {
     await copyText(address)
@@ -265,7 +267,11 @@ export function QrModal({
   }
 
   return createPortal(
-    <div className="modal-backdrop is-over-drawer" role="presentation">
+    <div
+      className={`modal-backdrop is-over-drawer${entered ? ' is-open' : ''}`}
+      role="presentation"
+      onTransitionEnd={onExitEnd}
+    >
       <div
         className="qr-modal"
         role="dialog"

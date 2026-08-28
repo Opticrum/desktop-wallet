@@ -4,6 +4,8 @@ import { toCommandError } from '../api/types'
 import type { ExternalTarget, NodeTargetList } from '../api/types'
 import { useLocale } from '../i18n/LocaleContext'
 import { commandErrorText } from '../lib/errors'
+import { usePresence } from '../lib/usePresence'
+import { useScrollLock } from '../lib/useScrollLock'
 import { useNode } from '../node/NodeContext'
 import { useWalletNetwork } from '../wallet/WalletNetworkContext'
 import { ConfirmModal } from './ConfirmModal'
@@ -109,6 +111,14 @@ export function NodeSideMenu({
   const [formToken, setFormToken] = useState('')
   const [formBusy, setFormBusy] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const dialogOpen = dialog.mode !== 'closed'
+  const { shown: dialogShown, entered: dialogEntered, onExitEnd: onDialogExitEnd } =
+    usePresence(dialogOpen)
+  const [dialogDisplay, setDialogDisplay] = useState(dialog)
+  useEffect(() => {
+    if (dialog.mode !== 'closed') setDialogDisplay(dialog)
+  }, [dialog])
+  useScrollLock(dialogShown)
 
   const refresh = useCallback(() => {
     node.listTargets().then(setList).catch(() => {})
@@ -330,16 +340,17 @@ export function NodeSideMenu({
         </span>
       </button>
 
-      {dialog.mode !== 'closed' && (
+      {dialogShown && dialogDisplay.mode !== 'closed' && (
         <div
-          className="modal-backdrop"
+          className={`modal-backdrop${dialogEntered ? ' is-open' : ''}`}
           role="dialog"
           aria-modal="true"
-          aria-label={dialog.mode === 'add' ? t.nodeAddExternal : t.nodeEditExternal}
+          aria-label={dialogDisplay.mode === 'add' ? t.nodeAddExternal : t.nodeEditExternal}
+          onTransitionEnd={onDialogExitEnd}
         >
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-title">
-              {dialog.mode === 'add' ? t.nodeAddExternal : t.nodeEditExternal}
+              {dialogDisplay.mode === 'add' ? t.nodeAddExternal : t.nodeEditExternal}
             </div>
             <div className="modal-body nsm-form">
               <label className="send-form-label">

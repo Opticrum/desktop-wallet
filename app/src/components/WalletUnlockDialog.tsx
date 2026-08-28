@@ -3,6 +3,7 @@ import { wallet } from '../api/client'
 import { toCommandError } from '../api/types'
 import { useLocale } from '../i18n/LocaleContext'
 import { commandErrorText } from '../lib/errors'
+import { usePresence } from '../lib/usePresence'
 import { useScrollLock } from '../lib/useScrollLock'
 
 type Props = {
@@ -17,6 +18,7 @@ export function WalletUnlockDialog({ open, onCancel, onUnlocked }: Props) {
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { shown, entered, onExitEnd } = usePresence(open)
 
   useEffect(() => {
     if (!open) return
@@ -34,9 +36,9 @@ export function WalletUnlockDialog({ open, onCancel, onUnlocked }: Props) {
     return () => document.removeEventListener('keydown', onKey)
   }, [open, busy, onCancel])
 
-  useScrollLock(open)
+  useScrollLock(shown)
 
-  if (!open) return null
+  if (!shown) return null
 
   const submit = async () => {
     if (!password) {
@@ -56,10 +58,11 @@ export function WalletUnlockDialog({ open, onCancel, onUnlocked }: Props) {
 
   return (
     <div
-      className="modal-backdrop"
+      className={`modal-backdrop${entered ? ' is-open' : ''}`}
       role="dialog"
       aria-modal="true"
       aria-label={t.walletUnlock}
+      onTransitionEnd={onExitEnd}
     >
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-title">{t.walletUnlock}</div>

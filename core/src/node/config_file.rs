@@ -36,6 +36,8 @@ pub(crate) struct FiberSection {
   #[serde(skip_serializing_if = "Option::is_none")]
   standalone_watchtower_rpc_url: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
+  standalone_watchtower_token: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
   disable_built_in_watchtower: Option<bool>,
 }
 
@@ -184,6 +186,7 @@ fn wire_to_config_file(cfg: &NodeConfig) -> FiberConfigFile {
       chain: cfg.fiber.chain.clone(),
       scripts: fiber_scripts(cfg),
       standalone_watchtower_rpc_url: non_empty(cfg.fiber.standalone_watchtower_rpc_url.clone()),
+      standalone_watchtower_token: non_empty(cfg.fiber.standalone_watchtower_token.clone()),
       disable_built_in_watchtower: Some(cfg.fiber.disable_built_in_watchtower),
     },
     rpc: RpcSection {
@@ -238,5 +241,19 @@ mod tests {
     // udt whitelist nested
     assert!(yaml.contains("udt_whitelist:"));
     assert!(yaml.contains("name: RUSD"));
+  }
+
+  #[test]
+  fn writes_standalone_watchtower_token() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cfg = default_config();
+    cfg.fiber.standalone_watchtower_token = "abc.biscuit".into();
+    let path = write_fiber_config(&cfg, dir.path()).unwrap();
+    let yaml = std::fs::read_to_string(&path).unwrap();
+    assert!(
+      yaml.contains("standalone_watchtower_token: abc.biscuit")
+        || yaml.contains("standalone_watchtower_token: \"abc.biscuit\""),
+      "{yaml}"
+    );
   }
 }

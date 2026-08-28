@@ -1,7 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocale } from '../i18n/LocaleContext'
 import { CopyableText } from './CopyableText'
+import { usePresence } from '../lib/usePresence'
 import { useScrollLock } from '../lib/useScrollLock'
 import { shortHash } from '../lib/wallet'
 
@@ -54,9 +55,15 @@ export function ChannelOpenModal({
   overDrawer?: boolean
 }) {
   const { t } = useLocale()
+  const open = state.status !== 'idle'
+  const { shown, entered, onExitEnd } = usePresence(open)
+  const [display, setDisplay] = useState(state)
+  useEffect(() => {
+    if (state.status !== 'idle') setDisplay(state)
+  }, [state])
 
   useEffect(() => {
-    if (state.status === 'idle') return
+    if (!open) return
     const handler = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       e.stopPropagation()
@@ -64,20 +71,20 @@ export function ChannelOpenModal({
     }
     document.addEventListener('keydown', handler, true)
     return () => document.removeEventListener('keydown', handler, true)
-  }, [state.status, onClose])
+  }, [open, state.status, onClose])
 
-  useScrollLock(state.status !== 'idle')
+  useScrollLock(shown)
 
-  if (state.status === 'idle') return null
+  if (!shown || display.status === 'idle') return null
 
-  const waiting = state.status === 'submitting' || state.status === 'waiting'
-  const ready = state.status === 'ready'
-  const failed = state.status === 'failed'
+  const waiting = display.status === 'submitting' || display.status === 'waiting'
+  const ready = display.status === 'ready'
+  const failed = display.status === 'failed'
 
   const statusText =
-    state.status === 'submitting'
+    display.status === 'submitting'
       ? t.channelOpenSubmitting
-      : state.status === 'waiting'
+      : display.status === 'waiting'
         ? t.channelOpenWaiting
         : ready
           ? t.channelOpenReady
@@ -87,8 +94,9 @@ export function ChannelOpenModal({
 
   return createPortal(
     <div
-      className={`modal-backdrop ckb-tx-backdrop${overDrawer ? ' is-over-drawer' : ''}`}
+      className={`modal-backdrop ckb-tx-backdrop${entered ? ' is-open' : ''}${overDrawer ? ' is-over-drawer' : ''}`}
       role="presentation"
+      onTransitionEnd={onExitEnd}
     >
       <div
         className="modal ckb-tx-modal"
@@ -113,18 +121,18 @@ export function ChannelOpenModal({
         <div className={`ckb-tx-status${failed ? ' is-failed' : ''}`}>{statusText}</div>
         {hint && <div className="ckb-tx-hint">{hint}</div>}
 
-        {ready && state.channelId && (
+        {ready && display.channelId && (
           <div className="channel-open-id">
             <span className="channel-open-id-k">{t.nodeChannelId}</span>
             <CopyableText
-              value={state.channelId}
-              display={shortHash(state.channelId)}
+              value={display.channelId}
+              display={shortHash(display.channelId)}
               className="mono"
             />
           </div>
         )}
 
-        {failed && <div className="ckb-tx-error">{state.error}</div>}
+        {failed && <div className="ckb-tx-error">{display.error}</div>}
 
         {!waiting && (
           <button type="button" className="btn-primary ckb-tx-done" onClick={onClose}>

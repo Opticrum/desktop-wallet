@@ -59,7 +59,7 @@ tokio-util = { version = "0.7", features = ["rt"] }
 clap-serde-derive = "0.2.1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "registry"] }
-jsonrpsee = { version = "0.25.1", features = ["server"] }
+jsonrpsee = { version = "0.25.1", features = ["server", "http-client"] }
 ckb-chain-spec = "1"
 ckb-resource = "1"
 ckb-types = "1"

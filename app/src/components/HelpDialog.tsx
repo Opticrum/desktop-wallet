@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useLocale } from '../i18n/LocaleContext'
+import { usePresence } from '../lib/usePresence'
 import { useScrollLock } from '../lib/useScrollLock'
 
 type Section = { title: string; lines: string[] }
@@ -32,13 +33,18 @@ const TABS = ['helpTabProtocol', 'helpTabBuyer', 'helpTabSeller'] as const
 export function HelpDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useLocale()
   const [tab, setTab] = useState(0)
+  const { shown, entered, onExitEnd } = usePresence(open)
 
-  useScrollLock(open)
+  useScrollLock(shown)
 
-  if (!open) return null
+  if (!shown) return null
 
   return (
-    <div className="modal-backdrop" role="presentation">
+    <div
+      className={`modal-backdrop${entered ? ' is-open' : ''}`}
+      role="presentation"
+      onTransitionEnd={onExitEnd}
+    >
       <div
         className="modal help-dialog"
         role="dialog"

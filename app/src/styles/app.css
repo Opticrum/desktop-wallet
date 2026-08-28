@@ -1100,18 +1100,25 @@ body:has(.modal-backdrop, .send-modal-backdrop, .drawer-backdrop) .center-panel 
   padding: 24px;
   overflow: hidden;
   overscroll-behavior: contain;
-  animation: send-modal-fade 0.16s ease-out;
+  opacity: 0;
+  transition-property: opacity;
+  transition-duration: 140ms;
+  transition-timing-function: ease-out;
+}
+
+.send-modal-backdrop.is-open {
+  opacity: 1;
+}
+
+.send-modal-backdrop:not(.is-open) {
+  transition-timing-function: ease-in;
+  pointer-events: none;
 }
 
 /* Sit above the bottom drawer (300). Used when the send dialog is portaled
    out of the wallet sheet — a transformed ancestor would otherwise clip it. */
 .send-modal-backdrop.is-over-drawer {
   z-index: 350;
-}
-
-@keyframes send-modal-fade {
-  from { opacity: 0; }
-  to   { opacity: 1; }
 }
 
 .send-modal {
@@ -1127,12 +1134,18 @@ body:has(.modal-backdrop, .send-modal-backdrop, .drawer-backdrop) .center-panel 
     0 24px 60px rgb(0 0 0 / 28%),
     0 4px 16px rgb(0 0 0 / 12%);
   padding: 24px 28px 28px;
-  animation: send-modal-pop 0.18s cubic-bezier(0.2, 0.8, 0.3, 1);
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
+  transition-property: opacity, transform;
+  transition-duration: 140ms;
+  transition-timing-function: ease-in;
 }
 
-@keyframes send-modal-pop {
-  from { transform: translateY(8px) scale(0.98); opacity: 0; }
-  to   { transform: translateY(0)   scale(1);    opacity: 1; }
+.send-modal-backdrop.is-open .send-modal {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition-duration: 180ms;
+  transition-timing-function: cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 
 .send-modal-head {
@@ -2571,6 +2584,7 @@ body:has(.modal-backdrop, .send-modal-backdrop, .drawer-backdrop) .center-panel 
 .log-viewer.lv-scroll .lv-body {
   max-height: 300px;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .log-line {
@@ -3229,16 +3243,23 @@ body:has(.modal-backdrop, .send-modal-backdrop, .drawer-backdrop) .center-panel 
      panel inside it) can't chain through and scroll the page behind. */
   overflow: hidden;
   overscroll-behavior: contain;
-  animation: backdrop-in 140ms ease-out;
+  opacity: 0;
+  transition-property: opacity;
+  transition-duration: 140ms;
+  transition-timing-function: ease-out;
+}
+
+.modal-backdrop.is-open {
+  opacity: 1;
+}
+
+.modal-backdrop:not(.is-open) {
+  transition-timing-function: ease-in;
+  pointer-events: none;
 }
 
 .modal-backdrop.is-over-drawer {
   z-index: 350;
-}
-
-@keyframes backdrop-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
 }
 
 .modal {
@@ -3253,12 +3274,18 @@ body:has(.modal-backdrop, .send-modal-backdrop, .drawer-backdrop) .center-panel 
   overflow-y: auto;
   overscroll-behavior: contain;
   box-shadow: var(--shadow-panel);
-  animation: modal-in 180ms ease-out;
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
+  transition-property: opacity, transform;
+  transition-duration: 140ms;
+  transition-timing-function: ease-in;
 }
 
-@keyframes modal-in {
-  from { opacity: 0; transform: translateY(8px) scale(0.98); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
+.modal-backdrop.is-open .modal {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition-duration: 180ms;
+  transition-timing-function: ease-out;
 }
 
 .modal-title {
@@ -3675,8 +3702,19 @@ body:has(.modal-backdrop, .send-modal-backdrop, .drawer-backdrop) .center-panel 
   width: 100%;
   max-width: 372px;
   box-shadow: var(--shadow-panel);
-  animation: modal-in 180ms ease-out;
   overflow: hidden;
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
+  transition-property: opacity, transform;
+  transition-duration: 140ms;
+  transition-timing-function: ease-in;
+}
+
+.modal-backdrop.is-open .qr-modal {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition-duration: 180ms;
+  transition-timing-function: ease-out;
 }
 
 /* Hairline accent along the top edge of the sheet. */
@@ -4409,7 +4447,7 @@ body:has(.modal-backdrop, .send-modal-backdrop, .drawer-backdrop) .center-panel 
   color: var(--ink-4);
 }
 
-/* Disabled config section (watchtower when built-in disabled) */
+/* Disabled config section (fieldset disables nested controls) */
 
 .config-section.is-disabled .config-section-body {
   opacity: 0.5;
@@ -7498,6 +7536,7 @@ button.ncp-start-tip {
 
 .node-logs-console .nlc-viewer {
   margin-top: 12px;
+  overscroll-behavior: contain;
 }
 
 .node-logs-console .nlc-viewer .log-viewer {

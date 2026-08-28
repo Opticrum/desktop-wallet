@@ -50,6 +50,7 @@ export const defaultNodeConfig: NodeConfig = {
     ],
     announced_addrs: [],
     standalone_watchtower_rpc_url: '/ip4/45.77.65.221/tcp/8115',
+    standalone_watchtower_token: '',
     watchtower_check_interval_seconds: 60,
     disable_built_in_watchtower: false,
     open_channel_auto_accept_min_ckb_funding_amount: 10_000_000_000,
@@ -205,6 +206,9 @@ export function serializeConfigYaml(c: NodeConfig): string {
   lines.push(`  watchtower_check_interval_seconds: ${c.fiber.watchtower_check_interval_seconds}`)
   if (c.fiber.standalone_watchtower_rpc_url) {
     lines.push(`  standalone_watchtower_rpc_url: ${yamlStr(c.fiber.standalone_watchtower_rpc_url)}`)
+  }
+  if (c.fiber.standalone_watchtower_token) {
+    lines.push(`  standalone_watchtower_token: ${yamlStr(c.fiber.standalone_watchtower_token)}`)
   }
   lines.push(`  disable_built_in_watchtower: ${c.fiber.disable_built_in_watchtower}`)
   if (c.fiber.proxy_url) {

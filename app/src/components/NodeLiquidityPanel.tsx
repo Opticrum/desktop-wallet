@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { usePresence } from '../lib/usePresence'
 import { useScrollLock } from '../lib/useScrollLock'
 import { useLocale } from '../i18n/LocaleContext'
 import { useNode } from '../node/NodeContext'
@@ -62,10 +63,11 @@ function BuyOrderModal({ open, onClose, onPublish, disabled, disabledTitle }: Bu
   const [cost, setCost] = useState('250')
   const [days, setDays] = useState('30')
   const [fiberAddress, setFiberAddress] = useState('')
+  const { shown, entered, onExitEnd } = usePresence(open)
 
-  useScrollLock(open)
+  useScrollLock(shown)
 
-  if (!open) return null
+  if (!shown) return null
 
   const capacityNum = Number(capacity.replace(/,/g, '')) || 0
   const costNum = Number(cost.replace(/,/g, '')) || 0
@@ -92,7 +94,11 @@ function BuyOrderModal({ open, onClose, onPublish, disabled, disabledTitle }: Bu
   }
 
   return (
-    <div className="modal-backdrop" role="presentation">
+    <div
+      className={`modal-backdrop${entered ? ' is-open' : ''}`}
+      role="presentation"
+      onTransitionEnd={onExitEnd}
+    >
       <div className="modal" role="dialog" aria-modal="true" aria-label={t.lmNewOrder} onClick={(e) => e.stopPropagation()}>
         <div className="modal-title">{t.lmNewOrder}</div>
         <div className="modal-body">
@@ -187,21 +193,31 @@ function AdjustDepositModal({
 }: AdjustDepositModalProps) {
   const { t } = useLocale()
   const [amount, setAmount] = useState('')
+  const { shown, entered, onExitEnd } = usePresence(open)
+  // Keep the last match so the exit fade still has labels.
+  const [displayMatch, setDisplayMatch] = useState(match)
+  useEffect(() => {
+    if (match) setDisplayMatch(match)
+  }, [match])
 
-  useScrollLock(open)
+  useScrollLock(shown)
 
-  if (!open || !match) return null
+  if (!shown || !displayMatch) return null
 
   const amountNum = Number(amount.replace(/,/g, '')) || 0
   const valid = amountNum > 0
 
   const handleConfirm = () => {
-    if (!valid) return
+    if (!valid || !match) return
     onConfirm(match, amountNum)
   }
 
   return (
-    <div className="modal-backdrop" role="presentation">
+    <div
+      className={`modal-backdrop${entered ? ' is-open' : ''}`}
+      role="presentation"
+      onTransitionEnd={onExitEnd}
+    >
       <div className="modal" role="dialog" aria-modal="true" aria-label={t.lmAdjustTitle} onClick={(e) => e.stopPropagation()}>
         <div className="modal-title">
           {t.lmAdjustTitle} · {t.lmInject}
@@ -212,7 +228,7 @@ function AdjustDepositModal({
             <input className="search-input" type="text" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} spellCheck={false} autoFocus />
           </div>
           <div className="lm-form-hint">
-            {t.lmStakedHint.replace('{amount}', formatCkb(match.depositCkb))}
+            {t.lmStakedHint.replace('{amount}', formatCkb(displayMatch.depositCkb))}
           </div>
         </div>
         <div className="modal-actions">

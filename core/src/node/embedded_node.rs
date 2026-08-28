@@ -9,6 +9,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use jsonrpsee::http_client::{HeaderMap, HeaderValue, HttpClientBuilder};
 use jsonrpsee::server::ServerHandle;
 use ractor::Actor;
 use ractor::ActorRef;
@@ -167,6 +168,29 @@ impl EmbeddedNode {
     )
     .await;
 
+    // Standalone watchtower RPC client (optional biscuit Bearer token).
+    let watchtower_client = if let Some(url) = fiber_config.standalone_watchtower_rpc_url.clone() {
+      let mut client_builder = HttpClientBuilder::default();
+      if let Some(token) = fiber_config.standalone_watchtower_token.as_ref() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+          "Authorization",
+          HeaderValue::from_str(&format!("Bearer {token}"))
+            .map_err(|e| CommandError::invalid_input(format!("watchtower token: {e}")))?,
+        );
+        client_builder = client_builder.set_headers(headers);
+      } else {
+        log::debug!("create watchtower rpc client without standalone_watchtower_token");
+      }
+      Some(
+        client_builder
+          .build(url)
+          .map_err(|e| CommandError::internal(format!("watchtower rpc client: {e}")))?,
+      )
+    } else {
+      None
+    };
+
     // Watchtower (built-in unless disabled).
     if !fiber_config.disable_built_in_watchtower.unwrap_or(false) {
       let (watchtower_actor, _) = Actor::spawn_linked(
@@ -185,9 +209,15 @@ impl EmbeddedNode {
       });
     }
 
-    // Drain network events (the watchtower-forwarding loop is a no-op drain in
-    // v1 so the 4000-deep channel never fills).
-    tracker.spawn(async move { while event_receiver.recv().await.is_some() {} });
+    tracker.spawn(async move {
+      while let Some(event) = event_receiver.recv().await {
+        if let Some(client) = watchtower_client.as_ref() {
+          if let Err(err) = fnn::event_handler::forward_event_to_client(event, client).await {
+            log::error!("Failed to forward event to standalone watchtower: {err}");
+          }
+        }
+      }
+    });
 
     // RPC server.
     let rpc_handle = {

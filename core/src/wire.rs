@@ -288,6 +288,8 @@ pub struct FiberConfig {
   #[serde(default)]
   pub standalone_watchtower_rpc_url: String,
   #[serde(default)]
+  pub standalone_watchtower_token: String,
+  #[serde(default)]
   pub disable_built_in_watchtower: bool,
   #[serde(default)]
   pub watchtower_check_interval_seconds: u64,

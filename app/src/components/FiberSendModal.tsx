@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocale } from '../i18n/LocaleContext'
+import { usePresence } from '../lib/usePresence'
 import { useScrollLock } from '../lib/useScrollLock'
 
 function IconClose() {
@@ -52,8 +53,9 @@ export function FiberSendModal({
   const [invoice, setInvoice] = useState('')
   const [amount, setAmount] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const { shown, entered, onExitEnd } = usePresence(open)
 
-  useScrollLock(open)
+  useScrollLock(shown)
 
   useEffect(() => {
     if (!open) return
@@ -67,7 +69,7 @@ export function FiberSendModal({
     return () => window.removeEventListener('keydown', handler)
   }, [open, onClose])
 
-  if (!open) return null
+  if (!shown) return null
 
   const handleConfirm = () => {
     const value = Number.parseFloat(amount)
@@ -88,7 +90,11 @@ export function FiberSendModal({
   }
 
   return (
-    <div className="send-modal-backdrop" role="presentation">
+    <div
+      className={`send-modal-backdrop${entered ? ' is-open' : ''}`}
+      role="presentation"
+      onTransitionEnd={onExitEnd}
+    >
       <div
         className="send-modal fiber-modal"
         role="dialog"
